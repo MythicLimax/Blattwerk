@@ -1,6 +1,6 @@
 # 0001: Bibliotheken für Bearbeiten und Speichern
 
-- Status: **Vorschlag, wartet auf Freigabe**
+- Status: **angenommen** (2026-10-12, Entscheidung an Claude delegiert)
 - Datum: 2026-10-12
 - Rendering ist gesetzt: **pdf.js** (`pdfjs-dist` 6.4.299, Apache-2.0). Diese Entscheidung betrifft nur das Ändern und Schreiben von PDFs.
 

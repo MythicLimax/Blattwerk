@@ -2,15 +2,16 @@
 
 Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro. Die vollständige Vorgabe steht in [docs/spezifikation.md](docs/spezifikation.md). **Vor jeder Arbeit lesen.**
 
-- Arbeitsname: **noch offen**, Vorschlag „Blattwerk“. Der Name steht nur in `src/shared/product.ts` (Name, App-ID) und im i18n-Schlüssel `app.name`, nie hart im Code. Kein Adobe-Name, kein Adobe-Logo, keine kopierten Icons oder Grafiken.
+- App-Name: **Blattwerk**, App-ID `de.blattwerk.app`. Der Name steht nur in `src/shared/product.ts` und im i18n-Schlüssel `app.name`, nie hart im Code. Kein Adobe-Name, kein Adobe-Logo, keine kopierten Icons oder Grafiken.
 - Sprache: Gespräch, Doku, Kommentare und UI auf Deutsch. Bezeichner im Code auf Englisch.
+- **Auftraggeber programmiert nicht selbst** und hat alle technischen Entscheidungen an Claude delegiert (2026-10-12). Ziel: eine App auf dem MacBook (Apple Silicon), die möglichst viel von Acrobat Pro kann. Daher: Entscheidungen selbst treffen und in `docs/entscheidungen/` begründen, Berichte in einfacher Sprache ohne Fachjargon, nur bei echten Weichenstellungen nachfragen. macOS hat Vorrang, Windows bleibt Ziel der Spezifikation.
 
 ## Phasenstatus
 
 | Phase | Inhalt | Status |
 |---|---|---|
-| 0 | Grundlagen: Spezifikation, Bibliotheksauswahl, CLAUDE.md | erledigt, **wartet auf OK** |
-| 1 | Viewer | offen |
+| 0 | Grundlagen: Spezifikation, Bibliotheksauswahl, CLAUDE.md | erledigt |
+| 1 | Viewer | in Arbeit |
 | 2 | Kommentieren | offen |
 | 3 | Seiten organisieren | offen |
 | 4 | Formulare und Unterschrift | offen |
@@ -18,7 +19,7 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | offen |
 | 7 | Profi (PAdES, PDF/A, Tags) | offen |
 
-Offene Entscheidungen vor Phase 1: Bibliotheksempfehlung, App-Name und App-ID, ISC-Lizenz von Lucide, Projektordner in iCloud (siehe unten).
+Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig, Projekt liegt lokal unter `~/Documents/Claude Projekte/Adobe Acrobat Klon Lokal` (nicht in iCloud).
 
 ## Arbeitsweise (verbindlich)
 
@@ -125,7 +126,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 | Zustand | zustand | 5.0.15 | MIT |
 | Virtualisierung | @tanstack/react-virtual | 3.14.15 | MIT |
 | i18n | i18next, react-i18next | 26.4.4, 17.0.16 | MIT |
-| Icons | lucide-react | 1.55.0 | **ISC** (gleichwertig zu MIT, Freigabe offen) |
+| Icons | lucide-react | 1.55.0 | ISC |
 | Tests | vitest, @playwright/test | 5.0.4, 1.64.0 | MIT, Apache-2.0 |
 | Lint | eslint, typescript-eslint | 10.12.0, 8.71.1 | MIT |
 | Packaging | electron-builder | 26.15.3 | MIT |
@@ -154,7 +155,9 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 
 ## Befehle
 
-Noch keine. Entstehen in Phase 1 (`npm run dev`, `npm test`, `npm run test:e2e`, `npm run build`, `npm run dist`).
+Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befehl: `source scripts/dev-env.sh` (setzt `PATH` und legt alle Caches nach `.tools/cache`).
+
+Weitere Befehle entstehen in Phase 1 (`npm run dev`, `npm test`, `npm run test:e2e`, `npm run build`, `npm run dist:mac`).
 
 ## Packaging
 
@@ -167,4 +170,4 @@ Noch keine. Entstehen in Phase 1 (`npm run dev`, `npm test`, `npm run test:e2e`,
 - Pinch auf dem Trackpad kommt als `wheel`-Event mit `ctrlKey`. Browser-Zoom per `setVisualZoomLevelLimits(1, 1)` abschalten und selbst zoomen.
 - `File.path` gibt es in Electron nicht mehr. Für Drag & Drop `webUtils.getPathForFile` im Preload nutzen.
 - macOS öffnet Dateien per `open-file`-Event, auch vor `ready`. Windows übergibt sie über `argv` und `second-instance`.
-- **Projekt liegt in iCloud Drive:** `node_modules`, `out/` und `release/` nicht synchronisieren lassen (siehe offene Entscheidung).
+- Pfad des Projekts enthält Leerzeichen. In Skripten Pfade immer quoten.

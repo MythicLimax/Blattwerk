@@ -1,0 +1,100 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+/* Text im Dokument muss auswählbar bleiben, obwohl die Oberfläche es nicht ist. */
+.pdfViewer .textLayer {
+  user-select: text;
+}
+
+/* Trefferfarben der Suche an das eigene Design anpassen */
+.pdfViewer .textLayer .highlight {
+  --highlight-bg-color: var(--color-match);
+  --highlight-selected-bg-color: var(--color-match-selected);
+}
+
+.pdfViewer {
+  --page-border: none;
+  --page-margin: 12px auto;
+  --spreadHorizontalWrapped-margin-LR: 6px;
+}
+
+.pdfViewer .page {
+  box-shadow: var(--shadow-page);
+}
+
+/* Druckbereich: nur beim Drucken sichtbar, die App selbst wird ausgeblendet. */
+#print-container {
+  display: none;
+}
+
+@media print {
+  html,
+  body {
+    height: auto;
+    overflow: visible;
+    background: #ffffff;
+  }
+
+  #root {
+    display: none !important;
+  }
+
+  #print-container {
+    display: block;
+  }
+
+  #print-container > .printed-page {
+    width: 100vw;
+    height: 100vh;
+    page-break-after: always;
+    page-break-inside: avoid;
+    break-after: page;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  #print-container > .printed-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  #print-container img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+}

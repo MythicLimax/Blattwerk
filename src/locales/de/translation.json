@@ -1,0 +1,257 @@
+{
+  "menu": {
+    "app": {
+      "about": "Über {{appName}}",
+      "services": "Dienste",
+      "hide": "{{appName}} ausblenden",
+      "hideOthers": "Andere ausblenden",
+      "showAll": "Alle einblenden",
+      "quit": "{{appName}} beenden"
+    },
+    "file": {
+      "title": "Ablage",
+      "titleWindows": "Datei",
+      "open": "Öffnen …",
+      "openRecent": "Zuletzt geöffnet",
+      "clearRecent": "Liste leeren",
+      "noRecent": "Keine Einträge",
+      "close": "Schließen",
+      "print": "Drucken …",
+      "properties": "Dokumenteigenschaften …",
+      "setDefault": "Als Standardprogramm für PDFs festlegen …",
+      "quit": "Beenden"
+    },
+    "edit": {
+      "title": "Bearbeiten",
+      "undo": "Widerrufen",
+      "redo": "Wiederholen",
+      "cut": "Ausschneiden",
+      "copy": "Kopieren",
+      "paste": "Einfügen",
+      "selectAll": "Alles auswählen",
+      "find": "Suchen …",
+      "findNext": "Weitersuchen",
+      "findPrevious": "Rückwärts suchen"
+    },
+    "view": {
+      "title": "Anzeige",
+      "zoomIn": "Vergrößern",
+      "zoomOut": "Verkleinern",
+      "fitPage": "Ganze Seite",
+      "actualSize": "Originalgröße",
+      "fitWidth": "Fensterbreite",
+      "pageDisplay": "Seitenanzeige",
+      "modeSingle": "Einzelne Seite",
+      "modeContinuous": "Einzelne Seite, fortlaufend",
+      "modeTwoPage": "Zwei Seiten",
+      "modeTwoPageContinuous": "Zwei Seiten, fortlaufend",
+      "rotate": "Ansicht drehen",
+      "rotateClockwise": "Im Uhrzeigersinn",
+      "rotateCounterClockwise": "Gegen den Uhrzeigersinn",
+      "toggleSidebar": "Seitenleiste",
+      "toggleRightPanel": "Suchbereich",
+      "fullscreen": "Vollbild",
+      "devTools": "Entwicklerwerkzeuge"
+    },
+    "nav": {
+      "title": "Gehe zu",
+      "firstPage": "Erste Seite",
+      "previousPage": "Vorherige Seite",
+      "nextPage": "Nächste Seite",
+      "lastPage": "Letzte Seite",
+      "goToPage": "Seite …"
+    },
+    "window": {
+      "title": "Fenster",
+      "minimize": "Im Dock ablegen",
+      "minimizeWindows": "Minimieren",
+      "zoom": "Zoomen",
+      "front": "Alle nach vorne bringen",
+      "nextTab": "Nächster Tab",
+      "previousTab": "Vorheriger Tab"
+    }
+  },
+  "dialog": {
+    "openTitle": "PDF öffnen",
+    "filterPdf": "PDF-Dokumente",
+    "externalLink": {
+      "message": "Diesen Link im Browser öffnen?",
+      "detail": "{{url}}",
+      "open": "Öffnen",
+      "cancel": "Abbrechen"
+    },
+    "defaultApp": {
+      "macMessage": "So wird {{appName}} zum Standardprogramm für PDFs",
+      "macDetail": "1. Klicke im Finder mit der rechten Maustaste auf eine PDF-Datei und wähle „Informationen“.\n2. Wähle unter „Öffnen mit“ {{appName}} aus.\n3. Klicke auf „Alle ändern …“ und bestätige.",
+      "macSuccess": "{{appName}} ist jetzt das Standardprogramm für PDF-Dateien.",
+      "winMessage": "In den Windows-Einstellungen unter „Standard-Apps“ kannst du {{appName}} für PDF-Dateien auswählen.",
+      "ok": "OK"
+    }
+  },
+  "errors": {
+    "open": {
+      "not-found": "Die Datei „{{name}}“ wurde nicht gefunden.",
+      "not-a-file": "„{{name}}“ ist keine Datei.",
+      "not-pdf": "„{{name}}“ ist kein PDF-Dokument.",
+      "unreadable": "Die Datei „{{name}}“ konnte nicht gelesen werden.",
+      "cancelled": "Das Öffnen wurde abgebrochen."
+    },
+    "load": {
+      "invalid": "Die Datei ist beschädigt oder kein gültiges PDF und konnte nicht angezeigt werden.",
+      "generic": "Das Dokument konnte nicht geöffnet werden.",
+      "detail": "Technische Details: {{detail}}"
+    },
+    "print": {
+      "failed": "Das Drucken ist fehlgeschlagen."
+    },
+    "dismiss": "Schließen"
+  },
+  "start": {
+    "title": "Willkommen bei {{appName}}",
+    "open": "PDF öffnen",
+    "dropHint": "oder eine PDF-Datei hierher ziehen",
+    "recent": "Zuletzt geöffnet",
+    "noRecent": "Noch keine Dateien geöffnet.",
+    "remove": "Aus der Liste entfernen",
+    "clear": "Liste leeren"
+  },
+  "toolbar": {
+    "open": "Öffnen",
+    "print": "Drucken",
+    "properties": "Dokumenteigenschaften",
+    "sidebar": "Seitenleiste ein- oder ausblenden",
+    "search": "Suchen",
+    "previousPage": "Vorherige Seite",
+    "nextPage": "Nächste Seite",
+    "pageNumber": "Seitenzahl",
+    "pageOf": "von {{count}}",
+    "zoomIn": "Vergrößern",
+    "zoomOut": "Verkleinern",
+    "zoomSelect": "Zoomstufe",
+    "viewMode": "Seitenanzeige",
+    "rotateClockwise": "Ansicht im Uhrzeigersinn drehen",
+    "rotateCounterClockwise": "Ansicht gegen den Uhrzeigersinn drehen",
+    "zoom": {
+      "auto": "Automatisch",
+      "pageWidth": "Fensterbreite",
+      "pageFit": "Ganze Seite",
+      "pageActual": "Originalgröße",
+      "percent": "{{value}} %"
+    }
+  },
+  "viewMode": {
+    "single": "Einzelne Seite",
+    "continuous": "Einzelne Seite, fortlaufend",
+    "two-page": "Zwei Seiten",
+    "two-page-continuous": "Zwei Seiten, fortlaufend"
+  },
+  "tabs": {
+    "label": "Geöffnete Dokumente",
+    "close": "Tab schließen",
+    "loading": "Wird geladen …"
+  },
+  "sidebar": {
+    "label": "Seitenleiste",
+    "pages": "Seiten",
+    "bookmarks": "Lesezeichen",
+    "thumbnail": "Seite {{page}}",
+    "noOutline": "Dieses Dokument enthält keine Lesezeichen.",
+    "loadingOutline": "Lesezeichen werden geladen …",
+    "expand": "Aufklappen",
+    "collapse": "Zuklappen"
+  },
+  "search": {
+    "title": "Suchen",
+    "close": "Suchbereich schließen",
+    "placeholder": "Im Dokument suchen",
+    "next": "Nächster Treffer",
+    "previous": "Vorheriger Treffer",
+    "caseSensitive": "Groß- und Kleinschreibung beachten",
+    "entireWord": "Nur ganze Wörter",
+    "diacritics": "Akzente beachten",
+    "count_one": "{{current}} von {{count}} Treffer",
+    "count_other": "{{current}} von {{count}} Treffern",
+    "limit": "Mehr als {{limit}} Treffer",
+    "notFound": "Keine Treffer",
+    "pending": "Suche läuft …",
+    "wrappedTop": "Ende erreicht, weiter am Anfang",
+    "wrappedBottom": "Anfang erreicht, weiter am Ende",
+    "results": "Ergebnisse",
+    "page": "Seite {{page}}",
+    "hits_one": "{{count}} Treffer",
+    "hits_other": "{{count}} Treffer",
+    "hint": "Gib einen Begriff ein und drücke die Eingabetaste."
+  },
+  "password": {
+    "title": "Kennwort erforderlich",
+    "message": "„{{name}}“ ist kennwortgeschützt. Gib das Kennwort zum Öffnen ein.",
+    "incorrect": "Das Kennwort ist falsch. Versuche es noch einmal.",
+    "label": "Kennwort",
+    "ok": "Öffnen",
+    "cancel": "Abbrechen"
+  },
+  "properties": {
+    "title": "Dokumenteigenschaften",
+    "sectionDescription": "Beschreibung",
+    "sectionAdvanced": "Erweitert",
+    "fileName": "Dateiname",
+    "location": "Ort",
+    "fileSize": "Dateigröße",
+    "docTitle": "Titel",
+    "author": "Autor",
+    "subject": "Thema",
+    "keywords": "Stichwörter",
+    "created": "Erstellt",
+    "modified": "Geändert",
+    "creator": "Anwendung",
+    "producer": "PDF erstellt mit",
+    "version": "PDF-Version",
+    "pageCount": "Seitenanzahl",
+    "pageSize": "Seitengröße",
+    "linearized": "Schnelle Webanzeige",
+    "tagged": "Getaggtes PDF",
+    "forms": "Formularfelder",
+    "security": "Sicherheit",
+    "none": "–",
+    "yes": "Ja",
+    "no": "Nein",
+    "noSecurity": "Kein Schutz",
+    "passwordProtected": "Kennwortschutz zum Öffnen",
+    "restricted": "Eingeschränkt: {{list}} nicht erlaubt",
+    "unrestricted": "Keine Einschränkungen",
+    "permission": {
+      "print": "Drucken",
+      "copy": "Kopieren",
+      "modify": "Ändern",
+      "annotate": "Kommentieren",
+      "fillForms": "Formulare ausfüllen",
+      "assemble": "Seiten zusammenstellen"
+    },
+    "sizeBytes": "{{size}} ({{bytes}} Byte)",
+    "pageSizeValue": "{{width}} × {{height}} {{unit}} ({{orientation}})",
+    "pageSizeNamed": "{{width}} × {{height}} {{unit}} ({{name}}, {{orientation}})",
+    "portrait": "Hochformat",
+    "landscape": "Querformat",
+    "close": "Schließen"
+  },
+  "print": {
+    "preparing": "Druck wird vorbereitet …",
+    "progress": "Seite {{current}} von {{total}}",
+    "cancel": "Abbrechen",
+    "notAllowed": "Das Drucken ist für dieses Dokument nicht erlaubt."
+  },
+  "goto": {
+    "title": "Gehe zu Seite",
+    "label": "Seite (1 bis {{count}})",
+    "ok": "Gehe zu",
+    "cancel": "Abbrechen",
+    "invalid": "Bitte gib eine Zahl von 1 bis {{count}} ein."
+  },
+  "drop": {
+    "message": "PDF hier ablegen zum Öffnen"
+  },
+  "viewer": {
+    "loading": "Dokument wird geladen …",
+    "closeTab": "Tab schließen"
+  }
+}

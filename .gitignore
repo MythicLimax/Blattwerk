@@ -16,3 +16,9 @@ test/fixtures/generated/
 # System
 .DS_Store
 Thumbs.db
+
+# Lokale Werkzeuge (Node.js, Caches)
+.tools/
+
+# Build-Artefakte von electron-builder
+*.blockmap

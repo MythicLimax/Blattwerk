@@ -1,0 +1,73 @@
+.bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: var(--tabbar-height);
+  padding: 0 var(--space-2);
+  background: var(--color-surface-sunken);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  flex: none;
+  scrollbar-width: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 120px;
+  max-width: 240px;
+  height: 28px;
+  padding: 0 var(--space-1) 0 var(--space-2);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  color: var(--color-text-muted);
+  cursor: default;
+  flex: 0 1 auto;
+}
+
+.tab:hover {
+  background: var(--color-hover);
+}
+
+.active,
+.active:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 -1px 0 var(--color-border) inset;
+}
+
+.name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  opacity: 0.6;
+}
+
+.close:hover {
+  background: var(--color-active);
+  opacity: 1;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

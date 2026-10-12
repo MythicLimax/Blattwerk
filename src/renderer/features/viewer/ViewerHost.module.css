@@ -1,0 +1,8 @@
+/* pdf.js verlangt einen absolut positionierten Container. */
+.container {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  outline: none;
+  background: var(--color-viewer-bg);
+}
