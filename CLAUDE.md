@@ -12,8 +12,8 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 |---|---|---|
 | 0 | Grundlagen: Spezifikation, Bibliotheksauswahl, CLAUDE.md | erledigt |
 | 1 | Viewer | erledigt ([Bericht](docs/phasen/phase-1.md)) |
-| 2 | Kommentieren | in Arbeit |
-| 3 | Seiten organisieren | offen |
+| 2 | Kommentieren | erledigt ([Bericht](docs/phasen/phase-2.md)) |
+| 3 | Seiten organisieren | als Nächstes |
 | 4 | Formulare und Unterschrift | offen |
 | 5 | Bearbeiten (inkl. Schwärzen) | offen |
 | 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | offen |
@@ -41,28 +41,31 @@ Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001
 Hauptprozess (Node)                 Preload                       Renderer (React, sandboxed)
 - Fenster, natives Menü             contextBridge:                - Oberfläche, Tabs, Seitenleisten
 - Dateien öffnen und lesen (IDs)    window.blattwerk (typisiert)  - pdf.js-Worker je Dokument (Parsen, Text)
-- Zuletzt geöffnet, Einstellungen                                 - ab Phase 2: PDFium-Worker (Ändern, Speichern)
+- Zuletzt geöffnet, Einstellungen                                 - PDFium-Worker (Ändern, Speichern; bei Bedarf)
 - app://-Protokoll, Sicherheit                                    - Zustand: zustand-Stores
 - Dateizuordnung, Einzelinstanz
 ```
 
 - **Renderer hat keinen Node-Zugriff.** Alles Dateisystem läuft über `window.blattwerk` (Typ in `src/preload/api-types.ts`) → IPC → Hauptprozess. Der Renderer kennt nur Datei-IDs.
 - **Anzeigen mit den Viewer-Bausteinen von pdf.js** (`PDFViewer`, `PDFFindController`, `PDFLinkService`), siehe [ADR 0002](docs/entscheidungen/0002-anzeige-mit-pdfjs-viewer.md). Parsen, Schriften und Bilddekodierung laufen im Worker, gezeichnet wird zeitgeteilt im Hauptthread. Vollständiges Rendern im Worker wurde geprüft und ist nicht nötig (gemessen in den Oberflächentests).
-- **Ändern und Speichern ab Phase 2 mit PDFium-WASM** (`@embedpdf/pdfium`), siehe [0001](docs/entscheidungen/0001-pdf-bibliotheken.md). Zugriff nur über eine eigene Schicht `src/workers/pdfium/` (entsteht in Phase 2), nie direkt auf `pdfiumModule`.
+- **Ändern und Speichern mit PDFium-WASM** (`@embedpdf/pdfium`), siehe [0001](docs/entscheidungen/0001-pdf-bibliotheken.md). Zugriff nur über die eigene Schicht `src/workers/pdfium/` (`engine.ts`, Speicherhilfen in `memory.ts`), nie direkt auf das Modul. Ein Worker für die ganze App (`src/renderer/engine/pdfium-client.ts`): startet beim ersten Auftrag, beendet sich 2 s nach dem letzten (WASM-Speicher schrumpft sonst nie).
 - **Große Dateien** (über 8 MB): eigener `PDFDataRangeTransport` (`src/renderer/engine/range-transport.ts`) liest 1-MB-Blöcke per IPC, höchstens 6 gleichzeitig. Kleinere Dateien werden in einem Stück gelesen.
 - **Laden ist abbrechbar:** `LoadedDocumentHandle.promise` lehnt beim Schließen ab; der pdf.js-Worker wird erst nach `task.destroy()` beendet.
 
-### Dokumentmodell (Stand Phase 1)
+### Dokumentmodell
 
 - Pro Tab: `TabState` in `src/renderer/state/documents-store.ts` (alles, was die Oberfläche anzeigt) und `DocumentRuntime` in `src/renderer/engine/runtime.ts` (pdf.js-Objekte, Viewer, Miniaturen-Cache, Seitentexte). Ablauf und Befehle in `src/renderer/engine/session.ts`.
 - Der Hauptprozess merkt sich je Datei Größe und Änderungszeit beim Öffnen und meldet `file-changed`, wenn die Datei danach von außen geändert wird.
-- **Ab Phase 2 geplant:** Koordinaten im PDF-Benutzerraum (Punkte, Ursprung unten links, ungedrehte Seite), Umrechnung nur über `src/renderer/engine/coords.ts`. Undo/Redo als Command-Pattern auf dem App-Modell; ungespeicherte Annotationen zeichnet eine React-Ebene über dem pdf.js-Canvas; beim Speichern wendet PDFium die Änderungen an. Für Inhaltsänderungen (Phase 5) Undo per Snapshot.
+- **Kommentare** ([ADR 0005](docs/entscheidungen/0005-kommentare.md)): Modell in `src/shared/annotations.ts`, Koordinaten im PDF-Benutzerraum (Punkte, Ursprung unten links, ungedrehte Seite), Umrechnung nur über `src/renderer/engine/coords.ts`. Zustand je Tab in `src/renderer/state/annotations-store.ts` (Liste, Stand beim Laden, Rückgängig-Stapel als Befehle, Auswahl, Werkzeug). Ablauf in `src/renderer/features/annotations/controller.ts`.
+- **Anzeige der Kommentare:** pdf.js zeichnet vorhandene, unveränderte Kommentare. Neue und geänderte zeichnet je sichtbarer Seite eine SVG-Ebene (`AnnotationLayer` → `PageOverlay`), die in der Seite von pdf.js hängt. Geänderte und gelöschte vorhandene blendet pdf.js über seinen Anmerkungsspeicher aus (`syncHiddenAnnotations`).
+- **Speichern:** `computeChanges` (`features/annotations/changes.ts`) ermittelt neue, geänderte und gelöschte Kommentare; PDFium schreibt sie inkrementell; danach lädt der Tab die Datei neu. Drucken mit ungespeicherten Kommentaren nutzt denselben Weg im Speicher.
+- Für Inhaltsänderungen (Phase 5) ist Undo per Snapshot der Dokumentbytes geplant.
 
 ### Speichern (Grundregeln aus der Spezifikation, ab Phase 2)
 
 1. PDFium erzeugt die neuen Bytes, standardmäßig **inkrementell** (`FPDF_INCREMENTAL`).
 2. **Vollständig neu geschrieben** wird nur, wenn es nötig ist: Schwärzen, Verschlüsselung ändern, Komprimieren, „Speichern unter → optimiert“. Haben Signaturen im Dokument, fragt die App vorher nach.
-3. Prüfen: Die neuen Bytes werden in einer frischen PDFium-Instanz geöffnet. Schlägt das fehl, wird nicht gespeichert.
+3. Prüfen: Die neuen Bytes werden in PDFium als neues Dokument geöffnet (dieselbe WASM-Instanz, siehe ADR 0005). Schlägt das fehl, wird nicht gespeichert.
 4. Hauptprozess: Prüfen, ob die Datei auf der Platte noch dem Stand beim Öffnen entspricht. Sonst nachfragen.
 5. **Atomar schreiben** mit `src/main/files/atomic-write.ts`: temporäre Datei im *selben* Ordner, `fsync`, `rename` über das Original, unter Windows mit Wiederholungen bei `EPERM`/`EBUSY`. Die Originaldatei wird nie direkt beschrieben.
 
@@ -89,7 +92,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0004)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0005)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
@@ -99,13 +102,15 @@ src/
   locales/de/               translation.json (alle UI-Texte, Renderer und Menü), pdfjs-viewer.ftl (Texte der pdf.js-Bausteine)
   renderer/
     app/                    Shell: Layout, Werkzeugleiste, Tabs, Seitenleisten, Startbildschirm, globale Tasten, Drag & Drop
-    features/               viewer, thumbnails, outline, search, properties, print, password, goto
+    features/               viewer, thumbnails, outline, search, properties, print, password, goto,
+                            annotations (Kommentare), prompt (Rückfragen), settings
     components/             generische UI-Bausteine (IconButton, Dialog)
-    state/                  zustand-Stores (documents-store, ui-store)
-    engine/                 pdf.js-Einrichtung, Laden, Range-Transport, Laufzeit je Dokument, Befehle (session.ts)
+    state/                  zustand-Stores (documents-store, ui-store, annotations-store)
+    engine/                 pdf.js-Einrichtung, Laden, Range-Transport, Laufzeit je Dokument, Befehle (session.ts),
+                            coords.ts, pdfium-client.ts
     styles/                 Design-Tokens, hell/dunkel
     public/                 beim Build kopierte pdf.js-Ressourcen (nicht eingecheckt)
-  workers/pdfium/           ab Phase 2: Bearbeitungs- und Speicher-Engine
+  workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, memory, protocol, worker)
 resources/icon.svg          eigenes App-Symbol (Quelle)
 build/                      icon.png (aus resources/icon.svg erzeugt), after-pack.cjs
 scripts/                    build, dev, generate-fixtures, check-licenses, dist-mac-local, smoke-packaged, make-icon, dev-env.sh
@@ -154,11 +159,11 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 
 ## Tests
 
-- **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js. Ab Phase 2 auch PDFium-WASM in Node.
-- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Funktionen) und `test/e2e/regressions.spec.ts` (behobene Fehler). Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
-- **Fertige App:** `node scripts/smoke-packaged.mjs <Pfad zur .app>` startet das Paket und prüft die Anzeige.
-- **Ausgabeprüfung für jede gespeicherte Datei:** `qpdf --check` (in CI installiert), Öffnen mit pdf.js und mit PDFium, Annotationen haben /AP. Unter macOS zusätzlich mit PDFKit (die Engine von Apple Vorschau) rendern. Acrobat Reader: manuelle Checkliste im Phasenbericht.
-- **Test-PDFs** (`test/fixtures/pdfs/`): Text, Scan (nur Bild), Formular (AcroForm), verschlüsselt (Benutzer- und Besitzerpasswort), beschädigt (kaputte xref, abgeschnitten), mit Links und Lesezeichen, signiert. „Sehr groß“ (600 Seiten, mehr als 100 MB) erzeugt `scripts/generate-fixtures.ts` nach `test/fixtures/generated/`.
+- **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js; PDFium-WASM läuft ebenfalls in Node (`test/integration/pdfium-annotations.test.ts`).
+- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
+- **Fertige App:** `node scripts/smoke-packaged.mjs <Pfad zur .app>` startet das Paket, prüft die Anzeige und speichert einen Kommentar (PDFium aus dem Paket).
+- **Ausgabeprüfung für jede gespeicherte Datei:** `qpdf --check` (in CI installiert, lokal übersprungen, wenn nicht vorhanden), Öffnen mit pdf.js, PDFium und `@cantoo/pdf-lib`, Annotationen haben /AP. Unter macOS zusätzlich mit PDFKit (die Engine von Apple Vorschau): `test/e2e/pdfkit.ts` (JavaScript for Automation). Acrobat Reader: manuelle Checkliste im Phasenbericht.
+- **Test-PDFs** (`test/fixtures/pdfs/`): Text, Scan (nur Bild), Formular (AcroForm), verschlüsselt (Benutzer- und Besitzerpasswort), eingeschränkt, beschädigt (kaputte xref, abgeschnitten), mit Links und Lesezeichen, mit Kommentaren (`kommentare.pdf`: Antwort, Prüfstatus). Signiert folgt in Phase 4. „Sehr groß“ (600 Seiten, mehr als 100 MB) erzeugt `scripts/generate-fixtures.ts` nach `test/fixtures/generated/`.
 
 ## Befehle
 
@@ -171,7 +176,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 | `npm run typecheck`, `npm run lint` | Typprüfung, ESLint |
 | `npm test` | Unit- und Integrationstests |
 | `npm run test:e2e` | Build und Oberflächentests mit der echten App |
-| `npm run fixtures -- --large` | Test-PDFs neu erzeugen (unter macOS inklusive Scan) |
+| `npm run fixtures -- --large` | Test-PDFs neu erzeugen (unter macOS inklusive Scan); `-- --only=name.pdf` erzeugt nur eine Datei (verschlüsselte ändern sich sonst bei jedem Lauf) |
 | `npm run licenses` | Lizenzprüfung der eingebündelten Pakete |
 | `npm run dist:mac:local` | Mac-App (Apple Silicon) bauen, `.dmg` nach `release/` |
 | `npm run dist:mac`, `npm run dist:win` | Pakete für CI (beide Mac-Architekturen bzw. Windows) |
@@ -199,3 +204,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 - pdf.js rechnet den Zoom-Anker relativ zum `offsetParent` des Containers (`containerTopLeft`), nicht zum Fenster.
 - `pdf_viewer.mjs` erwartet `globalThis.pdfjsLib`; deshalb `src/renderer/engine/pdfjs-global.ts` vor dem Import.
 - Playwright erzwingt sonst den hellen Modus; in `test/e2e/app.ts` steht deshalb `colorScheme: null`.
+- React lauscht auch an Portal-Containern. Native Listener am Viewer-Container laufen deshalb **nach** React-Handlern in der Kommentarebene (siehe Auswahl aufheben in `AnnotationLayer.tsx`).
+- pdf.js leert eine Seite bei `reset()` komplett; eigene Elemente in der Seite müssen wieder eingehängt werden (`MutationObserver`). `mix-blend-mode` wirkt nur ohne eigenen Stapelkontext (kein `z-index` an der Kommentarebene).
+- pdf.js liefert `State`/`StateModel` als rohe PDF-Zeichenketten (UTF-16 mit BOM möglich) und den `/Name` von Stempeln gar nicht.
+- `python3` ist auf diesem Mac nicht nutzbar (Xcode-Lizenz nicht bestätigt). Für Skripte Node verwenden.
