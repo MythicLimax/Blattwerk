@@ -1,0 +1,71 @@
+# Baut Blattwerk für macOS (Apple Silicon und Intel) und Windows und führt alle Tests aus.
+# Signieren ist optional: Sind die Secrets nicht gesetzt, entstehen unsignierte Builds.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Prüfen und testen (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run licenses
+      - name: Große Testdatei erzeugen
+        run: npm run fixtures -- --large
+      - run: npm test
+      - name: Oberflächentests
+        run: npm run test:e2e
+
+  package:
+    name: Paket (${{ matrix.name }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            command: npm run dist:mac
+          - name: Windows
+            os: windows-latest
+            command: npm run dist:win
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: App bauen
+        run: ${{ matrix.command }}
+        env:
+          # Optional: Apple-Developer-Zertifikat (macOS) bzw. Code-Signing-Zertifikat (Windows) als Base64
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Blattwerk-${{ matrix.name }}
+          path: |
+            release/*.dmg
+            release/*.exe
+          if-no-files-found: error
