@@ -19,7 +19,7 @@ const api: BlattwerkApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
   openFileDialog: () => ipcRenderer.invoke(IPC.openDialog),
   openDroppedFile: (file: File) => {
-    let filePath = '';
+    let filePath: string;
     try {
       filePath = webUtils.getPathForFile(file);
     } catch {

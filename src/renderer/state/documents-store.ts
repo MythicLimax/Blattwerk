@@ -25,6 +25,8 @@ export interface TabState {
   size: number;
   status: TabStatus;
   passwordIncorrect: boolean;
+  // true, wenn zum Öffnen ein Kennwort nötig war
+  openedWithPassword: boolean;
   errorKey: string | null;
   errorDetail: string | null;
   title: string | null;
@@ -71,6 +73,7 @@ export const useDocuments = create<DocumentsState>((set) => ({
           ...tab,
           status: 'loading',
           passwordIncorrect: false,
+          openedWithPassword: false,
           errorKey: null,
           errorDetail: null,
           title: null,

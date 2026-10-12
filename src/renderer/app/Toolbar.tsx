@@ -11,7 +11,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ViewMode } from '../../shared/ipc';
 import { IconButton } from '../components/IconButton';
@@ -24,13 +24,16 @@ import styles from './Toolbar.module.css';
 
 function PageInput({ tab }: { tab: TabState }) {
   const { t } = useTranslation();
-  const [value, setValue] = useState(String(tab.currentPage));
-  useEffect(() => setValue(String(tab.currentPage)), [tab.currentPage]);
+  // Während der Eingabe zeigt das Feld den Entwurf, sonst die aktuelle Seite.
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? String(tab.currentPage);
 
   const commit = () => {
-    const page = Number.parseInt(value, 10);
-    if (Number.isFinite(page)) goToPage(tab, page);
-    else setValue(String(tab.currentPage));
+    if (draft !== null) {
+      const page = Number.parseInt(draft, 10);
+      if (Number.isFinite(page)) goToPage(tab, page);
+    }
+    setDraft(null);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -38,7 +41,7 @@ function PageInput({ tab }: { tab: TabState }) {
       commit();
       event.currentTarget.blur();
     } else if (event.key === 'Escape') {
-      setValue(String(tab.currentPage));
+      setDraft(null);
       event.currentTarget.blur();
     }
   };
@@ -51,7 +54,7 @@ function PageInput({ tab }: { tab: TabState }) {
         data-testid="page-input"
         inputMode="numeric"
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
         onKeyDown={onKeyDown}
         onFocus={(event) => event.currentTarget.select()}

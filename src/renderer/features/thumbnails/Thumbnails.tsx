@@ -80,6 +80,8 @@ export function Thumbnails({ tab }: { tab: TabState }) {
     };
   }, [runtime, tab.rotation]);
 
+  // TanStack Virtual verträgt sich nicht mit automatischer Memoisierung; die Komponente bleibt bewusst unmemoisiert.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: tab.pageCount,
     getScrollElement: () => scrollRef.current,

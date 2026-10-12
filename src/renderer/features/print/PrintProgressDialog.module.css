@@ -1,0 +1,10 @@
+.bar {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--color-accent);
+}
+
+.text {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+}

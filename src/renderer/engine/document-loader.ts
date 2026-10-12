@@ -3,12 +3,8 @@ import type { FileInfo } from '../../shared/ipc';
 import { api } from '../api';
 import { readChunked } from './file-reader';
 import { createPdfWorker, pdfjs, PDFJS_ASSETS } from './pdfjs';
-import { createRangeTransport } from './range-transport';
+import { createRangeTransport, RANGE_CHUNK_SIZE, WHOLE_FILE_LIMIT } from './range-transport';
 
-// Bis zu dieser Größe wird die Datei in einem Stück gelesen. Größere Dateien lädt pdf.js bei Bedarf in Bereichen.
-export const WHOLE_FILE_LIMIT = 8 * 1024 * 1024;
-// pdf.js fordert Daten in Blöcken dieser Größe an.
-export const RANGE_CHUNK_SIZE = 256 * 1024;
 
 export interface LoadedDocumentHandle {
   task: PDFDocumentLoadingTask;
@@ -46,7 +42,7 @@ export async function startLoading(file: FileInfo, callbacks: LoadCallbacks): Pr
     } else {
       const initialEnd = Math.min(RANGE_CHUNK_SIZE, file.size);
       const initialData = await read(0, initialEnd);
-      const range = createRangeTransport(file.size, initialData, read, callbacks.onRangeError);
+      const range = createRangeTransport(pdfjs.PDFDataRangeTransport, file.size, initialData, read, callbacks.onRangeError);
       task = pdfjs.getDocument({
         ...common,
         range,

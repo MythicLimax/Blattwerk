@@ -1,0 +1,109 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+import de from '../../src/locales/de/translation.json';
+import { COMMANDS } from '../../src/shared/commands';
+import type { OpenErrorCode, ViewMode } from '../../src/shared/ipc';
+import { APP_ID, PRODUCT_NAME } from '../../src/shared/product';
+import { SHORTCUTS } from '../../src/shared/shortcuts';
+import { PERMISSION_FLAGS } from '../../src/renderer/features/properties/properties';
+
+vi.mock('electron', () => ({ Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn() } }));
+
+const root = path.resolve(import.meta.dirname, '../..');
+
+function lookup(key: string): unknown {
+  return key.split('.').reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], de);
+}
+
+function keyExists(key: string): boolean {
+  if (typeof lookup(key) === 'string') return true;
+  // i18next-Pluralformen
+  return typeof lookup(`${key}_one`) === 'string' && typeof lookup(`${key}_other`) === 'string';
+}
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = path.join(dir, name);
+    if (statSync(full).isDirectory()) return name === 'public' ? [] : sourceFiles(full);
+    return /\.(ts|tsx)$/.test(name) ? [full] : [];
+  });
+}
+
+describe('Übersetzungen', () => {
+  const files = sourceFiles(path.join(root, 'src'));
+
+  it('jeder im Code verwendete Schlüssel existiert in de/translation.json', () => {
+    const missing: string[] = [];
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8');
+      for (const match of text.matchAll(/\bt\(\s*'([a-zA-Z0-9_.-]+)'/g)) {
+        const key = match[1] as string;
+        if (!keyExists(key)) missing.push(`${path.relative(root, file)}: ${key}`);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('dynamisch zusammengesetzte Schlüssel sind vollständig', () => {
+    const openErrors: OpenErrorCode[] = ['not-found', 'not-a-file', 'not-pdf', 'unreadable', 'cancelled'];
+    const viewModes: ViewMode[] = ['single', 'continuous', 'two-page', 'two-page-continuous'];
+    const keys = [
+      ...openErrors.map((e) => `errors.open.${e}`),
+      ...viewModes.map((m) => `viewMode.${m}`),
+      ...Object.keys(PERMISSION_FLAGS).map((p) => `properties.permission.${p}`),
+      'properties.portrait',
+      'properties.landscape',
+      'errors.load.invalid',
+      'errors.load.generic',
+    ];
+    expect(keys.filter((key) => !keyExists(key))).toEqual([]);
+  });
+
+  it('der Produktname steht nicht hart in den Texten', () => {
+    expect(JSON.stringify(de)).not.toContain(PRODUCT_NAME);
+  });
+});
+
+describe('Menü und Tastenkürzel', () => {
+  it('jeder Befehl hat einen Menüeintrag mit Übersetzung', async () => {
+    const { buildMenuTemplate } = await import('../../src/main/menu');
+    const collectIds = (items: Electron.MenuItemConstructorOptions[]): string[] =>
+      items.flatMap((item) => [
+        ...(item.id ? [item.id] : []),
+        ...(Array.isArray(item.submenu) ? collectIds(item.submenu) : []),
+      ]);
+    for (const platform of ['darwin', 'win32'] as const) {
+      const template = buildMenuTemplate({
+        platform,
+        state: { hasDocument: true, canPrint: true, viewMode: 'continuous', sidebarVisible: true, rightPanelVisible: false, tabCount: 2 },
+        recent: [],
+        devTools: false,
+        sendCommand: () => undefined,
+        openFileDialog: () => undefined,
+        openRecent: () => undefined,
+        clearRecent: () => undefined,
+        setDefaultApp: () => undefined,
+      });
+      const ids = collectIds(template);
+      expect(COMMANDS.filter((command) => !ids.includes(command))).toEqual([]);
+      const labels = JSON.stringify(template);
+      expect(labels).not.toMatch(/"label":"menu\./);
+    }
+  });
+
+  it('Kürzel sind eindeutig', () => {
+    const accelerators = Object.values(SHORTCUTS).map((s) => s?.accelerator);
+    expect(new Set(accelerators).size).toBe(accelerators.length);
+  });
+});
+
+describe('Produktname und App-ID', () => {
+  it('stimmen in package.json und electron-builder.yml überein', () => {
+    const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as { productName: string };
+    const builder = readFileSync(path.join(root, 'electron-builder.yml'), 'utf8');
+    expect(pkg.productName).toBe(PRODUCT_NAME);
+    expect(builder).toContain(`appId: ${APP_ID}`);
+    expect(builder).toContain(`productName: ${PRODUCT_NAME}`);
+  });
+});

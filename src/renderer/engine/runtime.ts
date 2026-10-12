@@ -1,6 +1,7 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { FileInfo } from '../../shared/ipc';
 import { useDocuments, type SearchState, type SearchStatus } from '../state/documents-store';
+import { joinTextItems, type PageText } from '../features/search/snippet';
 import { ThumbnailCache } from '../features/thumbnails/thumbnail-cache';
 import { layoutForMode } from '../features/viewer/view-modes';
 import { pdfjs, PDFJS_ASSETS } from './pdfjs';
@@ -25,6 +26,7 @@ export interface DocumentRuntime {
   pdf: PDFDocumentProxy | null;
   viewer: PDFViewer | null;
   thumbnails: ThumbnailCache;
+  pageTexts: Map<number, Promise<PageText>>;
   terminate: () => void;
 }
 
@@ -57,6 +59,7 @@ export function createRuntime(tabId: string, file: FileInfo, terminate: () => vo
     pdf: null,
     viewer: null,
     thumbnails: new ThumbnailCache(),
+    pageTexts: new Map(),
     terminate,
   };
   runtimes.set(tabId, runtime);
@@ -69,6 +72,7 @@ export function destroyRuntime(tabId: string): void {
   if (!runtime) return;
   runtimes.delete(tabId);
   runtime.thumbnails.clear();
+  runtime.pageTexts.clear();
   try {
     runtime.viewer?.setDocument(null as unknown as PDFDocumentProxy);
   } catch {
@@ -218,28 +222,30 @@ export function closeFind(runtime: DocumentRuntime): void {
   runtime.eventBus.dispatch('findbarclose', { source: null });
 }
 
-// Kurzer Textausschnitt rund um einen Treffer für die Ergebnisliste.
-export function matchSnippet(
+// Position eines Treffers im unveränderten Seitentext (so wie pdf.js ihn für die Markierung nutzt).
+export function matchPosition(
   runtime: DocumentRuntime,
   pageIndex: number,
   matchIndex: number,
-  context = 40,
-): { before: string; match: string; after: string } | null {
-  const controller = runtime.findController as unknown as {
-    _pageContents?: string[];
-    pageMatches?: number[][];
-    pageMatchesLength?: number[][];
-  };
-  const content = controller._pageContents?.[pageIndex];
-  const start = controller.pageMatches?.[pageIndex]?.[matchIndex];
+): { start: number; length: number } | null {
+  const controller = runtime.findController as unknown as { pageMatchesLength?: number[][] };
+  const start = runtime.findController.pageMatches?.[pageIndex]?.[matchIndex] as number | undefined;
   const length = controller.pageMatchesLength?.[pageIndex]?.[matchIndex];
-  if (content === undefined || start === undefined || length === undefined) return null;
-  const clean = (s: string) => s.replace(/\s+/g, ' ');
-  const beforeStart = Math.max(0, start - context);
-  return {
-    before: (beforeStart > 0 ? '…' : '') + clean(content.slice(beforeStart, start)).trimStart(),
-    match: clean(content.slice(start, start + length)),
-    after: clean(content.slice(start + length, start + length + context)).trimEnd() +
-      (start + length + context < content.length ? '…' : ''),
-  };
+  return start === undefined || length === undefined ? null : { start, length };
+}
+
+// Seitentext in der Zählweise der pdf.js-Treffer (siehe snippet.ts). Wird pro Seite einmal geladen.
+export function originalPageText(runtime: DocumentRuntime, pageIndex: number): Promise<PageText> {
+  let cached = runtime.pageTexts.get(pageIndex);
+  if (!cached) {
+    const pdf = runtime.pdf;
+    cached = pdf
+      ? pdf
+          .getPage(pageIndex + 1)
+          .then((page) => page.getTextContent({ disableNormalization: true }))
+          .then((content) => joinTextItems(content.items as Array<{ str?: string; hasEOL?: boolean }>))
+      : Promise.resolve({ text: '', breaks: [] });
+    runtime.pageTexts.set(pageIndex, cached);
+  }
+  return cached;
 }

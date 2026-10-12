@@ -77,9 +77,21 @@ app.on('second-instance', (_event, argv) => {
   }
 });
 
+// Dateien werden nacheinander geöffnet, damit die Tabs in der angeforderten Reihenfolge entstehen
+// und die zuletzt angeforderte Datei vorne liegt.
+let openChain: Promise<void> = Promise.resolve();
+function enqueueOpen(win: BrowserWindow, filePath: string): void {
+  openChain = openChain
+    .then(async () => {
+      if (win.isDestroyed()) return;
+      sendOpenResult(win, await openPathFor(win, filePath));
+    })
+    .catch(() => undefined);
+}
+
 function requestOpen(filePath: string): void {
   if (mainWindow && rendererReady) {
-    void openPathFor(mainWindow, filePath).then((result) => sendOpenResult(mainWindow, result));
+    enqueueOpen(mainWindow, filePath);
   } else {
     pendingPaths.push(filePath);
     if (app.isReady() && !mainWindow) void createWindow();
@@ -208,10 +220,7 @@ void app.whenReady().then(async () => {
     onRendererReady: (win) => {
       if (win !== mainWindow) return;
       rendererReady = true;
-      const paths = pendingPaths.splice(0);
-      for (const p of paths) {
-        void openPathFor(win, p).then((result) => sendOpenResult(win, result));
-      }
+      for (const p of pendingPaths.splice(0)) enqueueOpen(win, p);
     },
     onRecentChanged: () => refreshMenu(),
     openPathFor,

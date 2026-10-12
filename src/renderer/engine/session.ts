@@ -47,7 +47,11 @@ export async function handleOpenResult(result: OpenResult): Promise<void> {
     const handle = await startLoading(file, {
       onPassword: (reason, submit) => {
         passwordCallbacks.set(tabId, submit);
-        useDocuments.getState().updateTab(tabId, { status: 'password', passwordIncorrect: reason === 'incorrect' });
+        useDocuments.getState().updateTab(tabId, {
+          status: 'password',
+          passwordIncorrect: reason === 'incorrect',
+          openedWithPassword: true,
+        });
       },
       onRangeError: (error) => {
         useDocuments.getState().updateTab(tabId, {
@@ -75,7 +79,7 @@ export async function handleOpenResult(result: OpenResult): Promise<void> {
       status: 'ready',
       pageCount: pdf.numPages,
       title,
-      canPrint: permissions === null || permissions.includes(pdfjs.PermissionFlag.PRINT),
+      canPrint: permissions === null || permissions.has(pdfjs.PermissionFlag.PRINT),
     });
   } catch (error) {
     if (!useDocuments.getState().tabs.some((tab) => tab.id === tabId)) return;

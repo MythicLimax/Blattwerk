@@ -40,7 +40,6 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
       detach();
     };
     // Der Viewer wird einmal pro Tab erstellt; Änderungen am Tab-Zustand steuern ihn über Befehle.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab.id]);
 
   // Beim Sichtbarwerden Größe neu berechnen (das Fenster kann sich verändert haben) und Fokus setzen.

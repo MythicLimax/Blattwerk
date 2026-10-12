@@ -48,7 +48,9 @@ export function registerIpc(ctx: IpcContext): void {
     const win = windowOf(event);
     if (!win) return [];
     const paths = await showOpenDialog(win);
-    return Promise.all(paths.map((p) => ctx.openPathFor(win, p)));
+    const results: OpenResult[] = [];
+    for (const p of paths) results.push(await ctx.openPathFor(win, p));
+    return results;
   });
 
   handle(IPC.openDropped, async (event, filePath: unknown): Promise<OpenResult> => {

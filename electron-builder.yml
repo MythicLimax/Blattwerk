@@ -1,0 +1,63 @@
+# Packaging mit electron-builder. Name und App-ID müssen zu src/shared/product.ts passen (Test prüft das).
+appId: de.blattwerk.app
+productName: Blattwerk
+copyright: Copyright © 2026 Linus
+
+directories:
+  output: release
+  buildResources: build
+
+# Haupt-, Preload- und Renderer-Code sind vollständig gebündelt; node_modules werden nicht gebraucht.
+files:
+  - out/**
+  - package.json
+  - '!**/*.map'
+  - '!node_modules/**'
+asar: true
+afterPack: build/after-pack.cjs
+
+# Sicherheitsschalter im Electron-Binary (siehe CLAUDE.md, Abschnitt Sicherheit)
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
+
+fileAssociations:
+  - ext: pdf
+    name: PDF-Dokument
+    description: PDF-Dokument
+    mimeType: application/pdf
+    role: Viewer
+    rank: Alternate
+
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.png
+  target:
+    - target: dmg
+  # Ad-hoc-Signatur: nötig, damit die App auf Apple Silicon startet. Für Weitergabe an andere
+  # braucht es ein Apple-Developer-Zertifikat und Notarisierung (dann identity setzen, hardenedRuntime an).
+  identity: '-'
+  hardenedRuntime: false
+  darkModeSupport: true
+  extendInfo:
+    NSHumanReadableCopyright: Copyright © 2026 Linus
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-Setup-${version}.${ext}

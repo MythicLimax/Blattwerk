@@ -30,7 +30,9 @@ export const PDFJS_ASSETS = {
 // Jedes Dokument bekommt einen eigenen Worker. Schließen des Tabs beendet ihn und gibt den Speicher frei.
 export function createPdfWorker(name: string): { worker: pdfjs.PDFWorker; terminate: () => void } {
   const port = new Worker(workerUrl, { type: 'module', name: `pdfjs-${name}` });
-  const worker = new pdfjs.PDFWorker({ name, port: port as unknown as null });
+  // Die Typdefinition von pdf.js beschreibt name und port zu eng; zur Laufzeit sind String und Worker erlaubt.
+  const options = { name, port } as unknown as ConstructorParameters<typeof pdfjs.PDFWorker>[0];
+  const worker = new pdfjs.PDFWorker(options);
   return {
     worker,
     terminate: () => {

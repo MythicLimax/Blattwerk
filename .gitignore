@@ -22,3 +22,6 @@ Thumbs.db
 
 # Build-Artefakte von electron-builder
 *.blockmap
+
+# Vom Build kopierte pdf.js-Ressourcen
+src/renderer/public/
