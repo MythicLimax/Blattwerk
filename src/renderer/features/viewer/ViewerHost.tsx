@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { attachViewer, getRuntime } from '../../engine/runtime';
 import type { TabState } from '../../state/documents-store';
 import styles from './ViewerHost.module.css';
+import { PageFlipAccumulator, SCROLL_MODE, wheelDeltaPixels } from './view-modes';
 import { PinchAccumulator, wheelZoomIntent } from './zoom';
 
 // Bindet die pdf.js-Seitenansicht in React ein. pdf.js verwaltet den Inhalt des Containers selbst.
@@ -18,12 +19,43 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
 
     // Zoomen mit Trackpad-Pinch oder Strg/Cmd + Mausrad, verankert an der Mausposition.
     const pinch = new PinchAccumulator();
+    const pageFlip = new PageFlipAccumulator();
+
+    // In den Seitenansichten am Seitenrand weiterscrollen = umblättern (wie in Acrobat).
+    const flipPages = (event: WheelEvent) => {
+      const viewer = runtime.viewer;
+      const delta = wheelDeltaPixels(event);
+      if (!viewer || viewer.scrollMode !== SCROLL_MODE.PAGE || delta === 0) return;
+      const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
+      const atTop = container.scrollTop <= 0;
+      if ((delta > 0 && !atBottom) || (delta < 0 && !atTop)) {
+        pageFlip.reset();
+        return;
+      }
+      event.preventDefault();
+      const direction = pageFlip.add(delta, event.timeStamp);
+      if (direction > 0) {
+        viewer.nextPage();
+      } else if (direction < 0 && viewer.previousPage()) {
+        // Rückwärts blättern landet am Ende der vorherigen Seite, so liest man nahtlos weiter.
+        requestAnimationFrame(() => {
+          container.scrollTop = container.scrollHeight;
+        });
+      }
+    };
+
     const onWheel = (event: WheelEvent) => {
-      if (!event.ctrlKey && !event.metaKey) return;
+      if (!event.ctrlKey && !event.metaKey) {
+        flipPages(event);
+        return;
+      }
       event.preventDefault();
       const viewer = runtime.viewer;
       if (!viewer) return;
-      const origin = [event.clientX, event.clientY];
+      // pdf.js rechnet den Anker relativ zum offsetParent des Containers (containerTopLeft).
+      // Mauskoordinaten deshalb in dieses Koordinatensystem umrechnen.
+      const rect = container.getBoundingClientRect();
+      const origin = [event.clientX - rect.left + container.offsetLeft, event.clientY - rect.top + container.offsetTop];
       const intent = wheelZoomIntent(event);
       if (intent.kind === 'factor') {
         const factor = pinch.add(viewer.currentScale, intent.factor);

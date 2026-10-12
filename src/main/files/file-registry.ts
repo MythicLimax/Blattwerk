@@ -9,6 +9,15 @@ interface OpenFile {
   path: string;
   handle: fs.FileHandle;
   ownerId: number;
+  // Stand beim Öffnen. Ändert sich die Datei danach, liefern Lesezugriffe einen Fehler statt falscher Daten.
+  mtimeMs: number;
+}
+
+export class FileChangedError extends Error {
+  constructor() {
+    super('file-changed');
+    this.name = 'FileChangedError';
+  }
 }
 
 // Verwaltet geöffnete Dateien. Der Renderer kennt nur Datei-IDs, nie die Handles.
@@ -46,8 +55,16 @@ export class FileRegistry {
       return { ok: false, error: 'unreadable', name };
     }
 
-    const info: FileInfo = { fileId: randomUUID(), name, dir: path.dirname(filePath), size: stat.size };
-    this.#files.set(info.fileId, { info, path: filePath, handle, ownerId });
+    // Größe und Zeitstempel über das geöffnete Handle, nicht über den Pfad: kein Zeitfenster dazwischen.
+    let opened;
+    try {
+      opened = await handle.stat();
+    } catch {
+      await handle.close().catch(() => undefined);
+      return { ok: false, error: 'unreadable', name };
+    }
+    const info: FileInfo = { fileId: randomUUID(), name, dir: path.dirname(filePath), size: opened.size };
+    this.#files.set(info.fileId, { info, path: filePath, handle, ownerId, mtimeMs: opened.mtimeMs });
     return { ok: true, file: info };
   }
 
@@ -56,6 +73,8 @@ export class FileRegistry {
     if (!file || file.ownerId !== ownerId) throw new Error('unknown-file');
     const range = validateReadRange(begin, end, file.info.size);
     if (!range) throw new Error('invalid-range');
+    const current = await file.handle.stat();
+    if (current.size !== file.info.size || current.mtimeMs !== file.mtimeMs) throw new FileChangedError();
     const length = range.end - range.begin;
     const buffer = new Uint8Array(length);
     let offset = 0;
@@ -64,7 +83,9 @@ export class FileRegistry {
       if (bytesRead === 0) break;
       offset += bytesRead;
     }
-    return offset === length ? buffer : buffer.subarray(0, offset);
+    // Weniger Bytes als erwartet heißt: Die Datei wurde gekürzt. Nie still unvollständige Daten liefern.
+    if (offset !== length) throw new FileChangedError();
+    return buffer;
   }
 
   pathOf(fileId: string, ownerId: number): string | null {

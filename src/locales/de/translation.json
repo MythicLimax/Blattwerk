@@ -16,6 +16,7 @@
       "clearRecent": "Liste leeren",
       "noRecent": "Keine Einträge",
       "close": "Schließen",
+      "closeWindow": "Fenster schließen",
       "print": "Drucken …",
       "properties": "Dokumenteigenschaften …",
       "setDefault": "Als Standardprogramm für PDFs festlegen …",
@@ -82,6 +83,12 @@
       "open": "Öffnen",
       "cancel": "Abbrechen"
     },
+    "rendererGone": {
+      "message": "Die Anzeige von {{appName}} wurde unerwartet beendet.",
+      "detail": "Das kann bei sehr großen Dokumenten passieren, wenn der Arbeitsspeicher knapp wird. Geöffnete Dokumente müssen neu geöffnet werden.",
+      "reload": "Neu laden",
+      "close": "Fenster schließen"
+    },
     "defaultApp": {
       "macMessage": "So wird {{appName}} zum Standardprogramm für PDFs",
       "macDetail": "1. Klicke im Finder mit der rechten Maustaste auf eine PDF-Datei und wähle „Informationen“.\n2. Wähle unter „Öffnen mit“ {{appName}} aus.\n3. Klicke auf „Alle ändern …“ und bestätige.",
@@ -100,6 +107,7 @@
     },
     "load": {
       "invalid": "Die Datei ist beschädigt oder kein gültiges PDF und konnte nicht angezeigt werden.",
+      "changed": "Die Datei wurde außerhalb von {{appName}} geändert. Bitte schließe den Tab und öffne die Datei neu.",
       "generic": "Das Dokument konnte nicht geöffnet werden.",
       "detail": "Technische Details: {{detail}}"
     },

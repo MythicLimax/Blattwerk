@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
-import { IPC, type AppInfo, type MenuState, type OpenResult, type PrintRequest } from '../shared/ipc';
+import { IPC, type AppInfo, type MenuState, type OpenResult, type PrintRequest, type RecentFile } from '../shared/ipc';
 import { PRODUCT_NAME } from '../shared/product';
 import { isFileId, isSafeLocalPath, validateMenuState } from '../shared/validate';
 import type { FileRegistry } from './files/file-registry';
@@ -16,6 +16,7 @@ export interface IpcContext {
   onMenuState: (win: BrowserWindow, state: MenuState) => void;
   onRendererReady: (win: BrowserWindow) => void;
   onRecentChanged: () => void;
+  clearRecent: () => Promise<RecentFile[]>;
   openPathFor: (win: BrowserWindow, filePath: string) => Promise<OpenResult>;
 }
 
@@ -87,11 +88,7 @@ export function registerIpc(ctx: IpcContext): void {
     return list;
   });
 
-  handle(IPC.recentClear, async () => {
-    const list = await ctx.recent.clear();
-    ctx.onRecentChanged();
-    return list;
-  });
+  handle(IPC.recentClear, () => ctx.clearRecent());
 
   handle(IPC.appInfo, (): AppInfo => ({
     platform: process.platform === 'darwin' || process.platform === 'win32' ? process.platform : 'linux',

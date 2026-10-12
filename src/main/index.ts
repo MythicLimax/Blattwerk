@@ -1,12 +1,13 @@
-import { app, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { CommandId } from '../shared/commands';
-import { IPC, type MenuState, type OpenResult } from '../shared/ipc';
-import { APP_ORIGIN, PRODUCT_NAME } from '../shared/product';
+import { IPC, type MenuState, type OpenResult, type RecentFile } from '../shared/ipc';
+import { APP_ID, APP_ORIGIN, PRODUCT_NAME } from '../shared/product';
 import { FileRegistry } from './files/file-registry';
 import { RecentFiles } from './files/recent-files';
 import { setAsDefaultPdfApp } from './default-app';
+import { t } from './i18n';
 import { registerIpc, showOpenDialog } from './ipc';
 import { applyMenu } from './menu';
 import { handleAppScheme, registerAppScheme } from './protocol';
@@ -19,6 +20,8 @@ const devServerUrl = app.isPackaged ? null : (process.env.BLATTWERK_DEV_SERVER_U
 const devServerOrigin = devServerUrl ? new URL(devServerUrl).origin : null;
 
 app.setName(PRODUCT_NAME);
+// Windows: Taskleiste und Sprungliste ordnen das Fenster sonst nicht der installierten Verknüpfung zu.
+if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
 // Tests laufen mit eigenem Profilordner, damit sie keine echten Einstellungen verändern.
 // Der Ordner für Einstellungen lässt sich auch in der installierten App umlenken (Rauchtest
 // scripts/smoke-packaged.mjs). Das betrifft nur Einstellungen und die Liste zuletzt geöffneter Dateien.
@@ -41,6 +44,9 @@ const files = new FileRegistry();
 let recent: RecentFiles;
 let mainWindow: BrowserWindow | null = null;
 let rendererReady = false;
+// Erst nach dem Start (Einstellungen gelesen, IPC registriert) dürfen Fenster entstehen.
+// Vorher angeforderte Dateien landen in pendingPaths und öffnen im ersten Fenster.
+let initialized = false;
 let menuState: MenuState = {
   hasDocument: false,
   canPrint: false,
@@ -72,12 +78,14 @@ app.on('open-file', (event, filePath) => {
   requestOpen(filePath);
 });
 
+function revealWindow(win: BrowserWindow): void {
+  if (win.isMinimized()) win.restore();
+  win.focus();
+}
+
 app.on('second-instance', (_event, argv) => {
   for (const p of pathsFromArgv(argv)) requestOpen(p);
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
+  if (mainWindow && rendererReady) revealWindow(mainWindow);
 });
 
 // Dateien werden nacheinander geöffnet, damit die Tabs in der angeforderten Reihenfolge entstehen
@@ -95,9 +103,11 @@ function enqueueOpen(win: BrowserWindow, filePath: string): void {
 function requestOpen(filePath: string): void {
   if (mainWindow && rendererReady) {
     enqueueOpen(mainWindow, filePath);
+    // Sonst öffnet sich die Datei unsichtbar in einem minimierten Fenster.
+    revealWindow(mainWindow);
   } else {
     pendingPaths.push(filePath);
-    if (app.isReady() && !mainWindow) void createWindow();
+    if (initialized && !mainWindow) void createWindow();
   }
 }
 
@@ -108,10 +118,15 @@ function sendOpenResult(win: BrowserWindow | null, result: OpenResult): void {
 async function openPathFor(win: BrowserWindow, filePath: string): Promise<OpenResult> {
   const result = await files.open(filePath, win.webContents.id);
   if (result.ok) {
-    await recent.add(filePath);
+    try {
+      await recent.add(filePath);
+    } catch (error) {
+      // Die Liste zuletzt geöffneter Dateien ist Nebensache und darf das Öffnen nicht verhindern.
+      console.error('Zuletzt-Liste konnte nicht gespeichert werden', error);
+    }
     if (process.platform === 'darwin' || process.platform === 'win32') app.addRecentDocument(filePath);
     refreshMenu();
-    win.webContents.send(IPC.recentChanged);
+    if (!win.isDestroyed()) win.webContents.send(IPC.recentChanged);
   }
   return result;
 }
@@ -121,7 +136,17 @@ function sendCommand(command: CommandId): void {
   if (win && !win.isDestroyed()) win.webContents.send(IPC.menuCommand, { command });
 }
 
+// Leert die eigene Liste und die des Systems (Dock unter macOS, Sprungliste unter Windows).
+async function clearRecentEverywhere(): Promise<RecentFile[]> {
+  const list = await recent.clear();
+  if (process.platform === 'darwin' || process.platform === 'win32') app.clearRecentDocuments();
+  refreshMenu();
+  mainWindow?.webContents.send(IPC.recentChanged);
+  return list;
+}
+
 async function openFileDialogFromMenu(): Promise<void> {
+  if (!initialized) return;
   const win = mainWindow ?? (await createWindow());
   const paths = await showOpenDialog(win);
   for (const p of paths) requestOpen(p);
@@ -137,13 +162,7 @@ function refreshMenu(): void {
       sendCommand,
       openFileDialog: () => void openFileDialogFromMenu(),
       openRecent: (p) => requestOpen(p),
-      clearRecent: () => {
-        void recent.clear().then(() => {
-          app.clearRecentDocuments();
-          refreshMenu();
-          mainWindow?.webContents.send(IPC.recentChanged);
-        });
-      },
+      clearRecent: () => void clearRecentEverywhere(),
       setDefaultApp: () => void setAsDefaultPdfApp(mainWindow),
     }),
   );
@@ -187,6 +206,30 @@ async function createWindow(): Promise<BrowserWindow> {
       void files.closeAllOwnedBy(ownerId);
     }
   });
+  // Absturz der Oberfläche (z. B. zu wenig Speicher): Dateien freigeben und Neuladen anbieten.
+  // Bis zum Neuladen angeforderte Dateien warten in pendingPaths und öffnen danach.
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit' || mainWindow !== win) return;
+    rendererReady = false;
+    void files.closeAllOwnedBy(ownerId);
+    menuState = { ...menuState, hasDocument: false, canPrint: false, tabCount: 0, viewMode: null };
+    refreshMenu();
+    void dialog
+      .showMessageBox(win, {
+        type: 'error',
+        message: t('dialog.rendererGone.message'),
+        detail: t('dialog.rendererGone.detail'),
+        buttons: [t('dialog.rendererGone.reload'), t('dialog.rendererGone.close')],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      })
+      .then(({ response }) => {
+        if (win.isDestroyed()) return;
+        if (response === 0) win.webContents.reload();
+        else win.close();
+      });
+  });
   await win.loadURL(devServerUrl ?? `${APP_ORIGIN}/index.html`);
   return win;
 }
@@ -198,7 +241,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  if (!mainWindow && app.isReady()) void createWindow();
+  if (initialized && !mainWindow) void createWindow();
 });
 
 void app.whenReady().then(async () => {
@@ -226,9 +269,11 @@ void app.whenReady().then(async () => {
       for (const p of pendingPaths.splice(0)) enqueueOpen(win, p);
     },
     onRecentChanged: () => refreshMenu(),
+    clearRecent: clearRecentEverywhere,
     openPathFor,
   });
 
   refreshMenu();
-  await createWindow();
+  initialized = true;
+  if (!mainWindow) await createWindow();
 });

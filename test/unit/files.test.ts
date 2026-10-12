@@ -103,6 +103,19 @@ describe('FileRegistry', () => {
     expect(registry.openCount).toBe(0);
   });
 
+  it('meldet von außen geänderte oder gekürzte Dateien statt falsche Daten zu liefern', async () => {
+    const target = path.join(dir, 'aenderbar.pdf');
+    await writeFile(target, await readFile(fixture('text.pdf')));
+    const registry = new FileRegistry();
+    const result = await registry.open(target, 1);
+    if (!result.ok) throw new Error('öffnen fehlgeschlagen');
+    await expect(registry.read(result.file.fileId, 0, 100, 1)).resolves.toHaveLength(100);
+    // An Ort und Stelle kürzen (wie ein anderes Programm, das die Datei neu schreibt)
+    await writeFile(target, '%PDF-1.7 gekuerzt');
+    await expect(registry.read(result.file.fileId, 0, 100, 1)).rejects.toThrow('file-changed');
+    await registry.close(result.file.fileId, 1);
+  });
+
   it('meldet fehlende Dateien, Ordner und Nicht-PDFs', async () => {
     const registry = new FileRegistry();
     expect(await registry.open(path.join(dir, 'fehlt.pdf'), 1)).toMatchObject({ ok: false, error: 'not-found' });

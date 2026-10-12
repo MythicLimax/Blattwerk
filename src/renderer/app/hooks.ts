@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { MenuState } from '../../shared/ipc';
 import { matchRendererShortcut } from '../../shared/shortcuts';
 import { api } from '../api';
+import { getRuntime } from '../engine/runtime';
 import { executeCommand, handleOpenResult } from '../engine/session';
 import { isPagedMode } from '../features/viewer/view-modes';
 import { getActiveTab, useDocuments } from '../state/documents-store';
@@ -63,9 +64,23 @@ export function useGlobalKeys(): void {
         executeCommand(command);
         return;
       }
-      if (isPagedMode(tab.viewMode) && (event.key === 'PageDown' || event.key === 'PageUp')) {
-        event.preventDefault();
-        executeCommand(event.key === 'PageDown' ? 'nav.nextPage' : 'nav.previousPage');
+      if (isPagedMode(tab.viewMode)) {
+        if (event.key === 'PageDown' || event.key === 'PageUp') {
+          event.preventDefault();
+          executeCommand(event.key === 'PageDown' ? 'nav.nextPage' : 'nav.previousPage');
+          return;
+        }
+        // Pfeil runter/Leertaste am Seitenende blättert weiter, Pfeil hoch/Umschalt+Leertaste am Anfang zurück.
+        const container = getRuntime(tab.id)?.container;
+        if (!container) return;
+        const forward = event.key === 'ArrowDown' || (event.key === ' ' && !event.shiftKey);
+        const backward = event.key === 'ArrowUp' || (event.key === ' ' && event.shiftKey);
+        const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
+        const atTop = container.scrollTop <= 0;
+        if ((forward && atBottom) || (backward && atTop)) {
+          event.preventDefault();
+          executeCommand(forward ? 'nav.nextPage' : 'nav.previousPage');
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -103,9 +118,11 @@ export function useFileDrop(): void {
       depth = 0;
       setDragging(false);
       const files = Array.from(event.dataTransfer?.files ?? []);
+      // Nacheinander beim Hauptprozess anmelden (Reihenfolge der Tabs), aber nicht auf das Laden warten:
+      // Eine Kennwortabfrage soll die übrigen Dateien nicht aufhalten.
       void (async () => {
         for (const file of files) {
-          await handleOpenResult(await api.openDroppedFile(file));
+          void handleOpenResult(await api.openDroppedFile(file));
         }
       })();
     };

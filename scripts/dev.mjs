@@ -21,7 +21,12 @@ function startElectron() {
   child = spawn(electronBinary, ['.', ...process.argv.slice(2)], {
     cwd: root,
     stdio: 'inherit',
-    env: { ...process.env, BLATTWERK_DEV_SERVER_URL: url },
+    // Eigenes Profil: trennt Einstellungen, Zuletzt-Liste und Einzelinstanz-Sperre von der installierten App.
+    env: {
+      ...process.env,
+      BLATTWERK_DEV_SERVER_URL: url,
+      BLATTWERK_USER_DATA: process.env.BLATTWERK_USER_DATA ?? path.join(root, '.tools', 'dev-profile'),
+    },
   });
   child.on('exit', () => {
     if (!restarting) {

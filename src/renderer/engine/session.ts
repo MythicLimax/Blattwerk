@@ -22,6 +22,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// Übersetzungsschlüssel für einen Ladefehler. Fehler aus IPC tragen ein Präfix von Electron,
+// deshalb wird auf enthaltenen Text geprüft.
+function loadErrorKey(error: unknown): string {
+  if (errorMessage(error).includes('file-changed')) return 'errors.load.changed';
+  if (errorName(error) === 'InvalidPDFException') return 'errors.load.invalid';
+  return 'errors.load.generic';
+}
+
 export async function handleOpenResult(result: OpenResult): Promise<void> {
   if (!result.ok) {
     if (result.error !== 'cancelled') {
@@ -54,9 +62,10 @@ export async function handleOpenResult(result: OpenResult): Promise<void> {
         });
       },
       onRangeError: (error) => {
+        if (!useDocuments.getState().tabs.some((tab) => tab.id === tabId)) return;
         useDocuments.getState().updateTab(tabId, {
           status: 'error',
-          errorKey: 'errors.load.generic',
+          errorKey: loadErrorKey(error),
           errorDetail: errorMessage(error),
         });
       },
@@ -66,7 +75,7 @@ export async function handleOpenResult(result: OpenResult): Promise<void> {
       return;
     }
     const runtime = createRuntime(tabId, file, handle.terminate);
-    const pdf = await handle.task.promise;
+    const pdf = await handle.promise;
     if (!getRuntime(tabId)) return;
     setRuntimeDocument(runtime, pdf);
     const [metadata, permissions] = await Promise.all([
@@ -83,10 +92,9 @@ export async function handleOpenResult(result: OpenResult): Promise<void> {
     });
   } catch (error) {
     if (!useDocuments.getState().tabs.some((tab) => tab.id === tabId)) return;
-    const invalid = errorName(error) === 'InvalidPDFException';
     useDocuments.getState().updateTab(tabId, {
       status: 'error',
-      errorKey: invalid ? 'errors.load.invalid' : 'errors.load.generic',
+      errorKey: loadErrorKey(error),
       errorDetail: errorMessage(error),
     });
   } finally {
@@ -103,18 +111,24 @@ export function submitPassword(tabId: string, password: string): void {
 
 export async function openWithDialog(): Promise<void> {
   const results = await api.openFileDialog();
-  for (const result of results) await handleOpenResult(result);
+  // Nicht auf das Laden warten: Eine Kennwortabfrage soll die übrigen Dateien nicht aufhalten.
+  // Die Tab-Reihenfolge bleibt erhalten, weil handleOpenResult den Tab vor dem ersten await anlegt.
+  for (const result of results) void handleOpenResult(result);
 }
 
 export function closeTab(tabId: string): void {
   const tab = useDocuments.getState().tabs.find((t) => t.id === tabId);
   if (!tab) return;
   passwordCallbacks.delete(tabId);
+  const ui = useUi.getState();
+  // Ein laufender Druck dieses Dokuments wird abgebrochen, bevor seine pdf.js-Instanz verschwindet.
+  if (ui.print?.tabId === tabId) printAbort?.abort();
   destroyRuntime(tabId);
   void api.closeFile(tab.fileId);
   useDocuments.getState().removeTab(tabId);
-  const ui = useUi.getState();
   if (ui.propertiesTabId === tabId) ui.openProperties(null);
+  // „Gehe zu Seite“ gilt immer dem aktiven Tab; nach dem Schließen ist das ein anderer.
+  ui.setGoToPageOpen(false);
 }
 
 export function setViewMode(tab: TabState, mode: ViewMode): void {
@@ -130,7 +144,10 @@ export function setViewMode(tab: TabState, mode: ViewMode): void {
 
 export function setScaleValue(tab: TabState, value: string): void {
   const viewer = getRuntime(tab.id)?.viewer;
-  if (viewer) viewer.currentScaleValue = value;
+  if (!viewer) return;
+  viewer.currentScaleValue = value;
+  // pdf.js meldet keine Änderung, wenn sich nur die Art (z. B. Automatisch → 125 %) ändert, nicht der Maßstab.
+  useDocuments.getState().updateTab(tab.id, { scaleValue: viewer.currentScaleValue || value, scale: viewer.currentScale });
 }
 
 export function goToPage(tab: TabState, pageNumber: number): void {

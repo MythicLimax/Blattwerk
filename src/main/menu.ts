@@ -44,13 +44,16 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
     };
   };
 
+  // "&" leitet in Menütexten ein Tastenkürzel ein; als Zeichen muss es verdoppelt werden.
+  const escapeLabel = (text: string) => text.replaceAll('&', '&&');
+
   const recentItems: MenuItemConstructorOptions[] =
     ctx.recent.length === 0
       ? [{ label: t('menu.file.noRecent'), enabled: false }]
       : [
           ...ctx.recent.map((file) => ({
-            label: file.name,
-            sublabel: file.dir,
+            label: escapeLabel(file.name),
+            sublabel: escapeLabel(file.dir),
             click: () => ctx.openRecent(file.path),
           })),
           { type: 'separator' as const },
@@ -68,7 +71,11 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       },
       { label: t('menu.file.openRecent'), submenu: recentItems },
       { type: 'separator' },
-      cmd('file.close', t('menu.file.close'), { enabled: doc }),
+      // Schließen wirkt auf jeden Tab, auch während des Ladens, bei Kennwortabfrage oder Fehler.
+      // Ohne Tabs schließt dasselbe Kürzel unter macOS das Fenster, wie in anderen Mac-Apps.
+      ...(isMac && state.tabCount === 0
+        ? [{ role: 'close' as const, label: t('menu.file.closeWindow'), accelerator: SHORTCUTS['file.close']?.accelerator }]
+        : [cmd('file.close', t('menu.file.close'), { enabled: state.tabCount > 0 })]),
       { type: 'separator' },
       cmd('file.properties', t('menu.file.properties'), { enabled: doc }),
       cmd('file.print', t('menu.file.print'), { enabled: doc && state.canPrint }),

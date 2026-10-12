@@ -8,10 +8,10 @@ import {
   getRuntime,
   matchPosition,
   originalPageText,
+  selectMatch,
   type DocumentRuntime,
   type FindType,
 } from '../../engine/runtime';
-import { goToPage } from '../../engine/session';
 import { useDocuments, type SearchState, type TabState } from '../../state/documents-store';
 import { useUi } from '../../state/ui-store';
 import styles from './SearchPanel.module.css';
@@ -40,33 +40,36 @@ function statusText(t: (key: string, options?: Record<string, unknown>) => strin
 
 function ResultRow({
   runtime,
-  tab,
+  search,
   pageIndex,
   matchIndex,
+  start,
+  length,
 }: {
   runtime: DocumentRuntime;
-  tab: TabState;
+  search: SearchState;
   pageIndex: number;
   matchIndex: number;
+  start: number;
+  length: number;
 }) {
   const { t } = useTranslation();
   const [snippet, setSnippet] = useState<Snippet | null>(null);
 
+  // Hängt an Position und Länge: Nach einer neuen Suche lädt die Zeile ihren Ausschnitt neu.
   useEffect(() => {
     let cancelled = false;
-    const position = matchPosition(runtime, pageIndex, matchIndex);
-    if (!position) return;
     void originalPageText(runtime, pageIndex).then((text) => {
-      if (!cancelled) setSnippet(snippetAround(text, position.start, position.length));
+      if (!cancelled) setSnippet(snippetAround(text, start, length));
     });
     return () => {
       cancelled = true;
     };
-  }, [runtime, pageIndex, matchIndex]);
+  }, [runtime, pageIndex, start, length]);
 
   return (
     <li>
-      <button type="button" className={styles.result} onClick={() => goToPage(tab, pageIndex + 1)}>
+      <button type="button" className={styles.result} onClick={() => selectMatch(runtime, search, pageIndex, matchIndex)}>
         <span className={styles.resultPage}>{t('search.page', { page: pageIndex + 1 })}</span>
         {snippet && (
           <span className={styles.snippet}>
@@ -88,16 +91,23 @@ export function SearchPanel({ tab }: { tab: TabState }) {
   const [draft, setDraft] = useState(tab.search.query);
   const search = tab.search;
 
+  // Fokus nur bei ausdrücklicher Anforderung (Cmd+F, Suchen-Schaltfläche), nicht bei jedem Tab-Wechsel.
   useEffect(() => {
+    const ui = useUi.getState();
+    if (focusRequest <= ui.searchFocusHandled) return;
+    ui.markSearchFocusHandled(focusRequest);
     inputRef.current?.focus();
     inputRef.current?.select();
   }, [focusRequest]);
 
-  // Beim Schließen des Bereichs die Markierungen im Dokument entfernen.
+  // Beim Einblenden vorhandene Treffer wieder markieren, beim Ausblenden die Markierungen entfernen.
   useEffect(() => {
+    const runtime = getRuntime(tab.id);
+    const current = useDocuments.getState().tabs.find((t) => t.id === tab.id)?.search;
+    if (runtime && current?.query) dispatchFind(runtime, current, 'highlightallchange');
     return () => {
-      const runtime = getRuntime(tab.id);
-      if (runtime) closeFind(runtime);
+      const rt = getRuntime(tab.id);
+      if (rt) closeFind(rt);
     };
   }, [tab.id]);
 
@@ -108,7 +118,8 @@ export function SearchPanel({ tab }: { tab: TabState }) {
 
   const onChangeQuery = (value: string) => {
     setDraft(value);
-    const next = { ...search, query: value, status: value ? search.status : ('idle' as const), current: 0, total: value ? search.total : 0, pages: value ? search.pages : [] };
+    // Alte Ergebnisse sofort verwerfen, damit keine veralteten Zeilen zu sehen sind.
+    const next: SearchState = { ...search, query: value, status: value ? 'pending' : 'idle', current: 0, total: 0, pages: [] };
     updateSearch(tab.id, next);
     if (value) run(next, '');
     else {
@@ -118,8 +129,8 @@ export function SearchPanel({ tab }: { tab: TabState }) {
   };
 
   const onToggle = (key: 'caseSensitive' | 'entireWord' | 'matchDiacritics', type: FindType) => {
-    const next = { ...search, [key]: !search[key] };
-    updateSearch(tab.id, { [key]: next[key] });
+    const next: SearchState = { ...search, [key]: !search[key], current: 0, total: 0, pages: [] };
+    updateSearch(tab.id, { [key]: next[key], current: 0, total: 0, pages: [] });
     run(next, type);
   };
 
@@ -200,15 +211,21 @@ export function SearchPanel({ tab }: { tab: TabState }) {
 
       {rows.length > 0 && runtime && (
         <ol className={styles.results} aria-label={t('search.results')} data-testid="search-results">
-          {rows.map(({ pageIndex, matchIndex }) => (
-            <ResultRow
-              key={`${pageIndex}:${matchIndex}`}
-              runtime={runtime}
-              tab={tab}
-              pageIndex={pageIndex}
-              matchIndex={matchIndex}
-            />
-          ))}
+          {rows.map(({ pageIndex, matchIndex }) => {
+            const position = matchPosition(runtime, pageIndex, matchIndex);
+            if (!position) return null;
+            return (
+              <ResultRow
+                key={`${pageIndex}:${matchIndex}`}
+                runtime={runtime}
+                search={search}
+                pageIndex={pageIndex}
+                matchIndex={matchIndex}
+                start={position.start}
+                length={position.length}
+              />
+            );
+          })}
         </ol>
       )}
     </div>

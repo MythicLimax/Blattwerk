@@ -27,6 +27,11 @@ export interface DocumentRuntime {
   viewer: PDFViewer | null;
   thumbnails: ThumbnailCache;
   pageTexts: Map<number, Promise<PageText>>;
+  // Container der Seitenansicht, um den Tastaturfokus dorthin zurückzugeben
+  container: HTMLDivElement | null;
+  // true, solange die Suche geschlossen ist. pdf.js meldet beim Schließen noch einmal den alten
+  // Trefferstand; der darf den Zustand nicht überschreiben.
+  findClosed: boolean;
   terminate: () => void;
 }
 
@@ -60,6 +65,8 @@ export function createRuntime(tabId: string, file: FileInfo, terminate: () => vo
     viewer: null,
     thumbnails: new ThumbnailCache(),
     pageTexts: new Map(),
+    container: null,
+    findClosed: true,
     terminate,
   };
   runtimes.set(tabId, runtime);
@@ -108,6 +115,7 @@ export function attachViewer(runtime: DocumentRuntime, container: HTMLDivElement
     enableAutoLinking: true,
   });
   runtime.viewer = viewer;
+  runtime.container = container;
   runtime.linkService.setViewer(viewer);
 
   const onPagesInit = () => {
@@ -123,6 +131,7 @@ export function attachViewer(runtime: DocumentRuntime, container: HTMLDivElement
 
   return () => {
     runtime.eventBus.off('pagesinit', onPagesInit);
+    if (runtime.container === container) runtime.container = null;
     if (runtime.viewer === viewer) {
       runtime.viewer = null;
       try {
@@ -179,13 +188,19 @@ function wireEvents(runtime: DocumentRuntime): void {
     }, 150);
   };
 
+  // Meldungen der Suche nur übernehmen, wenn sie offen ist und einen Suchbegriff hat.
+  const searchActive = () =>
+    !runtime.findClosed && Boolean(useDocuments.getState().tabs.find((t) => t.id === tabId)?.search.query);
+
   eventBus.on('updatefindmatchescount', (evt: { matchesCount: { current: number; total: number } }) => {
+    if (!searchActive()) return;
     updateSearch(tabId, { current: evt.matchesCount.current, total: evt.matchesCount.total });
     schedulePages();
   });
   eventBus.on(
     'updatefindcontrolstate',
     (evt: { state: number; previous: boolean; matchesCount: { current: number; total: number } }) => {
+      if (!searchActive()) return;
       updateSearch(tabId, {
         status: findStatus(evt.state, evt.previous),
         current: evt.matchesCount.current,
@@ -196,16 +211,35 @@ function wireEvents(runtime: DocumentRuntime): void {
   );
 
   // Seiten, die der Viewer ohnehin gerendert hat, liefern billige Miniaturen.
-  eventBus.on('pagerendered', (evt: { pageNumber: number; source?: { canvas?: HTMLCanvasElement | null } }) => {
+  eventBus.on(
+    'pagerendered',
+    (evt: {
+      pageNumber: number;
+      source?: { canvas?: HTMLCanvasElement | null };
+      cssTransform?: boolean;
+      isDetailView?: boolean;
+      error?: unknown;
+    }) => {
+    // Nur vollständige, frisch gerenderte Seiten: Bei CSS-Drehung ist das Canvas noch alt,
+    // eine Detailansicht zeigt nur einen Ausschnitt.
+    if (evt.cssTransform || evt.isDetailView || evt.error) return;
     const canvas = evt.source?.canvas;
     const rotation = runtime.viewer?.pagesRotation ?? 0;
     if (canvas) runtime.thumbnails.offerRenderedPage(evt.pageNumber, canvas, rotation);
-  });
+    },
+  );
 }
 
-export type FindType = '' | 'again' | 'casesensitivitychange' | 'entirewordchange' | 'diacriticmatchingchange';
+export type FindType =
+  | ''
+  | 'again'
+  | 'casesensitivitychange'
+  | 'entirewordchange'
+  | 'diacriticmatchingchange'
+  | 'highlightallchange';
 
 export function dispatchFind(runtime: DocumentRuntime, search: SearchState, type: FindType, findPrevious = false): void {
+  runtime.findClosed = false;
   runtime.eventBus.dispatch('find', {
     source: null,
     type,
@@ -219,7 +253,37 @@ export function dispatchFind(runtime: DocumentRuntime, search: SearchState, type
 }
 
 export function closeFind(runtime: DocumentRuntime): void {
+  runtime.findClosed = true;
   runtime.eventBus.dispatch('findbarclose', { source: null });
+}
+
+// Wählt einen bestimmten Treffer aus (wie „Weitersuchen“ bis zu genau diesem Treffer).
+// pdf.js hat dafür keine öffentliche Schnittstelle; _selected und _offset gibt es in pdfjs-dist 6.4.299
+// als Felder von PDFFindController. Fehlen sie, springt die Funktion nur zur Seite.
+export function selectMatch(runtime: DocumentRuntime, search: SearchState, pageIndex: number, matchIndex: number): void {
+  const controller = runtime.findController as unknown as {
+    _selected?: { pageIdx: number; matchIdx: number };
+    _offset?: { pageIdx: number | null; matchIdx: number | null; wrapped: boolean };
+  };
+  if (!controller._selected || !controller._offset) {
+    if (runtime.viewer) runtime.viewer.currentPageNumber = pageIndex + 1;
+    return;
+  }
+  const previousPage = controller._selected.pageIdx;
+  // Erst zur Seite wechseln, sonst beginnt pdf.js die Suche von der aktuellen Seite neu.
+  runtime.linkService.page = pageIndex + 1;
+  controller._selected = { pageIdx: pageIndex, matchIdx: -1 };
+  controller._offset = { pageIdx: pageIndex, matchIdx: matchIndex > 0 ? matchIndex - 1 : null, wrapped: false };
+  if (previousPage !== -1 && previousPage !== pageIndex) {
+    runtime.eventBus.dispatch('updatetextlayermatches', { source: runtime.findController, pageIndex: previousPage });
+  }
+  dispatchFind(runtime, search, 'again', false);
+}
+
+// Gibt den Tastaturfokus an die Seitenansicht zurück (z. B. nach Klicks in der Werkzeugleiste),
+// damit Pfeiltasten, Bild auf/ab und Leertaste weiter das Dokument bewegen.
+export function focusViewer(runtime: DocumentRuntime | undefined): void {
+  runtime?.container?.focus({ preventScroll: true });
 }
 
 // Position eines Treffers im unveränderten Seitentext (so wie pdf.js ihn für die Markierung nutzt).

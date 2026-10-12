@@ -22,8 +22,10 @@ interface UiState {
   notices: Notice[];
   recent: RecentFile[];
   draggingFiles: boolean;
-  // Zähler, damit die Suche den Fokus bekommt, auch wenn der Bereich schon offen ist
+  // Zähler, damit die Suche den Fokus bekommt, auch wenn der Bereich schon offen ist.
+  // searchFocusHandled merkt sich die zuletzt erfüllte Anforderung, damit ein Tab-Wechsel nicht erneut fokussiert.
   searchFocusRequest: number;
+  searchFocusHandled: number;
   setSidebarVisible: (visible: boolean) => void;
   setRightPanelVisible: (visible: boolean) => void;
   openProperties: (tabId: string | null) => void;
@@ -34,6 +36,7 @@ interface UiState {
   setRecent: (recent: RecentFile[]) => void;
   setDraggingFiles: (dragging: boolean) => void;
   requestSearchFocus: () => void;
+  markSearchFocusHandled: (request: number) => void;
 }
 
 let nextNoticeId = 1;
@@ -48,6 +51,7 @@ export const useUi = create<UiState>((set) => ({
   recent: [],
   draggingFiles: false,
   searchFocusRequest: 0,
+  searchFocusHandled: 0,
   setSidebarVisible: (sidebarVisible) => set({ sidebarVisible }),
   setRightPanelVisible: (rightPanelVisible) => set({ rightPanelVisible }),
   openProperties: (propertiesTabId) => set({ propertiesTabId }),
@@ -60,4 +64,5 @@ export const useUi = create<UiState>((set) => ({
   setDraggingFiles: (draggingFiles) => set({ draggingFiles }),
   requestSearchFocus: () =>
     set((state) => ({ rightPanelVisible: true, searchFocusRequest: state.searchFocusRequest + 1 })),
+  markSearchFocusHandled: (request) => set({ searchFocusHandled: request }),
 }));

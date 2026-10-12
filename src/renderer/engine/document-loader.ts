@@ -1,14 +1,23 @@
-import type { PDFDocumentLoadingTask } from 'pdfjs-dist';
+import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import type { FileInfo } from '../../shared/ipc';
 import { api } from '../api';
 import { readChunked } from './file-reader';
 import { createPdfWorker, pdfjs, PDFJS_ASSETS } from './pdfjs';
 import { createRangeTransport, RANGE_CHUNK_SIZE, WHOLE_FILE_LIMIT } from './range-transport';
 
-
 export interface LoadedDocumentHandle {
   task: PDFDocumentLoadingTask;
+  // Wie task.promise, wird aber auch beim Abbrechen (terminate) abgelehnt.
+  // pdf.js selbst lässt task.promise offen, wenn der Worker während des Ladens beendet wird.
+  promise: Promise<PDFDocumentProxy>;
   terminate: () => void;
+}
+
+export class LoadAbortedError extends Error {
+  constructor() {
+    super('aborted');
+    this.name = 'LoadAbortedError';
+  }
 }
 
 export interface LoadCallbacks {
@@ -60,11 +69,23 @@ export async function startLoading(file: FileInfo, callbacks: LoadCallbacks): Pr
     callbacks.onPassword(reason === pdfjs.PasswordResponses.INCORRECT_PASSWORD ? 'incorrect' : 'need', submit);
   };
 
+  const aborted = Promise.withResolvers<never>();
+  aborted.promise.catch(() => undefined);
+  let terminated = false;
+
   return {
     task,
+    promise: Promise.race([task.promise, aborted.promise]),
     terminate: () => {
-      void task.destroy().catch(() => undefined);
-      terminate();
+      if (terminated) return;
+      terminated = true;
+      aborted.reject(new LoadAbortedError());
+      // Erst pdf.js sauber abbauen lassen, dann den Worker beenden. Sonst warten offene
+      // pdf.js-Aufrufe (z. B. getPage beim Drucken) für immer auf einen toten Worker.
+      void task
+        .destroy()
+        .catch(() => undefined)
+        .finally(terminate);
     },
   };
 }

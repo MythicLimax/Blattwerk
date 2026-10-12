@@ -9,7 +9,7 @@ import {
   formatFileSize,
   parsePdfDate,
 } from '../../src/renderer/features/properties/properties';
-import { layoutForMode, isPagedMode } from '../../src/renderer/features/viewer/view-modes';
+import { layoutForMode, isPagedMode, PageFlipAccumulator, wheelDeltaPixels } from '../../src/renderer/features/viewer/view-modes';
 import {
   clampScale,
   parsePercentInput,
@@ -188,5 +188,30 @@ describe('Suchausschnitte', () => {
     expect(snippet?.after.startsWith(' Nummer 1 bbb')).toBe(true);
     expect(snippet?.after.endsWith('…')).toBe(true);
     expect(snippetAround(page, page.text.length, 5)).toBeNull();
+  });
+});
+
+describe('Umblättern per Mausrad und Trackpad', () => {
+  it('blättert erst ab der Schwelle und ignoriert den Nachlauf', () => {
+    const flip = new PageFlipAccumulator(80, 450);
+    expect(flip.add(30, 0)).toBe(0);
+    expect(flip.add(30, 10)).toBe(0);
+    expect(flip.add(30, 20)).toBe(1);
+    // Nachlauf des Trackpads: gesperrt, solange Ereignisse kommen
+    expect(flip.add(100, 100)).toBe(0);
+    expect(flip.add(100, 500)).toBe(0);
+    // nach einer Pause wieder möglich
+    expect(flip.add(100, 2000)).toBe(1);
+  });
+  it('setzt bei Richtungswechsel neu an', () => {
+    const flip = new PageFlipAccumulator(80, 450);
+    expect(flip.add(60, 0)).toBe(0);
+    expect(flip.add(-60, 10)).toBe(0);
+    expect(flip.add(-30, 20)).toBe(-1);
+  });
+  it('rechnet Zeilen- und Seitenschritte in Pixel um', () => {
+    expect(wheelDeltaPixels({ deltaY: 3, deltaMode: 1 })).toBe(120);
+    expect(wheelDeltaPixels({ deltaY: 1, deltaMode: 2 })).toBe(800);
+    expect(wheelDeltaPixels({ deltaY: 12, deltaMode: 0 })).toBe(12);
   });
 });

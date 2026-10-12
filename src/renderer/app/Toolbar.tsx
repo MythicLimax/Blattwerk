@@ -15,6 +15,7 @@ import { useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ViewMode } from '../../shared/ipc';
 import { IconButton } from '../components/IconButton';
+import { focusViewer, getRuntime } from '../engine/runtime';
 import { executeCommand, goToPage, openWithDialog, printTab, setScaleValue, setViewMode } from '../engine/session';
 import { VIEW_MODES } from '../features/viewer/view-modes';
 import { isPresetScaleValue, scaleToPercent, ZOOM_MENU_PERCENTS } from '../features/viewer/zoom';
@@ -36,13 +37,18 @@ function PageInput({ tab }: { tab: TabState }) {
     setDraft(null);
   };
 
+  const done = (input: HTMLInputElement) => {
+    input.blur();
+    focusViewer(getRuntime(tab.id));
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       commit();
-      event.currentTarget.blur();
+      done(event.currentTarget);
     } else if (event.key === 'Escape') {
       setDraft(null);
-      event.currentTarget.blur();
+      done(event.currentTarget);
     }
   };
 
@@ -86,7 +92,10 @@ function ZoomSelect({ tab }: { tab: TabState }) {
       title={t('toolbar.zoomSelect')}
       data-testid="zoom-select"
       value={selectValue}
-      onChange={(event) => setScaleValue(tab, event.target.value)}
+      onChange={(event) => {
+        setScaleValue(tab, event.target.value);
+        focusViewer(getRuntime(tab.id));
+      }}
     >
       {Object.entries(presetLabels).map(([value, label]) => (
         <option key={value} value={value}>
@@ -117,7 +126,10 @@ function ViewModeSelect({ tab }: { tab: TabState }) {
       title={t('toolbar.viewMode')}
       data-testid="view-mode-select"
       value={tab.viewMode}
-      onChange={(event) => setViewMode(tab, event.target.value as ViewMode)}
+      onChange={(event) => {
+        setViewMode(tab, event.target.value as ViewMode);
+        focusViewer(getRuntime(tab.id));
+      }}
     >
       {VIEW_MODES.map((mode) => (
         <option key={mode} value={mode}>
@@ -136,7 +148,15 @@ export function Toolbar() {
   const ready = tab?.status === 'ready';
 
   return (
-    <header className={styles.toolbar} data-testid="toolbar">
+    <header
+      className={styles.toolbar}
+      data-testid="toolbar"
+      // Klicks auf Schaltflächen nehmen dem Dokument nicht den Tastaturfokus (Pfeile, Bild auf/ab scrollen weiter).
+      // Per Tab-Taste bleiben die Schaltflächen erreichbar.
+      onMouseDown={(event) => {
+        if ((event.target as HTMLElement).closest('button')) event.preventDefault();
+      }}
+    >
       <div className={styles.group}>
         {ready && (
           <IconButton
@@ -173,7 +193,7 @@ export function Toolbar() {
               disabled={tab.currentPage >= tab.pageCount}
               onClick={() => executeCommand('nav.nextPage')}
             />
-            <PageInput tab={tab} />
+            <PageInput key={tab.id} tab={tab} />
           </div>
           <span className={styles.separator} />
           <div className={styles.group}>

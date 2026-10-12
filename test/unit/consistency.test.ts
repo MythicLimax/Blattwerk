@@ -92,6 +92,49 @@ describe('Menü und Tastenkürzel', () => {
     }
   });
 
+  it('Schließen wirkt auf jeden Tab; ohne Tabs schließt Cmd+W unter macOS das Fenster', async () => {
+    const { buildMenuTemplate } = await import('../../src/main/menu');
+    const base = {
+      recent: [],
+      devTools: false,
+      sendCommand: () => undefined,
+      openFileDialog: () => undefined,
+      openRecent: () => undefined,
+      clearRecent: () => undefined,
+      setDefaultApp: () => undefined,
+    };
+    const state = { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false };
+    const flatten = (items: Electron.MenuItemConstructorOptions[]): Electron.MenuItemConstructorOptions[] =>
+      items.flatMap((item) => [item, ...(Array.isArray(item.submenu) ? flatten(item.submenu) : [])]);
+
+    const loading = flatten(buildMenuTemplate({ ...base, platform: 'darwin', state: { ...state, tabCount: 1 } }));
+    expect(loading.find((i) => i.id === 'file.close')?.enabled).toBe(true);
+
+    const empty = flatten(buildMenuTemplate({ ...base, platform: 'darwin', state: { ...state, tabCount: 0 } }));
+    expect(empty.some((i) => i.role === 'close' && i.accelerator === 'CmdOrCtrl+W')).toBe(true);
+
+    const emptyWin = flatten(buildMenuTemplate({ ...base, platform: 'win32', state: { ...state, tabCount: 0 } }));
+    expect(emptyWin.find((i) => i.id === 'file.close')?.enabled).toBe(false);
+  });
+
+  it('maskiert & in Dateinamen der Zuletzt-Liste', async () => {
+    const { buildMenuTemplate } = await import('../../src/main/menu');
+    const template = buildMenuTemplate({
+      platform: 'win32',
+      state: { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, tabCount: 0 },
+      recent: [{ path: 'C:\\A & B\\AGB & Datenschutz.pdf', name: 'AGB & Datenschutz.pdf', dir: 'C:\\A & B', openedAt: 1 }],
+      devTools: false,
+      sendCommand: () => undefined,
+      openFileDialog: () => undefined,
+      openRecent: () => undefined,
+      clearRecent: () => undefined,
+      setDefaultApp: () => undefined,
+    });
+    const text = JSON.stringify(template);
+    expect(text).toContain('AGB && Datenschutz.pdf');
+    expect(text).toContain('C:\\\\A && B');
+  });
+
   it('Kürzel sind eindeutig', () => {
     const accelerators = Object.values(SHORTCUTS).map((s) => s?.accelerator);
     expect(new Set(accelerators).size).toBe(accelerators.length);
