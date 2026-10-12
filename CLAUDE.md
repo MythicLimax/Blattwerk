@@ -2,7 +2,7 @@
 
 Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro. Die vollständige Vorgabe steht in [docs/spezifikation.md](docs/spezifikation.md). **Vor jeder Arbeit lesen.**
 
-- App-Name: **Blattwerk**, App-ID `de.blattwerk.app`. Der Name steht nur in `src/shared/product.ts` und im i18n-Schlüssel `app.name`, nie hart im Code. Kein Adobe-Name, kein Adobe-Logo, keine kopierten Icons oder Grafiken.
+- App-Name: **Blattwerk**, App-ID `de.blattwerk.app`. Im Code steht der Name nur in `src/shared/product.ts`; Texte nutzen die Variable `{{appName}}`. `package.json` und `electron-builder.yml` tragen dieselben Werte (ein Test prüft das). Kein Adobe-Name, kein Adobe-Logo, keine kopierten Icons oder Grafiken.
 - Sprache: Gespräch, Doku, Kommentare und UI auf Deutsch. Bezeichner im Code auf Englisch.
 - **Auftraggeber programmiert nicht selbst** und hat alle technischen Entscheidungen an Claude delegiert (2026-10-12). Ziel: eine App auf dem MacBook (Apple Silicon), die möglichst viel von Acrobat Pro kann. Daher: Entscheidungen selbst treffen und in `docs/entscheidungen/` begründen, Berichte in einfacher Sprache ohne Fachjargon, nur bei echten Weichenstellungen nachfragen. macOS hat Vorrang, Windows bleibt Ziel der Spezifikation.
 
@@ -11,7 +11,7 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | Phase | Inhalt | Status |
 |---|---|---|
 | 0 | Grundlagen: Spezifikation, Bibliotheksauswahl, CLAUDE.md | erledigt |
-| 1 | Viewer | in Arbeit |
+| 1 | Viewer | erledigt ([Bericht](docs/phasen/phase-1.md)), wartet auf OK |
 | 2 | Kommentieren | offen |
 | 3 | Seiten organisieren | offen |
 | 4 | Formulare und Unterschrift | offen |
@@ -19,7 +19,7 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | offen |
 | 7 | Profi (PAdES, PDF/A, Tags) | offen |
 
-Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig, Projekt liegt lokal unter `~/Documents/Claude Projekte/Adobe Acrobat Klon Lokal` (nicht in iCloud).
+Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig. Projekt liegt unter `~/Documents/Claude Projekte/Adobe Acrobat Klon Lokal`. **Achtung:** `~/Documents` wird auf diesem Mac mit iCloud abgeglichen (offene Frage an den Auftraggeber, ob das Projekt umziehen soll).
 
 ## Arbeitsweise (verbindlich)
 
@@ -35,77 +35,80 @@ Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001
 ### Prozesse
 
 ```
-Hauptprozess (Node)               Preload                 Renderer (React, sandboxed)
-- Fenster, natives Menü           contextBridge:          - UI, Tabs, Panels
-- Datei-I/O, atomares Speichern   window.api (typisiert)  - pdf.js-Worker je Dokument: Parsen, Text, Suche
-- Zuletzt geöffnet, Einstellungen                         - PDFium-Worker je Dokument: Ändern, Speichern
-- Dateizuordnung, Single Instance                         - Zustand: zustand-Stores
+Hauptprozess (Node)                 Preload                       Renderer (React, sandboxed)
+- Fenster, natives Menü             contextBridge:                - Oberfläche, Tabs, Seitenleisten
+- Dateien öffnen und lesen (IDs)    window.blattwerk (typisiert)  - pdf.js-Worker je Dokument (Parsen, Text)
+- Zuletzt geöffnet, Einstellungen                                 - ab Phase 2: PDFium-Worker (Ändern, Speichern)
+- app://-Protokoll, Sicherheit                                    - Zustand: zustand-Stores
+- Dateizuordnung, Einzelinstanz
 ```
 
-- **Renderer hat keinen Node-Zugriff.** Alles Dateisystem läuft über `window.api` → IPC → Hauptprozess.
-- **Anzeigen nur mit pdf.js.** Parsen, Fonts und Bilddekodierung laufen im pdf.js-Worker. Das Zeichnen ist zeitgeteilt (pdf.js gibt nach etwa 15 ms an den Event-Loop zurück). Spike in Phase 1: komplettes Rendern im Worker per `OffscreenCanvas`. Falls das mit pdf.js nicht stabil geht, bleibt es beim zeitgeteilten Zeichnen, und ich melde das.
-- **Ändern und Speichern nur mit PDFium-WASM** (`@embedpdf/pdfium`), siehe [0001](docs/entscheidungen/0001-pdf-bibliotheken.md). Der PDFium-Worker startet erst, wenn ein Dokument geändert wird. Zugriff nur über die eigene Schicht `src/workers/pdfium/`, nie direkt auf `pdfiumModule`.
-- **Große Dateien:** pdf.js lädt über einen eigenen `PDFDataRangeTransport`, der Bytebereiche per IPC aus dem Hauptprozess liest. So landen 100+ MB nicht mehrfach im Speicher.
-- **Worker-Kommunikation:** typisiertes RPC (Request-ID, Promise, Abbruch). Große Puffer immer als Transferable übergeben, nie kopieren.
+- **Renderer hat keinen Node-Zugriff.** Alles Dateisystem läuft über `window.blattwerk` (Typ in `src/preload/api-types.ts`) → IPC → Hauptprozess. Der Renderer kennt nur Datei-IDs.
+- **Anzeigen mit den Viewer-Bausteinen von pdf.js** (`PDFViewer`, `PDFFindController`, `PDFLinkService`), siehe [ADR 0002](docs/entscheidungen/0002-anzeige-mit-pdfjs-viewer.md). Parsen, Schriften und Bilddekodierung laufen im Worker, gezeichnet wird zeitgeteilt im Hauptthread. Vollständiges Rendern im Worker wurde geprüft und ist nicht nötig (gemessen in den Oberflächentests).
+- **Ändern und Speichern ab Phase 2 mit PDFium-WASM** (`@embedpdf/pdfium`), siehe [0001](docs/entscheidungen/0001-pdf-bibliotheken.md). Zugriff nur über eine eigene Schicht `src/workers/pdfium/` (entsteht in Phase 2), nie direkt auf `pdfiumModule`.
+- **Große Dateien** (über 8 MB): eigener `PDFDataRangeTransport` (`src/renderer/engine/range-transport.ts`) liest 1-MB-Blöcke per IPC, höchstens 6 gleichzeitig. Kleinere Dateien werden in einem Stück gelesen.
+- **Laden ist abbrechbar:** `LoadedDocumentHandle.promise` lehnt beim Schließen ab; der pdf.js-Worker wird erst nach `task.destroy()` beendet.
 
-### Dokumentmodell
+### Dokumentmodell (Stand Phase 1)
 
-- Pro Tab eine `DocumentSession`: Datei-ID, Pfad, Stand der Datei beim Öffnen (Größe, mtime), pdf.js-Proxy, PDFium-Proxy (lazy), Ansichtszustand, Änderungsmodell, Undo-Stack, Dirty-Flag.
-- **Koordinaten:** Das Modell speichert alles im PDF-Benutzerraum (Punkte, Ursprung unten links, ungedrehte Seite). Umrechnung in Bildschirmkoordinaten nur über `src/renderer/engine/coords.ts`.
-- **Undo/Redo:** Command-Pattern (`apply`/`revert`) auf dem App-Modell. Ungespeicherte Annotationen zeichnet eine React-Ebene über dem pdf.js-Canvas. Beim Speichern wendet PDFium die Änderungen auf das Original an. Für Operationen, die den Seiteninhalt ändern (ab Phase 5), gilt Undo per Snapshot der Dokumentbytes.
+- Pro Tab: `TabState` in `src/renderer/state/documents-store.ts` (alles, was die Oberfläche anzeigt) und `DocumentRuntime` in `src/renderer/engine/runtime.ts` (pdf.js-Objekte, Viewer, Miniaturen-Cache, Seitentexte). Ablauf und Befehle in `src/renderer/engine/session.ts`.
+- Der Hauptprozess merkt sich je Datei Größe und Änderungszeit beim Öffnen und meldet `file-changed`, wenn die Datei danach von außen geändert wird.
+- **Ab Phase 2 geplant:** Koordinaten im PDF-Benutzerraum (Punkte, Ursprung unten links, ungedrehte Seite), Umrechnung nur über `src/renderer/engine/coords.ts`. Undo/Redo als Command-Pattern auf dem App-Modell; ungespeicherte Annotationen zeichnet eine React-Ebene über dem pdf.js-Canvas; beim Speichern wendet PDFium die Änderungen an. Für Inhaltsänderungen (Phase 5) Undo per Snapshot.
 
-### Speichern (Grundregeln aus der Spezifikation)
+### Speichern (Grundregeln aus der Spezifikation, ab Phase 2)
 
 1. PDFium erzeugt die neuen Bytes, standardmäßig **inkrementell** (`FPDF_INCREMENTAL`).
 2. **Vollständig neu geschrieben** wird nur, wenn es nötig ist: Schwärzen, Verschlüsselung ändern, Komprimieren, „Speichern unter → optimiert“. Haben Signaturen im Dokument, fragt die App vorher nach.
 3. Prüfen: Die neuen Bytes werden in einer frischen PDFium-Instanz geöffnet. Schlägt das fehl, wird nicht gespeichert.
 4. Hauptprozess: Prüfen, ob die Datei auf der Platte noch dem Stand beim Öffnen entspricht. Sonst nachfragen.
-5. **Atomar schreiben:** temporäre Datei im *selben* Ordner, `fsync`, `rename` über das Original. Unter Windows bei `EPERM`/`EBUSY` mit Backoff erneut versuchen (Virenscanner). Dateirechte übernehmen. Die Originaldatei wird nie direkt beschrieben.
+5. **Atomar schreiben** mit `src/main/files/atomic-write.ts`: temporäre Datei im *selben* Ordner, `fsync`, `rename` über das Original, unter Windows mit Wiederholungen bei `EPERM`/`EBUSY`. Die Originaldatei wird nie direkt beschrieben.
 
 ### Sicherheit
 
-- `BrowserWindow`: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, `webSecurity: true`. Strikte CSP (`script-src 'self' 'wasm-unsafe-eval'`). Navigation und `window.open` sind gesperrt.
-- **JavaScript in PDFs wird nie ausgeführt:** pdf.js mit `enableScripting: false`, `isEvalSupported: false` und `enableXfa: false`. PDFium ohne JS-Plattform-Callbacks.
-- Externe Links aus PDFs: nur `http`, `https` und `mailto`, und nur nach Rückfrage über `shell.openExternal`.
-- IPC: feste Kanalliste, Argumente validieren. Der Renderer bekommt Datei-IDs statt beliebiger Pfade. Pfade stammen nur aus Dialog, Drag & Drop (`webUtils.getPathForFile`), „Zuletzt geöffnet“ oder Dateizuordnung.
-- Electron-Fuses: `RunAsNode` aus, `NODE_OPTIONS` aus, Inspect-Argumente aus, ASAR-Integrität an, `OnlyLoadAppFromAsar` an.
+- `BrowserWindow`: `contextIsolation`, `sandbox`, `webSecurity` an, `nodeIntegration` aus. Navigation und `window.open` gesperrt (`src/main/security.ts`).
+- Alle App-Dateien kommen über `app://bundle/` (`src/main/protocol.ts`). Die CSP (`script-src 'self' 'wasm-unsafe-eval'`, `default-src 'none'`) steht in **jeder** Antwort, damit sie auch für Worker gilt. **Netzwerk ist komplett gesperrt** (`session.webRequest`), nur `app:`, `blob:`, `data:` sind erlaubt.
+- **JavaScript in PDFs wird nie ausgeführt:** pdf.js bekommt keinen Scripting-Manager (ohne ihn läuft kein PDF-JavaScript), `enableXfa: false`. Die frühere Option `isEvalSupported` gibt es in pdf.js 6 nicht mehr; pdf.js nutzt kein `eval`.
+- Externe Links: nur `http`, `https`, `mailto`, keine Zugangsdaten im Host-Teil, nur nach Rückfrage mit angezeigtem Zielserver (Punycode).
+- IPC: feste Kanalliste (`src/shared/ipc.ts`), Absender wird geprüft, Argumente validiert (`src/shared/validate.ts`). Drop-Pfade nur absolut und lokal (keine UNC-Pfade).
+- Testschalter (`BLATTWERK_E2E`, `BLATTWERK_E2E_PRINT_DIR`) wirken nur in der unpaketierten App. `BLATTWERK_USER_DATA` (Profilordner) wirkt immer, wird vom Rauchtest der fertigen App genutzt.
+- Electron-Fuses in `electron-builder.yml`: `RunAsNode` aus, `NODE_OPTIONS` aus, Inspect-Argumente aus, ASAR-Integrität an, `OnlyLoadAppFromAsar` an.
 
 ### Performance-Regeln
 
-- Seitenliste virtualisiert (`@tanstack/react-virtual`). Gerendert werden nur sichtbare Seiten plus Puffer. Verlassene Seiten brechen ihren Render-Task ab.
-- Miniaturen erst rendern, wenn sie sichtbar werden, in niedriger Auflösung. LRU-Cache mit Speicherlimit.
-- Zoom: sofort per CSS skalieren, scharf nachrendern mit Debounce. Canvas-Größe begrenzen, bei hohem Zoom in Kacheln rendern.
-- Textebene nur für sichtbare Seiten. Suche läuft im Worker und liefert Treffer seitenweise.
-- Referenz-Datei für Messungen: `test/fixtures/generated/gross-600-seiten.pdf` (mehr als 100 MB).
+- Hauptansicht: `PDFViewer` von pdf.js rendert nur sichtbare Seiten und hält einen begrenzten Seiten-Cache; bei hohem Zoom zeichnet es einen Detailausschnitt statt riesiger Canvas.
+- Miniaturen: virtualisierte Liste (`@tanstack/react-virtual`), Rendern erst bei Sichtbarkeit und im Leerlauf, Abbruch beim Herausscrollen, LRU-Cache mit höchstens 400 Einträgen (je etwa 240 px breit). Bereits gerenderte Seiten der Hauptansicht liefern Miniaturen ohne erneutes Rendern.
+- Zoom: pdf.js skaliert sofort per CSS und rendert verzögert scharf nach.
+- Suche: pdf.js extrahiert den Text seitenweise im Hintergrund; die Ergebnisliste lädt Textausschnitte nur für angezeigte Zeilen (höchstens 500).
+- Referenz für Messungen: `test/fixtures/generated/gross-600-seiten.pdf` (114 MB). Ziel: Öffnen unter 15 s, keine Blockade über 500 ms (gemessen: etwa 0,5 s und unter 150 ms).
 
 ## Ordnerstruktur
 
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0004)
   phasen/                   Abschlussbericht je Phase
 src/
-  main/                     Hauptprozess: index, windows, menu, ipc/, files/ (atomic-write, recent), security
-  preload/                  contextBridge-API
-  shared/                   Typen, IPC-Verträge, product.ts. Keine Node- oder DOM-Imports
-  locales/de/*.json         alle UI-Texte (Renderer und natives Menü), später en/
+  main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
+                            default-app, i18n, files/ (file-registry, recent-files, json-store, atomic-write)
+  preload/                  contextBridge-API (index.ts) und ihr Typ (api-types.ts)
+  shared/                   Typen, IPC-Vertrag, Befehle, Tastenkürzel, Validierung, product.ts. Keine Node- oder DOM-Imports
+  locales/de/               translation.json (alle UI-Texte, Renderer und Menü), pdfjs-viewer.ftl (Texte der pdf.js-Bausteine)
   renderer/
-    app/                    Shell: Layout, Tabs, Seitenleisten, Werkzeugleiste
-    features/               viewer, thumbnails, outline, search, properties, print, … (je Phase mehr)
-    components/             generische UI-Bausteine
-    state/                  zustand-Stores
-    engine/                 Clients für die Worker, coords.ts
+    app/                    Shell: Layout, Werkzeugleiste, Tabs, Seitenleisten, Startbildschirm, globale Tasten, Drag & Drop
+    features/               viewer, thumbnails, outline, search, properties, print, password, goto
+    components/             generische UI-Bausteine (IconButton, Dialog)
+    state/                  zustand-Stores (documents-store, ui-store)
+    engine/                 pdf.js-Einrichtung, Laden, Range-Transport, Laufzeit je Dokument, Befehle (session.ts)
     styles/                 Design-Tokens, hell/dunkel
-  workers/
-    pdfjs/                  pdf.js-Worker-Setup, Range-Transport
-    pdfium/                 Bearbeitungs- und Speicher-Engine (einziger Zugriff auf PDFium)
-resources/                  App-Icons, Stempelvorlagen (eigene Grafiken)
-build/                      electron-builder: Icons, Entitlements
-scripts/                    z. B. generate-fixtures.ts
+    public/                 beim Build kopierte pdf.js-Ressourcen (nicht eingecheckt)
+  workers/pdfium/           ab Phase 2: Bearbeitungs- und Speicher-Engine
+resources/icon.svg          eigenes App-Symbol (Quelle)
+build/                      icon.png (aus resources/icon.svg erzeugt), after-pack.cjs
+scripts/                    build, dev, generate-fixtures, check-licenses, dist-mac-local, smoke-packaged, make-icon, dev-env.sh
 test/
-  fixtures/pdfs/            kleine Test-PDFs (eingecheckt)
-  fixtures/generated/       große und erzeugte Dateien (nicht eingecheckt, per Skript)
+  fixtures/pdfs/            kleine Test-PDFs (eingecheckt), expectations.ts mit den erwarteten Eigenschaften
+  fixtures/generated/       große Datei (nicht eingecheckt, `npm run fixtures -- --large`)
   unit/  integration/  e2e/
 .github/workflows/build.yml
 ```
@@ -148,21 +151,36 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 
 ## Tests
 
-- **Unit/Integration (Vitest):** Engine-Funktionen gegen die Test-PDFs. PDFium-WASM läuft auch in Node.
-- **E2E (Playwright mit Electron):** je Phase ein Durchlauf mit allen Test-PDFs.
+- **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js. Ab Phase 2 auch PDFium-WASM in Node.
+- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Funktionen) und `test/e2e/regressions.spec.ts` (behobene Fehler). Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
+- **Fertige App:** `node scripts/smoke-packaged.mjs <Pfad zur .app>` startet das Paket und prüft die Anzeige.
 - **Ausgabeprüfung für jede gespeicherte Datei:** `qpdf --check` (in CI installiert), Öffnen mit pdf.js und mit PDFium, Annotationen haben /AP. Unter macOS zusätzlich mit PDFKit (die Engine von Apple Vorschau) rendern. Acrobat Reader: manuelle Checkliste im Phasenbericht.
 - **Test-PDFs** (`test/fixtures/pdfs/`): Text, Scan (nur Bild), Formular (AcroForm), verschlüsselt (Benutzer- und Besitzerpasswort), beschädigt (kaputte xref, abgeschnitten), mit Links und Lesezeichen, signiert. „Sehr groß“ (600 Seiten, mehr als 100 MB) erzeugt `scripts/generate-fixtures.ts` nach `test/fixtures/generated/`.
 
 ## Befehle
 
-Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befehl: `source scripts/dev-env.sh` (setzt `PATH` und legt alle Caches nach `.tools/cache`).
+Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befehl: `source scripts/dev-env.sh` (setzt `PATH`, legt alle Caches nach `.tools/cache`, beachtet einen gesetzten Proxy).
 
-Weitere Befehle entstehen in Phase 1 (`npm run dev`, `npm test`, `npm run test:e2e`, `npm run build`, `npm run dist:mac`).
+| Befehl | Zweck |
+|---|---|
+| `npm run dev` | Entwicklungsstart mit Vite-Server und eigenem Profil (`.tools/dev-profile`) |
+| `npm run build` | Haupt-, Preload- und Renderer-Bundle nach `out/` |
+| `npm run typecheck`, `npm run lint` | Typprüfung, ESLint |
+| `npm test` | Unit- und Integrationstests |
+| `npm run test:e2e` | Build und Oberflächentests mit der echten App |
+| `npm run fixtures -- --large` | Test-PDFs neu erzeugen (unter macOS inklusive Scan) |
+| `npm run licenses` | Lizenzprüfung der eingebündelten Pakete |
+| `npm run dist:mac:local` | Mac-App (Apple Silicon) bauen, `.dmg` nach `release/` |
+| `npm run dist:mac`, `npm run dist:win` | Pakete für CI (beide Mac-Architekturen bzw. Windows) |
+
+**In der Claude-Sandbox:** Electron, Playwright-Oberflächentests, `npm run fixtures` (wegen `sips`) und Packaging laufen nur außerhalb der Sandbox.
 
 ## Packaging
 
 - electron-builder: `.dmg` getrennt für arm64 und x64, Windows-Installer `.exe` (NSIS, x64).
-- Dateizuordnung `.pdf` (macOS `CFBundleDocumentTypes`, Windows ProgID). Standardprogramm festlegen: Windows erlaubt das nur über die Systemeinstellungen, die App öffnet die richtige Seite. Unter macOS braucht das Setzen eine native API (`NSWorkspace`). Lösung wird in Phase 1 geklärt.
+- Dateizuordnung `.pdf` (macOS `CFBundleDocumentTypes`, Windows ProgID). Standardprogramm festlegen ([ADR 0004](docs/entscheidungen/0004-standardprogramm.md)): unter macOS über Launch Services per JavaScript for Automation (nur in der installierten App), unter Windows öffnet die App die Einstellungsseite.
+- Signatur: lokal ad-hoc (`identity: '-'`, `hardenedRuntime: false`). Für Weitergabe an andere: Apple-Developer-Zertifikat, `identity` setzen, `hardenedRuntime: true`, Notarisierung.
+- `npm run dist:mac:local` baut außerhalb des Projektordners, weil iCloud den Dateien Attribute anhängt, an denen `codesign` scheitert. `build/after-pack.cjs` entfernt zusätzlich alle erweiterten Attribute vor dem Signieren.
 - GitHub Actions: Matrix `macos-latest` (arm64 und x64) und `windows-latest`. Signieren und Notarisieren optional über Secrets. Ohne Zertifikate sind die Builds unsigniert, dann warnen Gatekeeper bzw. SmartScreen.
 
 ## Bekannte Stolpersteine
@@ -171,3 +189,10 @@ Weitere Befehle entstehen in Phase 1 (`npm run dev`, `npm test`, `npm run test:e
 - `File.path` gibt es in Electron nicht mehr. Für Drag & Drop `webUtils.getPathForFile` im Preload nutzen.
 - macOS öffnet Dateien per `open-file`-Event, auch vor `ready`. Windows übergibt sie über `argv` und `second-instance`.
 - Pfad des Projekts enthält Leerzeichen. In Skripten Pfade immer quoten.
+- `~/Documents` wird mit iCloud abgeglichen. Große Ordner (`node_modules`, `.tools`) werden mit hochgeladen; Signieren klappt nur außerhalb.
+- `.tools/package.json` mit `"type": "commonjs"` (legt `dev-env.sh` an): Sonst liest Node die heruntergeladenen Hilfsprogramme von electron-builder als ES-Module.
+- pdf.js 6: `getPermissions()` liefert ein `Set`, `getFieldObjects()` eine `Map`. `PDFDocumentProxy.destroy()` gibt es nicht mehr, abgebaut wird über die Lade-Aufgabe.
+- pdf.js-Treffer (`pageMatches`) zählen Positionen im aneinandergehängten Text **ohne** Zeichen für Zeilenenden (siehe `src/renderer/features/search/snippet.ts`).
+- pdf.js rechnet den Zoom-Anker relativ zum `offsetParent` des Containers (`containerTopLeft`), nicht zum Fenster.
+- `pdf_viewer.mjs` erwartet `globalThis.pdfjsLib`; deshalb `src/renderer/engine/pdfjs-global.ts` vor dem Import.
+- Playwright erzwingt sonst den hellen Modus; in `test/e2e/app.ts` steht deshalb `colorScheme: null`.
