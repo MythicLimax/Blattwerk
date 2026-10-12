@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog, session, shell, type WebContents } from 'electron';
 import { isAllowedExternalUrl } from '../shared/validate';
+import { isAllowedRequestUrl } from './protocol-paths';
 import { t } from './i18n';
 
 // Erlaubte Herkunft für Seiten im Fenster (app://bundle oder in der Entwicklung der Vite-Server).
@@ -16,20 +17,28 @@ export function isTrustedAppUrl(url: string, devServerOrigin: string | null): bo
 // Fragt nach und öffnet den Link dann im Standardbrowser bzw. Mailprogramm.
 export async function confirmAndOpenExternal(url: string, parent: BrowserWindow | null): Promise<boolean> {
   if (!isAllowedExternalUrl(url)) return false;
+  // Einmal normalisieren und genau diesen Wert anzeigen und öffnen. Der Host erscheint in Punycode,
+  // damit ähnlich aussehende Zeichen (z. B. kyrillische Buchstaben) nicht täuschen.
+  const parsed = new URL(url);
+  const target = parsed.href;
+  const message =
+    parsed.protocol === 'mailto:'
+      ? t('dialog.externalLink.messageMail', { address: decodeURIComponent(parsed.pathname) })
+      : t('dialog.externalLink.messageHost', { host: parsed.host });
   const options = {
     type: 'question' as const,
     buttons: [t('dialog.externalLink.open'), t('dialog.externalLink.cancel')],
-    defaultId: 0,
+    defaultId: 1,
     cancelId: 1,
-    message: t('dialog.externalLink.message'),
-    detail: t('dialog.externalLink.detail', { url }),
+    message,
+    detail: t('dialog.externalLink.detail', { url: target }),
     noLink: true,
   };
   const { response } = parent
     ? await dialog.showMessageBox(parent, options)
     : await dialog.showMessageBox(options);
   if (response !== 0) return false;
-  await shell.openExternal(url);
+  await shell.openExternal(target);
   return true;
 }
 
@@ -50,8 +59,11 @@ export function hardenWebContents(contents: WebContents, devServerOrigin: string
 
 const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen']);
 
-export function hardenSession(): void {
+export function hardenSession(devServerOrigin: string | null): void {
   const ses = session.defaultSession;
+  ses.webRequest.onBeforeRequest((details, callback) => {
+    callback({ cancel: !isAllowedRequestUrl(details.url, devServerOrigin) });
+  });
   ses.setPermissionRequestHandler((_contents, permission, callback) => {
     callback(ALLOWED_PERMISSIONS.has(permission));
   });

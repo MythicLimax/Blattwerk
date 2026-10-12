@@ -42,15 +42,29 @@ export function validateMenuState(value: unknown): MenuState | null {
   };
 }
 
-// Nur Web- und Mail-Links dürfen extern geöffnet werden.
+// Nur Web- und Mail-Links dürfen extern geöffnet werden. Links mit Benutzername oder Passwort im Host-Teil
+// (z. B. https://bank.de@boese.example) werden abgelehnt, weil sie Nutzer über das wahre Ziel täuschen.
 export function isAllowedExternalUrl(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 8192) return false;
   try {
     const url = new URL(value);
+    if (url.username !== '' || url.password !== '') return false;
     return url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'mailto:';
   } catch {
     return false;
   }
+}
+
+// Pfad, den der Renderer (Drag & Drop) liefert: nur absolute, lokale Pfade.
+// Unter Windows keine UNC- oder Gerätepfade (\\server\freigabe, \\?\…), damit ein manipulierter Renderer
+// keine Netzwerkzugriffe (und damit keine Anmeldedaten-Weitergabe) auslösen kann.
+export function isSafeLocalPath(value: unknown, platform: string): value is string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 4096 || value.includes('\0')) return false;
+  if (platform === 'win32') {
+    if (value.startsWith('\\\\') || value.startsWith('//')) return false;
+    return /^[a-zA-Z]:[\\/]/.test(value);
+  }
+  return value.startsWith('/');
 }
 
 // Ein PDF beginnt mit "%PDF-". Die Spezifikation erlaubt Müll davor, Leser suchen in den ersten 1024 Bytes.

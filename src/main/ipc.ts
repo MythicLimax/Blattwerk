@@ -1,8 +1,7 @@
-import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import { IPC, type AppInfo, type MenuState, type OpenResult, type PrintRequest } from '../shared/ipc';
 import { PRODUCT_NAME } from '../shared/product';
-import { isFileId, validateMenuState } from '../shared/validate';
-import { setAsDefaultPdfApp } from './default-app';
+import { isFileId, isSafeLocalPath, validateMenuState } from '../shared/validate';
 import type { FileRegistry } from './files/file-registry';
 import type { RecentFiles } from './files/recent-files';
 import { t } from './i18n';
@@ -55,7 +54,7 @@ export function registerIpc(ctx: IpcContext): void {
 
   handle(IPC.openDropped, async (event, filePath: unknown): Promise<OpenResult> => {
     const win = windowOf(event);
-    if (!win || typeof filePath !== 'string' || filePath.length === 0 || filePath.length > 4096) {
+    if (!win || !isSafeLocalPath(filePath, process.platform)) {
       return { ok: false, error: 'unreadable' };
     }
     return ctx.openPathFor(win, filePath);
@@ -98,7 +97,7 @@ export function registerIpc(ctx: IpcContext): void {
     platform: process.platform === 'darwin' || process.platform === 'win32' ? process.platform : 'linux',
     version: ctx.appVersion,
     productName: PRODUCT_NAME,
-    e2e: Boolean(process.env.BLATTWERK_E2E),
+    e2e: !app.isPackaged && Boolean(process.env.BLATTWERK_E2E),
   }));
 
   handle(IPC.print, async (event, request: unknown) => {
@@ -115,8 +114,6 @@ export function registerIpc(ctx: IpcContext): void {
     if (typeof url !== 'string') return false;
     return confirmAndOpenExternal(url, windowOf(event));
   });
-
-  handle(IPC.defaultApp, (event) => setAsDefaultPdfApp(windowOf(event)));
 
   ipcMain.on(IPC.menuState, (event, state: unknown) => {
     if (!ctx.isTrustedSender(event)) return;

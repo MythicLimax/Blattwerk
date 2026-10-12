@@ -1,4 +1,4 @@
-import { type BrowserWindow } from 'electron';
+import { app, type BrowserWindow } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { PrintRequest, PrintResult } from '../shared/ipc';
@@ -7,7 +7,7 @@ import type { PrintRequest, PrintResult } from '../shared/ipc';
 // Im Testmodus (BLATTWERK_E2E_PRINT_DIR) entsteht statt des Systemdialogs eine PDF-Datei,
 // damit automatische Tests den Druckweg prüfen können.
 export async function printWindow(win: BrowserWindow, request: PrintRequest): Promise<PrintResult> {
-  const e2eDir = process.env.BLATTWERK_E2E_PRINT_DIR;
+  const e2eDir = app.isPackaged ? undefined : process.env.BLATTWERK_E2E_PRINT_DIR;
   if (e2eDir) {
     try {
       const data = await win.webContents.printToPDF({ preferCSSPageSize: true, printBackground: false });

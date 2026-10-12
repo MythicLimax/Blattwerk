@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CONTENT_SECURITY_POLICY, resolveAppPath } from '../../src/main/protocol-paths';
+import { CONTENT_SECURITY_POLICY, isAllowedRequestUrl, resolveAppPath } from '../../src/main/protocol-paths';
 import { readChunked } from '../../src/renderer/engine/file-reader';
 import { parsePageNumber } from '../../src/renderer/features/goto/page-number';
 import {
@@ -43,6 +43,15 @@ describe('resolveAppPath', () => {
     expect(CONTENT_SECURITY_POLICY).toContain("script-src 'self' 'wasm-unsafe-eval'");
     expect(CONTENT_SECURITY_POLICY).not.toMatch(/[^-]'unsafe-eval'/);
     expect(CONTENT_SECURITY_POLICY).toContain("object-src 'none'");
+  });
+  it('lässt nur App-interne Anfragen zu', () => {
+    expect(isAllowedRequestUrl('app://bundle/assets/a.js', null)).toBe(true);
+    expect(isAllowedRequestUrl('blob:app://bundle/123', null)).toBe(true);
+    expect(isAllowedRequestUrl('https://example.com/', null)).toBe(false);
+    expect(isAllowedRequestUrl('file:///etc/passwd', null)).toBe(false);
+    expect(isAllowedRequestUrl('http://localhost:5173/src/main.tsx', 'http://localhost:5173')).toBe(true);
+    expect(isAllowedRequestUrl('ws://localhost:5173/', 'http://localhost:5173')).toBe(true);
+    expect(isAllowedRequestUrl('http://localhost:51730/', 'http://localhost:5173')).toBe(false);
   });
 });
 

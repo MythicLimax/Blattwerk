@@ -328,6 +328,19 @@ test.describe('Oberfläche', () => {
     expect(prefs).toEqual({ contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true });
     expect(await page.evaluate(() => typeof (window as unknown as { require?: unknown }).require)).toBe('undefined');
     expect(await page.evaluate(() => typeof (window as unknown as { process?: unknown }).process)).toBe('undefined');
+    // Keine Netzwerkzugriffe aus der App, und die CSP gilt auch für Skripte und Worker.
+    const fetchResult = await page.evaluate(() =>
+      fetch('https://example.com/').then(
+        () => 'erreicht',
+        () => 'blockiert',
+      ),
+    );
+    expect(fetchResult).toBe('blockiert');
+    const scriptCsp = await page.evaluate(async () => {
+      const src = (document.querySelector('script[type="module"]') as HTMLScriptElement | null)?.src ?? '';
+      return (await fetch(src)).headers.get('content-security-policy');
+    });
+    expect(scriptCsp).toContain("script-src 'self'");
     // Navigation aus der App heraus wird verhindert.
     await page.evaluate(() => {
       window.location.href = 'https://example.com/';

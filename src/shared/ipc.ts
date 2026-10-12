@@ -15,7 +15,6 @@ export const IPC = {
   appInfo: 'app:info',
   print: 'print:run',
   openExternal: 'shell:open-external',
-  defaultApp: 'app:default-app',
   // Renderer → Hauptprozess (send)
   menuState: 'app:menu-state',
   rendererReady: 'app:renderer-ready',

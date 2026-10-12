@@ -3,6 +3,7 @@ import { MAX_READ_CHUNK } from '../../src/shared/ipc';
 import {
   isAllowedExternalUrl,
   isFileId,
+  isSafeLocalPath,
   looksLikePdf,
   validateMenuState,
   validateReadRange,
@@ -54,6 +55,30 @@ describe('isAllowedExternalUrl', () => {
     expect(isAllowedExternalUrl('smb://server/share')).toBe(false);
     expect(isAllowedExternalUrl('kein link')).toBe(false);
     expect(isAllowedExternalUrl(42)).toBe(false);
+  });
+  it('lehnt Links mit Zugangsdaten im Host-Teil ab (Täuschung über das Ziel)', () => {
+    expect(isAllowedExternalUrl('https://www.bank.de@boese.example/login')).toBe(false);
+    expect(isAllowedExternalUrl('https://nutzer:pw@example.com')).toBe(false);
+  });
+});
+
+describe('isSafeLocalPath', () => {
+  it('erlaubt nur absolute lokale Pfade', () => {
+    expect(isSafeLocalPath('/Users/a/datei.pdf', 'darwin')).toBe(true);
+    expect(isSafeLocalPath('relativ/datei.pdf', 'darwin')).toBe(false);
+    expect(isSafeLocalPath('C:\\Daten\\datei.pdf', 'win32')).toBe(true);
+    expect(isSafeLocalPath('D:/Daten/datei.pdf', 'win32')).toBe(true);
+  });
+  it('lehnt Netzwerk- und Gerätepfade unter Windows ab', () => {
+    expect(isSafeLocalPath('\\\\server\\freigabe\\datei.pdf', 'win32')).toBe(false);
+    expect(isSafeLocalPath('\\\\?\\C:\\datei.pdf', 'win32')).toBe(false);
+    expect(isSafeLocalPath('//server/freigabe/datei.pdf', 'win32')).toBe(false);
+  });
+  it('lehnt leere, zu lange und Nullbyte-Pfade ab', () => {
+    expect(isSafeLocalPath('', 'darwin')).toBe(false);
+    expect(isSafeLocalPath(`/${'a'.repeat(5000)}`, 'darwin')).toBe(false);
+    expect(isSafeLocalPath('/a\0b', 'darwin')).toBe(false);
+    expect(isSafeLocalPath(42, 'darwin')).toBe(false);
   });
 });
 

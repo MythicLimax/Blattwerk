@@ -2,7 +2,6 @@
 import type { CommandId } from '../shared/commands';
 import type {
   AppInfo,
-  DefaultAppResult,
   MenuState,
   OpenResult,
   PrintRequest,
@@ -25,7 +24,6 @@ export interface BlattwerkApi {
   };
   print(request: PrintRequest): Promise<PrintResult>;
   openExternal(url: string): Promise<boolean>;
-  setAsDefaultPdfApp(): Promise<DefaultAppResult>;
   setMenuState(state: MenuState): void;
   signalReady(): void;
   onFileOpened(listener: (result: OpenResult) => void): () => void;

@@ -37,7 +37,6 @@ const api: BlattwerkApi = {
   },
   print: (request) => ipcRenderer.invoke(IPC.print, request),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
-  setAsDefaultPdfApp: () => ipcRenderer.invoke(IPC.defaultApp),
   setMenuState: (state) => ipcRenderer.send(IPC.menuState, state),
   signalReady: () => ipcRenderer.send(IPC.rendererReady),
   onFileOpened: (listener) =>

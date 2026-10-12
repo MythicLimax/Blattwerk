@@ -13,12 +13,15 @@ import { handleAppScheme, registerAppScheme } from './protocol';
 import { hardenSession, hardenWebContents, isTrustedAppUrl } from './security';
 import { createMainWindow, createSettingsStore, type WindowState } from './window';
 
-const isE2E = Boolean(process.env.BLATTWERK_E2E);
+// Testschalter wirken nur beim Entwickeln, nie in der installierten App.
+const isE2E = !app.isPackaged && Boolean(process.env.BLATTWERK_E2E);
 const devServerUrl = app.isPackaged ? null : (process.env.BLATTWERK_DEV_SERVER_URL ?? null);
 const devServerOrigin = devServerUrl ? new URL(devServerUrl).origin : null;
 
 app.setName(PRODUCT_NAME);
 // Tests laufen mit eigenem Profilordner, damit sie keine echten Einstellungen verändern.
+// Der Ordner für Einstellungen lässt sich auch in der installierten App umlenken (Rauchtest
+// scripts/smoke-packaged.mjs). Das betrifft nur Einstellungen und die Liste zuletzt geöffneter Dateien.
 if (process.env.BLATTWERK_USER_DATA) {
   app.setPath('userData', process.env.BLATTWERK_USER_DATA);
 }
@@ -199,7 +202,7 @@ app.on('activate', () => {
 });
 
 void app.whenReady().then(async () => {
-  hardenSession();
+  hardenSession(devServerOrigin);
   handleAppScheme(rendererDir);
   recent = new RecentFiles(path.join(app.getPath('userData'), 'recent-files.json'));
   windowState = (await settingsStore.read()).window;

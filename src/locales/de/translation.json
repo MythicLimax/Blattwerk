@@ -76,6 +76,8 @@
     "filterPdf": "PDF-Dokumente",
     "externalLink": {
       "message": "Diesen Link im Browser öffnen?",
+      "messageHost": "Link zu „{{host}}“ im Browser öffnen?",
+      "messageMail": "E-Mail an „{{address}}“ schreiben?",
       "detail": "{{url}}",
       "open": "Öffnen",
       "cancel": "Abbrechen"

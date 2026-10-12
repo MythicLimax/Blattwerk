@@ -57,3 +57,11 @@ export function resolveAppPath(rootDir: string, requestUrl: string): string | nu
   if (resolved !== root && !resolved.startsWith(root + path.sep)) return null;
   return resolved;
 }
+
+// Die App braucht kein Netzwerk. Jede Anfrage außer an die eigenen Dateien wird abgebrochen
+// (in der Entwicklung zusätzlich der Vite-Server samt WebSocket für Hot Reload).
+export function isAllowedRequestUrl(url: string, devServerOrigin: string | null): boolean {
+  if (/^(app|blob|data|devtools):/.test(url)) return true;
+  if (!devServerOrigin) return false;
+  return url.startsWith(`${devServerOrigin}/`) || url.startsWith(`${devServerOrigin.replace(/^http/, 'ws')}/`);
+}
