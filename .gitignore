@@ -1,0 +1,18 @@
+# Abhängigkeiten und Build-Ausgaben
+node_modules/
+out/
+dist/
+release/
+
+# Tests
+coverage/
+playwright-report/
+test-results/
+test/fixtures/generated/
+
+# Temporäre Dateien beim atomaren Speichern
+*.tmp
+
+# System
+.DS_Store
+Thumbs.db
