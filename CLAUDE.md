@@ -11,20 +11,23 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | Phase | Inhalt | Status |
 |---|---|---|
 | 0 | Grundlagen: Spezifikation, Bibliotheksauswahl, CLAUDE.md | erledigt |
-| 1 | Viewer | erledigt ([Bericht](docs/phasen/phase-1.md)), wartet auf OK |
-| 2 | Kommentieren | offen |
+| 1 | Viewer | erledigt ([Bericht](docs/phasen/phase-1.md)) |
+| 2 | Kommentieren | in Arbeit |
 | 3 | Seiten organisieren | offen |
 | 4 | Formulare und Unterschrift | offen |
 | 5 | Bearbeiten (inkl. Schwärzen) | offen |
 | 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | offen |
 | 7 | Profi (PAdES, PDF/A, Tags) | offen |
 
-Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig. Projekt liegt unter `~/Documents/Claude Projekte/Adobe Acrobat Klon Lokal`. **Achtung:** `~/Documents` wird auf diesem Mac mit iCloud abgeglichen (offene Frage an den Auftraggeber, ob das Projekt umziehen soll).
+Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig.
+
+- **Ort:** `~/Entwicklung/Blattwerk` (nicht in iCloud). Bis Phase 1 lag das Projekt in `~/Documents`, das iCloud abgleicht; dort entstanden Konfliktkopien („Datei 2.js“) in `node_modules`, `out/` und `src/renderer/public/`. Projekt nie wieder in einen iCloud-Ordner legen.
+- **Ablauf ab Phase 2 (Auftraggeber, 2026-10-12):** Phasen 2 bis 7 ohne Pause durcharbeiten. Nach jeder Phase trotzdem Bericht in `docs/phasen/`, Commit „Phase N abgeschlossen“ und neue `.dmg`, aber nicht auf OK warten. Nur bei echten Weichenstellungen nachfragen.
 
 ## Arbeitsweise (verbindlich)
 
 - Strikt Phase für Phase. **Fertig** heißt: App startet, alle Features der Phase funktionieren, `npm test` und E2E-Tests sind grün, Git-Commit existiert.
-- Nach jeder Phase: Bericht in `docs/phasen/phase-N.md` (was geht, was nicht, bekannte Bugs) und im Chat. **Dann auf OK warten.**
+- Nach jeder Phase: Bericht in `docs/phasen/phase-N.md` (was geht, was nicht, bekannte Bugs). Ab Phase 2 ohne Warten weiter (siehe oben).
 - Ist ein Feature nicht sauber machbar: sagen und eine Alternative vorschlagen. Nichts halbgar bauen.
 - **Keine Platzhalter.** Kein Button, Menüeintrag oder Kürzel ohne Funktion. Was noch nicht gebaut ist, taucht in der UI nicht auf.
 - Diese Datei bei jeder Architekturänderung und an jedem Phasenende aktualisieren.
@@ -180,7 +183,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 - electron-builder: `.dmg` getrennt für arm64 und x64, Windows-Installer `.exe` (NSIS, x64).
 - Dateizuordnung `.pdf` (macOS `CFBundleDocumentTypes`, Windows ProgID). Standardprogramm festlegen ([ADR 0004](docs/entscheidungen/0004-standardprogramm.md)): unter macOS über Launch Services per JavaScript for Automation (nur in der installierten App), unter Windows öffnet die App die Einstellungsseite.
 - Signatur: lokal ad-hoc (`identity: '-'`, `hardenedRuntime: false`). Für Weitergabe an andere: Apple-Developer-Zertifikat, `identity` setzen, `hardenedRuntime: true`, Notarisierung.
-- `npm run dist:mac:local` baut außerhalb des Projektordners, weil iCloud den Dateien Attribute anhängt, an denen `codesign` scheitert. `build/after-pack.cjs` entfernt zusätzlich alle erweiterten Attribute vor dem Signieren.
+- `npm run dist:mac:local` baut im temporären Ordner des Systems und kopiert nur die `.dmg` nach `release/`. `build/after-pack.cjs` entfernt vor dem Signieren alle erweiterten Dateiattribute (an denen `codesign` sonst scheitern kann).
 - GitHub Actions: Matrix `macos-latest` (arm64 und x64) und `windows-latest`. Signieren und Notarisieren optional über Secrets. Ohne Zertifikate sind die Builds unsigniert, dann warnen Gatekeeper bzw. SmartScreen.
 
 ## Bekannte Stolpersteine
@@ -189,7 +192,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 - `File.path` gibt es in Electron nicht mehr. Für Drag & Drop `webUtils.getPathForFile` im Preload nutzen.
 - macOS öffnet Dateien per `open-file`-Event, auch vor `ready`. Windows übergibt sie über `argv` und `second-instance`.
 - Pfad des Projekts enthält Leerzeichen. In Skripten Pfade immer quoten.
-- `~/Documents` wird mit iCloud abgeglichen. Große Ordner (`node_modules`, `.tools`) werden mit hochgeladen; Signieren klappt nur außerhalb.
+- iCloud-Ordner (z. B. `~/Documents`) sind ungeeignet: Konfliktkopien in generierten Ordnern und Attribute, an denen `codesign` scheitert.
 - `.tools/package.json` mit `"type": "commonjs"` (legt `dev-env.sh` an): Sonst liest Node die heruntergeladenen Hilfsprogramme von electron-builder als ES-Module.
 - pdf.js 6: `getPermissions()` liefert ein `Set`, `getFieldObjects()` eine `Map`. `PDFDocumentProxy.destroy()` gibt es nicht mehr, abgebaut wird über die Lade-Aufgabe.
 - pdf.js-Treffer (`pageMatches`) zählen Positionen im aneinandergehängten Text **ohne** Zeichen für Zeilenenden (siehe `src/renderer/features/search/snippet.ts`).
