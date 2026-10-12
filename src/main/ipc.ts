@@ -1,7 +1,18 @@
 import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
-import { IPC, type AppInfo, type MenuState, type OpenResult, type PrintRequest, type RecentFile } from '../shared/ipc';
+import path from 'node:path';
+import {
+  IPC,
+  type AppInfo,
+  type AppSettings,
+  type MenuState,
+  type OpenResult,
+  type PrintRequest,
+  type RecentFile,
+  type SaveResult,
+} from '../shared/ipc';
 import { PRODUCT_NAME } from '../shared/product';
-import { isFileId, isSafeLocalPath, validateMenuState } from '../shared/validate';
+import { isFileId, isPdfBytes, isSafeLocalPath, validateAuthorName, validateMenuState } from '../shared/validate';
+import { atomicWrite } from './files/atomic-write';
 import type { FileRegistry } from './files/file-registry';
 import type { RecentFiles } from './files/recent-files';
 import { t } from './i18n';
@@ -18,6 +29,12 @@ export interface IpcContext {
   onRecentChanged: () => void;
   clearRecent: () => Promise<RecentFile[]>;
   openPathFor: (win: BrowserWindow, filePath: string) => Promise<OpenResult>;
+  // Nach erfolgreichem Speichern unter neuem Namen (Zuletzt-Liste, Menü)
+  onSavedAs: (filePath: string) => Promise<void>;
+  getSettings: () => AppSettings;
+  setAuthorName: (name: string) => Promise<AppSettings>;
+  onCloseConfirmed: (win: BrowserWindow) => void;
+  onCloseCancelled: (win: BrowserWindow) => void;
 }
 
 export async function showOpenDialog(win: BrowserWindow | null): Promise<string[]> {
@@ -107,6 +124,58 @@ export function registerIpc(ctx: IpcContext): void {
     return printWindow(win, { documentName: name });
   });
 
+  // Speichern über die vorhandene Datei. Vorher prüfen, ob die Datei inzwischen von außen geändert wurde.
+  handle(IPC.saveFile, async (event, fileId: unknown, bytes: unknown, force: unknown): Promise<SaveResult> => {
+    if (!isFileId(fileId)) return { ok: false, error: 'unknown-file' };
+    if (!isPdfBytes(bytes)) return { ok: false, error: 'invalid-data' };
+    const owner = event.sender.id;
+    const target = ctx.files.pathOf(fileId, owner);
+    if (!target) return { ok: false, error: 'unknown-file' };
+    if (force !== true && !(await ctx.files.isUnchangedOnDisk(fileId, owner))) {
+      return { ok: false, error: 'changed-externally' };
+    }
+    try {
+      await atomicWrite(target, bytes);
+    } catch (error) {
+      return { ok: false, error: 'write-failed', detail: String(error) };
+    }
+    const reopened = await ctx.files.reopen(fileId, owner);
+    return reopened.ok ? { ok: true, file: reopened.file } : { ok: false, error: 'write-failed', detail: reopened.error };
+  });
+
+  handle(IPC.saveFileAs, async (event, fileId: unknown, bytes: unknown): Promise<SaveResult> => {
+    const win = windowOf(event);
+    if (!win || !isFileId(fileId)) return { ok: false, error: 'unknown-file' };
+    if (!isPdfBytes(bytes)) return { ok: false, error: 'invalid-data' };
+    const owner = event.sender.id;
+    const current = ctx.files.pathOf(fileId, owner);
+    if (!current) return { ok: false, error: 'unknown-file' };
+    const result = await dialog.showSaveDialog(win, {
+      title: t('dialog.saveAsTitle'),
+      defaultPath: current,
+      filters: [{ name: t('dialog.filterPdf'), extensions: ['pdf'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+    if (result.canceled || !result.filePath) return { ok: false, error: 'cancelled' };
+    const target = path.extname(result.filePath).toLowerCase() === '.pdf' ? result.filePath : `${result.filePath}.pdf`;
+    try {
+      await atomicWrite(target, bytes);
+    } catch (error) {
+      return { ok: false, error: 'write-failed', detail: String(error) };
+    }
+    const reopened = await ctx.files.reopen(fileId, owner, target);
+    if (!reopened.ok) return { ok: false, error: 'write-failed', detail: reopened.error };
+    await ctx.onSavedAs(target);
+    return { ok: true, file: reopened.file };
+  });
+
+  handle(IPC.settingsGet, () => ctx.getSettings());
+
+  handle(IPC.settingsSetAuthor, async (_event, name: unknown) => {
+    const valid = validateAuthorName(name);
+    return valid ? ctx.setAuthorName(valid) : ctx.getSettings();
+  });
+
   handle(IPC.openExternal, (event, url: unknown) => {
     if (typeof url !== 'string') return false;
     return confirmAndOpenExternal(url, windowOf(event));
@@ -117,6 +186,18 @@ export function registerIpc(ctx: IpcContext): void {
     const win = windowOf(event);
     const valid = validateMenuState(state);
     if (win && valid) ctx.onMenuState(win, valid);
+  });
+
+  ipcMain.on(IPC.closeConfirmed, (event) => {
+    if (!ctx.isTrustedSender(event)) return;
+    const win = windowOf(event);
+    if (win) ctx.onCloseConfirmed(win);
+  });
+
+  ipcMain.on(IPC.closeCancelled, (event) => {
+    if (!ctx.isTrustedSender(event)) return;
+    const win = windowOf(event);
+    if (win) ctx.onCloseCancelled(win);
   });
 
   ipcMain.on(IPC.rendererReady, (event) => {

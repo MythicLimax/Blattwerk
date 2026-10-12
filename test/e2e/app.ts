@@ -42,7 +42,21 @@ export async function launchApp(files: string[] = [], options: { userData?: stri
     userData,
     printDir,
     close: async () => {
-      await app.close();
+      // Mit ungespeicherten Kommentaren fragt die App nach; im Test werden die Änderungen verworfen.
+      let closed = false;
+      const closing = app.close().finally(() => {
+        closed = true;
+      });
+      while (!closed) {
+        try {
+          const discard = page.getByTestId('prompt-discard');
+          if (await discard.isVisible()) await discard.click({ timeout: 1000 });
+        } catch {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      await closing;
       if (!options.keepUserData && !options.userData) rmSync(userData, { recursive: true, force: true });
     },
   };

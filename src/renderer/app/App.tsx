@@ -1,10 +1,13 @@
 import { useEffect } from 'react';
 import { api } from '../api';
-import { handleOpenResult, executeCommand } from '../engine/session';
+import { handleCloseRequest, handleOpenResult, executeCommand } from '../engine/session';
+import { CommentToolbar } from '../features/annotations/CommentToolbar';
 import { GoToPageDialog } from '../features/goto/GoToPageDialog';
 import { PasswordDialog } from '../features/password/PasswordDialog';
 import { PrintProgressDialog } from '../features/print/PrintProgressDialog';
+import { PromptDialog } from '../features/prompt/PromptDialog';
 import { PropertiesDialog } from '../features/properties/PropertiesDialog';
+import { SettingsDialog } from '../features/settings/SettingsDialog';
 import { DocumentPane } from '../features/viewer/DocumentPane';
 import { useActiveTab, useDocuments } from '../state/documents-store';
 import { useUi } from '../state/ui-store';
@@ -17,7 +20,7 @@ import { RightPanel } from './RightPanel';
 import { StartScreen } from './StartScreen';
 import { TabBar } from './TabBar';
 import { Toolbar } from './Toolbar';
-import { useFileDrop, useGlobalKeys, useMenuStateSync } from './hooks';
+import { useAnnotationSync, useFileDrop, useGlobalKeys, useMenuStateSync } from './hooks';
 
 export function App() {
   const tabs = useDocuments((s) => s.tabs);
@@ -28,24 +31,31 @@ export function App() {
   const propertiesTabId = useUi((s) => s.propertiesTabId);
   const goToPageOpen = useUi((s) => s.goToPageOpen);
   const print = useUi((s) => s.print);
+  const prompt = useUi((s) => s.prompt);
+  const settingsOpen = useUi((s) => s.settingsOpen);
+  const commentToolsVisible = useUi((s) => s.commentToolsVisible);
 
   useEffect(() => {
     const offOpened = api.onFileOpened((result) => void handleOpenResult(result));
     const offCommand = api.onMenuCommand((command) => executeCommand(command));
     const refreshRecent = () => void api.recent.list().then((list) => useUi.getState().setRecent(list));
     const offRecent = api.onRecentChanged(refreshRecent);
+    const offClose = api.onRequestClose(() => void handleCloseRequest());
     refreshRecent();
+    void api.getSettings().then((settings) => useUi.getState().setAuthorName(settings.authorName));
     api.signalReady();
     return () => {
       offOpened();
       offCommand();
       offRecent();
+      offClose();
     };
   }, []);
 
   useMenuStateSync();
   useGlobalKeys();
   useFileDrop();
+  useAnnotationSync();
 
   useEffect(() => {
     document.title = active ? `${active.name} – ${PRODUCT_NAME}` : PRODUCT_NAME;
@@ -58,6 +68,7 @@ export function App() {
     <div className={styles.app}>
       <Toolbar />
       {tabs.length > 0 && <TabBar />}
+      {commentToolsVisible && active?.status === 'ready' && <CommentToolbar tab={active} />}
       <div className={styles.workspace}>
         {!showDocumentChrome ? (
           <StartScreen />
@@ -77,6 +88,8 @@ export function App() {
       {propertiesTab && <PropertiesDialog tab={propertiesTab} />}
       {goToPageOpen && active?.status === 'ready' && <GoToPageDialog tab={active} />}
       {print && <PrintProgressDialog progress={print} />}
+      {settingsOpen && <SettingsDialog />}
+      {prompt && <PromptDialog key={`${prompt.kind}-${prompt.tabId}`} prompt={prompt} />}
       <Notices />
       <DropOverlay />
     </div>

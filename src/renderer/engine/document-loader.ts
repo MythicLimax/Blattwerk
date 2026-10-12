@@ -21,16 +21,15 @@ export class LoadAbortedError extends Error {
 }
 
 export interface LoadCallbacks {
+  // Bekanntes Kennwort (z. B. beim Neuladen nach dem Speichern); dann entfällt die Abfrage.
+  password?: string | null;
   onPassword: (reason: 'need' | 'incorrect', submit: (password: string) => void) => void;
   onRangeError: (error: unknown) => void;
 }
 
-export async function startLoading(file: FileInfo, callbacks: LoadCallbacks): Promise<LoadedDocumentHandle> {
-  const { worker, terminate } = createPdfWorker(file.fileId.slice(0, 8));
-  const read = (begin: number, end: number) => api.readRange(file.fileId, begin, end);
-
-  // Sicherheitsrelevant: kein JavaScript aus PDFs, kein XFA, keine Netzwerkzugriffe aus dem Dokument.
-  const common = {
+// Sicherheitsrelevant: kein JavaScript aus PDFs, kein XFA, keine Netzwerkzugriffe aus dem Dokument.
+function safeOptions(worker: pdfjs.PDFWorker, password: string | null | undefined) {
+  return {
     worker,
     cMapUrl: PDFJS_ASSETS.cMapUrl,
     cMapPacked: true,
@@ -41,7 +40,33 @@ export async function startLoading(file: FileInfo, callbacks: LoadCallbacks): Pr
     enableXfa: false,
     isOffscreenCanvasSupported: true,
     stopAtErrors: false,
+    password: password ?? undefined,
   } as const;
+}
+
+// Öffnet Bytes aus dem Speicher als eigenes, kurzlebiges Dokument (z. B. Druck mit ungespeicherten Kommentaren).
+export async function openTemporary(
+  data: Uint8Array,
+  password: string | null,
+): Promise<{ pdf: PDFDocumentProxy; destroy: () => Promise<void> }> {
+  const { worker, terminate } = createPdfWorker('temp');
+  const task = pdfjs.getDocument({ ...safeOptions(worker, password), data });
+  const destroy = async () => {
+    await task.destroy().catch(() => undefined);
+    terminate();
+  };
+  try {
+    return { pdf: await task.promise, destroy };
+  } catch (error) {
+    await destroy();
+    throw error;
+  }
+}
+
+export async function startLoading(file: FileInfo, callbacks: LoadCallbacks): Promise<LoadedDocumentHandle> {
+  const { worker, terminate } = createPdfWorker(file.fileId.slice(0, 8));
+  const read = (begin: number, end: number) => api.readRange(file.fileId, begin, end);
+  const common = safeOptions(worker, callbacks.password);
 
   let task: PDFDocumentLoadingTask;
   try {

@@ -1,0 +1,91 @@
+/* Ebene über der pdf.js-Seite. Lässt Klicks zur Textebene durch, außer auf Kommentaren und beim Zeichnen.
+   Ohne z-index: Sie liegt durch die Reihenfolge über Text- und Anmerkungsebene, bildet aber keinen eigenen
+   Stapelkontext. Nur so mischt sich die Hervorhebung (multiply) mit dem Seitenbild darunter. */
+.host {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.svg * {
+  pointer-events: none;
+}
+
+.drawing,
+.capturing {
+  pointer-events: all;
+}
+
+.drawing {
+  cursor: crosshair;
+}
+
+.place {
+  cursor: copy;
+}
+
+.svg .hit {
+  pointer-events: all;
+  cursor: pointer;
+  fill: transparent;
+  stroke: transparent;
+}
+
+.svg .hit * {
+  pointer-events: inherit;
+}
+
+.svg .hit[fill='none'] {
+  pointer-events: stroke;
+}
+
+.svg .movable {
+  cursor: move;
+}
+
+.svg .hit.passive,
+.svg .hit.passive * {
+  pointer-events: none;
+}
+
+.frame {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 1px;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.svg .handle {
+  pointer-events: all;
+  fill: #fff;
+  stroke: var(--color-accent);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.freeTextEditor {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 2px;
+  border: 1px dashed var(--color-accent);
+  background: rgb(255 255 255 / 0.85);
+  font-family: Helvetica, Arial, sans-serif;
+  line-height: 1.15;
+  resize: none;
+  outline: none;
+  overflow: hidden;
+  pointer-events: all;
+}

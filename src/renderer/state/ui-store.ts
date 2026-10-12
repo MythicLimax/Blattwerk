@@ -26,6 +26,12 @@ interface UiState {
   // searchFocusHandled merkt sich die zuletzt erfüllte Anforderung, damit ein Tab-Wechsel nicht erneut fokussiert.
   searchFocusRequest: number;
   searchFocusHandled: number;
+  // Name für neue Kommentare (aus den Einstellungen)
+  authorName: string;
+  commentToolsVisible: boolean;
+  settingsOpen: boolean;
+  // Offene Rückfrage (ungespeicherte Änderungen, von außen geänderte Datei)
+  prompt: Prompt | null;
   setSidebarVisible: (visible: boolean) => void;
   setRightPanelVisible: (visible: boolean) => void;
   openProperties: (tabId: string | null) => void;
@@ -37,6 +43,19 @@ interface UiState {
   setDraggingFiles: (dragging: boolean) => void;
   requestSearchFocus: () => void;
   markSearchFocusHandled: (request: number) => void;
+  setAuthorName: (name: string) => void;
+  setCommentToolsVisible: (visible: boolean) => void;
+  setSettingsOpen: (open: boolean) => void;
+  setPrompt: (prompt: Prompt | null) => void;
+}
+
+export type PromptAnswer = 'save' | 'discard' | 'cancel' | 'overwrite' | 'saveAs';
+
+export interface Prompt {
+  kind: 'unsaved' | 'changed-externally';
+  tabId: string;
+  name: string;
+  resolve: (answer: PromptAnswer) => void;
 }
 
 let nextNoticeId = 1;
@@ -52,6 +71,10 @@ export const useUi = create<UiState>((set) => ({
   draggingFiles: false,
   searchFocusRequest: 0,
   searchFocusHandled: 0,
+  authorName: '',
+  commentToolsVisible: false,
+  settingsOpen: false,
+  prompt: null,
   setSidebarVisible: (sidebarVisible) => set({ sidebarVisible }),
   setRightPanelVisible: (rightPanelVisible) => set({ rightPanelVisible }),
   openProperties: (propertiesTabId) => set({ propertiesTabId }),
@@ -65,4 +88,8 @@ export const useUi = create<UiState>((set) => ({
   requestSearchFocus: () =>
     set((state) => ({ rightPanelVisible: true, searchFocusRequest: state.searchFocusRequest + 1 })),
   markSearchFocusHandled: (request) => set({ searchFocusHandled: request }),
+  setAuthorName: (authorName) => set({ authorName }),
+  setCommentToolsVisible: (commentToolsVisible) => set({ commentToolsVisible }),
+  setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+  setPrompt: (prompt) => set({ prompt }),
 }));

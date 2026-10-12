@@ -32,7 +32,7 @@ export function DocumentPane({ tab, active }: { tab: TabState; active: boolean }
           <TriangleAlert size={32} className={styles.errorIcon} aria-hidden="true" />
           <p className={styles.errorText}>{t(tab.errorKey ?? 'errors.load.generic')}</p>
           {tab.errorDetail && <p className={styles.detail}>{t('errors.load.detail', { detail: tab.errorDetail })}</p>}
-          <button type="button" className={styles.button} onClick={() => closeTab(tab.id)}>
+          <button type="button" className={styles.button} onClick={() => void closeTab(tab.id)}>
             {t('viewer.closeTab')}
           </button>
         </div>

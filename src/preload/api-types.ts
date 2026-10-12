@@ -2,11 +2,13 @@
 import type { CommandId } from '../shared/commands';
 import type {
   AppInfo,
+  AppSettings,
   MenuState,
   OpenResult,
   PrintRequest,
   PrintResult,
   RecentFile,
+  SaveResult,
 } from '../shared/ipc';
 
 export interface BlattwerkApi {
@@ -23,6 +25,14 @@ export interface BlattwerkApi {
     clear(): Promise<RecentFile[]>;
   };
   print(request: PrintRequest): Promise<PrintResult>;
+  // Speichert neue Bytes über die geöffnete Datei. force überschreibt auch bei Änderungen von außen.
+  saveFile(fileId: string, bytes: Uint8Array, force?: boolean): Promise<SaveResult>;
+  saveFileAs(fileId: string, bytes: Uint8Array): Promise<SaveResult>;
+  getSettings(): Promise<AppSettings>;
+  setAuthorName(name: string): Promise<AppSettings>;
+  confirmClose(): void;
+  cancelClose(): void;
+  onRequestClose(listener: () => void): () => void;
   openExternal(url: string): Promise<boolean>;
   setMenuState(state: MenuState): void;
   signalReady(): void;

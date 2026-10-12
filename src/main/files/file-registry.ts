@@ -88,6 +88,27 @@ export class FileRegistry {
     return buffer;
   }
 
+  // true, wenn die Datei auf der Platte noch dem Stand beim Öffnen entspricht (Größe und Änderungszeit).
+  // Wird vor dem Überschreiben geprüft, damit fremde Änderungen nicht verloren gehen.
+  async isUnchangedOnDisk(fileId: string, ownerId: number): Promise<boolean> {
+    const file = this.#files.get(fileId);
+    if (!file || file.ownerId !== ownerId) return false;
+    try {
+      const current = await fs.stat(file.path);
+      return current.size === file.info.size && current.mtimeMs === file.mtimeMs;
+    } catch {
+      return false;
+    }
+  }
+
+  // Nach dem Speichern: alte Datei-ID schließen, die gespeicherte Datei neu öffnen.
+  async reopen(fileId: string, ownerId: number, newPath?: string): Promise<OpenResult> {
+    const file = this.#files.get(fileId);
+    if (!file || file.ownerId !== ownerId) return { ok: false, error: 'not-found' };
+    await this.close(fileId, ownerId);
+    return this.open(newPath ?? file.path, ownerId);
+  }
+
   pathOf(fileId: string, ownerId: number): string | null {
     const file = this.#files.get(fileId);
     return file && file.ownerId === ownerId ? file.path : null;

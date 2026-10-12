@@ -1,17 +1,23 @@
 import type { CommandId } from '../../shared/commands';
-import type { OpenResult, ViewMode } from '../../shared/ipc';
+import type { FileInfo, OpenResult, ViewMode } from '../../shared/ipc';
 import { api } from '../api';
+import { computeChanges, hasChanges } from '../features/annotations/changes';
+import { deleteAnnotation, loadAnnotations } from '../features/annotations/controller';
 import { printDocument } from '../features/print/print-service';
 import { layoutForMode } from '../features/viewer/view-modes';
 import { t } from '../i18n';
-import { getActiveTab, useDocuments, type TabState } from '../state/documents-store';
-import { useUi } from '../state/ui-store';
-import { startLoading } from './document-loader';
+import { isDirty, tabAnnotations, useAnnotations } from '../state/annotations-store';
+import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
+import { useUi, type PromptAnswer } from '../state/ui-store';
+import { openTemporary, startLoading } from './document-loader';
+import { saveAnnotationChanges } from './pdfium-client';
 import { pdfjs } from './pdfjs';
 import { createRuntime, destroyRuntime, dispatchFind, getRuntime, setRuntimeDocument } from './runtime';
 
 // Warteschlange für Kennwortabfragen je Tab (pdf.js ruft den Rückruf, bevor das Dokument geöffnet ist).
 const passwordCallbacks = new Map<string, (password: string) => void>();
+// Zuletzt eingegebenes Kennwort je Tab, bis das Dokument geöffnet ist (danach in der Laufzeit des Tabs)
+const enteredPasswords = new Map<string, string>();
 let printAbort: AbortController | null = null;
 
 function errorName(error: unknown): string {
@@ -28,6 +34,67 @@ function loadErrorKey(error: unknown): string {
   if (errorMessage(error).includes('file-changed')) return 'errors.load.changed';
   if (errorName(error) === 'InvalidPDFException') return 'errors.load.invalid';
   return 'errors.load.generic';
+}
+
+const tabExists = (tabId: string) => useDocuments.getState().tabs.some((tab) => tab.id === tabId);
+const findTab = (tabId: string) => useDocuments.getState().tabs.find((tab) => tab.id === tabId);
+
+// Lädt eine Datei in einen (neuen oder vorhandenen) Tab. Mit bekanntem Kennwort entfällt die Abfrage.
+async function loadIntoTab(tabId: string, file: FileInfo, knownPassword: string | null): Promise<void> {
+  try {
+    const handle = await startLoading(file, {
+      password: knownPassword,
+      onPassword: (reason, submit) => {
+        passwordCallbacks.set(tabId, submit);
+        useDocuments.getState().updateTab(tabId, {
+          status: 'password',
+          passwordIncorrect: reason === 'incorrect',
+          openedWithPassword: true,
+        });
+      },
+      onRangeError: (error) => {
+        if (!tabExists(tabId)) return;
+        useDocuments.getState().updateTab(tabId, {
+          status: 'error',
+          errorKey: loadErrorKey(error),
+          errorDetail: errorMessage(error),
+        });
+      },
+    });
+    if (!tabExists(tabId)) {
+      handle.terminate();
+      return;
+    }
+    const runtime = createRuntime(tabId, file, handle.terminate);
+    const pdf = await handle.promise;
+    if (getRuntime(tabId) !== runtime) return;
+    runtime.password = enteredPasswords.get(tabId) ?? knownPassword;
+    setRuntimeDocument(runtime, pdf);
+    const [metadata, permissions] = await Promise.all([
+      pdf.getMetadata().catch(() => null),
+      pdf.getPermissions().catch(() => null),
+    ]);
+    const info = (metadata?.info ?? {}) as Record<string, unknown>;
+    const title = typeof info.Title === 'string' && info.Title.trim() ? info.Title.trim() : null;
+    useDocuments.getState().updateTab(tabId, {
+      status: 'ready',
+      pageCount: pdf.numPages,
+      title,
+      canPrint: permissions === null || permissions.has(pdfjs.PermissionFlag.PRINT),
+      canAnnotate: permissions === null || permissions.has(pdfjs.PermissionFlag.MODIFY_ANNOTATIONS),
+    });
+    void loadAnnotations(tabId);
+  } catch (error) {
+    if (!tabExists(tabId)) return;
+    useDocuments.getState().updateTab(tabId, {
+      status: 'error',
+      errorKey: loadErrorKey(error),
+      errorDetail: errorMessage(error),
+    });
+  } finally {
+    passwordCallbacks.delete(tabId);
+    enteredPasswords.delete(tabId);
+  }
 }
 
 export async function handleOpenResult(result: OpenResult): Promise<void> {
@@ -50,61 +117,14 @@ export async function handleOpenResult(result: OpenResult): Promise<void> {
 
   const tabId = crypto.randomUUID();
   documents.addTab({ id: tabId, fileId: file.fileId, name: file.name, dir: file.dir, size: file.size });
-
-  try {
-    const handle = await startLoading(file, {
-      onPassword: (reason, submit) => {
-        passwordCallbacks.set(tabId, submit);
-        useDocuments.getState().updateTab(tabId, {
-          status: 'password',
-          passwordIncorrect: reason === 'incorrect',
-          openedWithPassword: true,
-        });
-      },
-      onRangeError: (error) => {
-        if (!useDocuments.getState().tabs.some((tab) => tab.id === tabId)) return;
-        useDocuments.getState().updateTab(tabId, {
-          status: 'error',
-          errorKey: loadErrorKey(error),
-          errorDetail: errorMessage(error),
-        });
-      },
-    });
-    if (!useDocuments.getState().tabs.some((tab) => tab.id === tabId)) {
-      handle.terminate();
-      return;
-    }
-    const runtime = createRuntime(tabId, file, handle.terminate);
-    const pdf = await handle.promise;
-    if (!getRuntime(tabId)) return;
-    setRuntimeDocument(runtime, pdf);
-    const [metadata, permissions] = await Promise.all([
-      pdf.getMetadata().catch(() => null),
-      pdf.getPermissions().catch(() => null),
-    ]);
-    const info = (metadata?.info ?? {}) as Record<string, unknown>;
-    const title = typeof info.Title === 'string' && info.Title.trim() ? info.Title.trim() : null;
-    useDocuments.getState().updateTab(tabId, {
-      status: 'ready',
-      pageCount: pdf.numPages,
-      title,
-      canPrint: permissions === null || permissions.has(pdfjs.PermissionFlag.PRINT),
-    });
-  } catch (error) {
-    if (!useDocuments.getState().tabs.some((tab) => tab.id === tabId)) return;
-    useDocuments.getState().updateTab(tabId, {
-      status: 'error',
-      errorKey: loadErrorKey(error),
-      errorDetail: errorMessage(error),
-    });
-  } finally {
-    passwordCallbacks.delete(tabId);
-  }
+  useAnnotations.getState().init(tabId);
+  await loadIntoTab(tabId, file, null);
 }
 
 export function submitPassword(tabId: string, password: string): void {
   const submit = passwordCallbacks.get(tabId);
   if (!submit) return;
+  enteredPasswords.set(tabId, password);
   useDocuments.getState().updateTab(tabId, { status: 'loading' });
   submit(password);
 }
@@ -116,19 +136,124 @@ export async function openWithDialog(): Promise<void> {
   for (const result of results) void handleOpenResult(result);
 }
 
-export function closeTab(tabId: string): void {
-  const tab = useDocuments.getState().tabs.find((t) => t.id === tabId);
+// Rückfrage an den Nutzer (ungespeicherte Änderungen, von außen geänderte Datei).
+function ask(kind: 'unsaved' | 'changed-externally', tab: TabState): Promise<PromptAnswer> {
+  return new Promise((resolve) => {
+    useUi.getState().setPrompt({
+      kind,
+      tabId: tab.id,
+      name: tab.name,
+      resolve: (answer) => {
+        useUi.getState().setPrompt(null);
+        resolve(answer);
+      },
+    });
+  });
+}
+
+// Schließt einen Tab sofort, ohne Rückfrage.
+function closeTabNow(tabId: string): void {
+  const tab = findTab(tabId);
   if (!tab) return;
   passwordCallbacks.delete(tabId);
+  enteredPasswords.delete(tabId);
   const ui = useUi.getState();
   // Ein laufender Druck dieses Dokuments wird abgebrochen, bevor seine pdf.js-Instanz verschwindet.
   if (ui.print?.tabId === tabId) printAbort?.abort();
   destroyRuntime(tabId);
   void api.closeFile(tab.fileId);
   useDocuments.getState().removeTab(tabId);
+  useAnnotations.getState().drop(tabId);
   if (ui.propertiesTabId === tabId) ui.openProperties(null);
   // „Gehe zu Seite“ gilt immer dem aktiven Tab; nach dem Schließen ist das ein anderer.
   ui.setGoToPageOpen(false);
+}
+
+// Schließt einen Tab. Bei ungespeicherten Änderungen wird vorher gefragt. Liefert false bei Abbruch.
+export async function closeTab(tabId: string): Promise<boolean> {
+  const tab = findTab(tabId);
+  if (!tab) return true;
+  if (isDirty(tabAnnotations(tabId))) {
+    useDocuments.getState().setActive(tabId);
+    const answer = await ask('unsaved', tab);
+    if (answer === 'cancel') return false;
+    if (answer === 'save' && !(await saveTab(tabId, 'save'))) return false;
+  }
+  closeTabNow(tabId);
+  return true;
+}
+
+// Fenster schließen oder App beenden: alle Tabs mit Änderungen nacheinander abfragen.
+export async function handleCloseRequest(): Promise<void> {
+  const dirtyTabs = useDocuments.getState().tabs.filter((tab) => isDirty(tabAnnotations(tab.id)));
+  for (const tab of dirtyTabs) {
+    useDocuments.getState().setActive(tab.id);
+    const answer = await ask('unsaved', tab);
+    if (answer === 'cancel' || (answer === 'save' && !(await saveTab(tab.id, 'save')))) {
+      api.cancelClose();
+      return;
+    }
+    if (answer === 'discard') closeTabNow(tab.id);
+  }
+  api.confirmClose();
+}
+
+// Lädt einen Tab nach dem Speichern aus der neuen Datei; Seite, Zoom und Ansicht bleiben erhalten.
+async function reloadTab(tabId: string, file: FileInfo): Promise<void> {
+  const password = getRuntime(tabId)?.password ?? null;
+  destroyRuntime(tabId);
+  useAnnotations.getState().init(tabId);
+  useDocuments.getState().updateTab(tabId, {
+    fileId: file.fileId,
+    name: file.name,
+    dir: file.dir,
+    size: file.size,
+    status: 'loading',
+    search: EMPTY_SEARCH,
+  });
+  await loadIntoTab(tabId, file, password);
+}
+
+// Speichert die Kommentare. „save“ überschreibt die Datei (inkrementell), „saveAs“ fragt nach einem neuen Namen.
+export async function saveTab(tabId: string, mode: 'save' | 'saveAs'): Promise<boolean> {
+  const tab = findTab(tabId);
+  const runtime = getRuntime(tabId);
+  const annotations = tabAnnotations(tabId);
+  if (!tab || tab.status !== 'ready' || !runtime?.pdf || !annotations || tab.saving) return false;
+  const changes = computeChanges(annotations.items, annotations.originals);
+  if (mode === 'save' && !hasChanges(changes)) {
+    useAnnotations.getState().markSaved(tabId);
+    return true;
+  }
+  useDocuments.getState().updateTab(tabId, { saving: true });
+  try {
+    // Die Originalbytes hält pdf.js bereits im Speicher; große Dateien liest es bei Bedarf nach.
+    const original = await runtime.pdf.getData();
+    const bytes = hasChanges(changes) ? await saveAnnotationChanges(original, runtime.password, changes) : original;
+    let result = mode === 'save' ? await api.saveFile(tab.fileId, bytes) : await api.saveFileAs(tab.fileId, bytes);
+    if (!result.ok && result.error === 'changed-externally') {
+      const answer = await ask('changed-externally', tab);
+      if (answer === 'overwrite') result = await api.saveFile(tab.fileId, bytes, true);
+      else if (answer === 'saveAs') result = await api.saveFileAs(tab.fileId, bytes);
+      else return false;
+    }
+    if (!result.ok) {
+      if (result.error !== 'cancelled') useUi.getState().notify(t('errors.save.failed'), result.detail ?? result.error);
+      return false;
+    }
+    await reloadTab(tabId, result.file);
+    return true;
+  } catch (error) {
+    useUi.getState().notify(t('errors.save.failed'), errorMessage(error));
+    return false;
+  } finally {
+    if (tabExists(tabId)) useDocuments.getState().updateTab(tabId, { saving: false });
+  }
+}
+
+function isEditableFocus(): boolean {
+  const element = document.activeElement;
+  return element instanceof HTMLElement && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName));
 }
 
 export function setViewMode(tab: TabState, mode: ViewMode): void {
@@ -166,8 +291,23 @@ export async function printTab(tab: TabState): Promise<void> {
   }
   printAbort = new AbortController();
   ui.setPrint({ tabId: tab.id, current: 0, total: runtime.pdf.numPages });
+  // Ungespeicherte Kommentare werden mitgedruckt: Den aktuellen Stand im Speicher erzeugen, die Datei bleibt unverändert.
+  let temporary: Awaited<ReturnType<typeof openTemporary>> | null = null;
+  const annotations = tabAnnotations(tab.id);
+  const changes = annotations ? computeChanges(annotations.items, annotations.originals) : null;
+  if (changes && hasChanges(changes)) {
+    try {
+      const bytes = await saveAnnotationChanges(await runtime.pdf.getData(), runtime.password, changes);
+      temporary = await openTemporary(bytes, runtime.password);
+    } catch (error) {
+      printAbort = null;
+      useUi.getState().setPrint(null);
+      useUi.getState().notify(t('errors.print.failed'), errorMessage(error));
+      return;
+    }
+  }
   const result = await printDocument(
-    runtime.pdf,
+    temporary?.pdf ?? runtime.pdf,
     {
       onProgress: (current, total) => useUi.getState().setPrint({ tabId: tab.id, current, total }),
       print: () => api.print({ documentName: tab.title ?? tab.name }),
@@ -176,6 +316,7 @@ export async function printTab(tab: TabState): Promise<void> {
   );
   printAbort = null;
   useUi.getState().setPrint(null);
+  await temporary?.destroy();
   if (!result.ok && result.reason === 'failed') {
     useUi.getState().notify(t('errors.print.failed'), result.detail);
   }
@@ -206,6 +347,10 @@ export function executeCommand(command: CommandId): void {
     void openWithDialog();
     return;
   }
+  if (command === 'app.settings') {
+    ui.setSettingsOpen(true);
+    return;
+  }
   if (command === 'window.nextTab') return switchTab(1);
   if (command === 'window.previousTab') return switchTab(-1);
 
@@ -222,7 +367,29 @@ export function executeCommand(command: CommandId): void {
 
   switch (command) {
     case 'file.close':
-      closeTab(tab.id);
+      void closeTab(tab.id);
+      return;
+    case 'file.save':
+      void saveTab(tab.id, 'save');
+      return;
+    case 'file.saveAs':
+      void saveTab(tab.id, 'saveAs');
+      return;
+    case 'edit.undo':
+    case 'edit.redo':
+      // In Eingabefeldern wirkt Rückgängig auf den Text, sonst auf die Kommentare.
+      if (isEditableFocus()) document.execCommand(command === 'edit.undo' ? 'undo' : 'redo');
+      else if (command === 'edit.undo') useAnnotations.getState().undo(tab.id);
+      else useAnnotations.getState().redo(tab.id);
+      return;
+    case 'edit.delete': {
+      const selected = tabAnnotations(tab.id)?.selectedId;
+      if (selected && tab.canAnnotate && !isEditableFocus()) deleteAnnotation(tab.id, selected);
+      return;
+    }
+    case 'view.toggleCommentTools':
+      ui.setCommentToolsVisible(!ui.commentToolsVisible);
+      if (ui.commentToolsVisible) useAnnotations.getState().setTool('select');
       return;
     case 'file.print':
       void printTab(tab);

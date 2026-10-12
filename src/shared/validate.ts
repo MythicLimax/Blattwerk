@@ -27,10 +27,9 @@ export function validateMenuState(value: unknown): MenuState | null {
   if (typeof value !== 'object' || value === null) return null;
   const v = value as Record<string, unknown>;
   const bool = (x: unknown) => typeof x === 'boolean';
-  if (!bool(v.hasDocument) || !bool(v.canPrint) || !bool(v.sidebarVisible) || !bool(v.rightPanelVisible)) {
-    return null;
-  }
-  if (!isNonNegativeInt(v.tabCount)) return null;
+  const flags = ['hasDocument', 'canPrint', 'sidebarVisible', 'rightPanelVisible', 'canUndo', 'canRedo', 'activeDirty', 'commentToolsVisible'];
+  if (!flags.every((key) => bool(v[key]))) return null;
+  if (!isNonNegativeInt(v.tabCount) || !isNonNegativeInt(v.dirtyCount)) return null;
   if (v.viewMode !== null && !VIEW_MODES.includes(v.viewMode as ViewMode)) return null;
   return {
     hasDocument: v.hasDocument as boolean,
@@ -39,7 +38,23 @@ export function validateMenuState(value: unknown): MenuState | null {
     rightPanelVisible: v.rightPanelVisible as boolean,
     tabCount: v.tabCount,
     viewMode: v.viewMode as ViewMode | null,
+    dirtyCount: v.dirtyCount,
+    canUndo: v.canUndo as boolean,
+    canRedo: v.canRedo as boolean,
+    activeDirty: v.activeDirty as boolean,
+    commentToolsVisible: v.commentToolsVisible as boolean,
   };
+}
+
+// Neuer Dateiinhalt aus dem Renderer: Bytes, nicht leer, mit PDF-Kopf, höchstens 2 GB.
+export function isPdfBytes(value: unknown): value is Uint8Array {
+  return value instanceof Uint8Array && value.length > 0 && value.length < 2 ** 31 && looksLikePdf(value.subarray(0, 1024));
+}
+
+export function validateAuthorName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && trimmed.length <= 200 ? trimmed : null;
 }
 
 // Nur Web- und Mail-Links dürfen extern geöffnet werden. Links mit Benutzername oder Passwort im Host-Teil

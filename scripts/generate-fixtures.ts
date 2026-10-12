@@ -212,6 +212,86 @@ async function buildFormPdf(): Promise<Uint8Array> {
   return doc.save({ useObjectStreams: false });
 }
 
+// Kommentare, wie sie ein anderes Programm anlegt: Hervorhebung, Notiz mit Antwort und Prüfstatus,
+// Rechteck auf Seite 1, Freihandzeichnung auf Seite 2. Ohne Darstellungsströme, die erzeugen die Anzeigeprogramme selbst.
+async function buildCommentsPdf(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  setMetadata(doc, 'Testdokument mit Kommentaren');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const pages = [doc.addPage([595.28, 841.89]), doc.addPage([595.28, 841.89])];
+  pages.forEach((page, index) => {
+    page.drawText(index === 0 ? 'Dokument mit Kommentaren' : 'Zweite Seite', { x: 56, y: 770, size: 20, font: bold });
+    drawParagraphs(page, font, LOREM, 720);
+  });
+  const date = PDFString.fromDate(FIXED_DATE);
+  const text = (value: string) => PDFHexString.fromText(value);
+  const add = (page: PDFPage, dict: Record<string, unknown>): PDFRef => {
+    const ref = doc.context.register(doc.context.obj({ Type: 'Annot', M: date, CreationDate: date, ...dict } as never));
+    const annots = page.node.lookup(PDFName.of('Annots'));
+    if (annots instanceof PDFArray) annots.push(ref);
+    else page.node.set(PDFName.of('Annots'), doc.context.obj([ref]));
+    return ref;
+  };
+  const [first, second] = pages as [PDFPage, PDFPage];
+  add(first, {
+    Subtype: 'Highlight',
+    Rect: [54, 714, 420, 732],
+    QuadPoints: [54, 732, 420, 732, 54, 714, 420, 714],
+    C: [1, 0.9, 0.1],
+    T: text('Erika Muster'),
+    Contents: text('Bitte prüfen'),
+    F: 4,
+  });
+  const note = add(first, {
+    Subtype: 'Text',
+    Rect: [520, 740, 540, 760],
+    Name: 'Comment',
+    C: [1, 0.8, 0.2],
+    T: text('Erika Muster'),
+    Contents: text('Vorhandene Notiz'),
+    F: 28,
+  });
+  add(first, {
+    Subtype: 'Text',
+    Rect: [520, 740, 540, 760],
+    IRT: note,
+    RT: 'R',
+    T: text('Max Beispiel'),
+    Contents: text('Erledigt, danke'),
+    F: 30,
+  });
+  add(first, {
+    Subtype: 'Text',
+    Rect: [520, 740, 540, 760],
+    IRT: note,
+    State: text('Accepted'),
+    StateModel: text('Review'),
+    T: text('Max Beispiel'),
+    Contents: text('Accepted gesetzt von Max Beispiel'),
+    F: 30,
+  });
+  add(first, {
+    Subtype: 'Square',
+    Rect: [300, 560, 420, 640],
+    C: [0.85, 0.1, 0.1],
+    BS: { W: 2, S: 'S' },
+    T: text('Erika Muster'),
+    Contents: text('Rahmen um den Absatz'),
+    F: 4,
+  });
+  add(second, {
+    Subtype: 'Ink',
+    Rect: [100, 500, 260, 560],
+    InkList: [[110, 510, 150, 550, 190, 510, 230, 550, 250, 520]],
+    C: [0.1, 0.3, 0.9],
+    BS: { W: 3, S: 'S' },
+    T: text('Erika Muster'),
+    F: 4,
+  });
+  return doc.save({ useObjectStreams: false });
+}
+
 async function encrypt(source: Uint8Array, options: Parameters<PDFDocument['encrypt']>[0]): Promise<Uint8Array> {
   const doc = await PDFDocument.load(source);
   doc.encrypt(options);
@@ -302,7 +382,10 @@ async function buildLargePdf(): Promise<Uint8Array> {
 
 async function main(): Promise<void> {
   mkdirSync(outDir, { recursive: true });
+  // --only=name.pdf schreibt nur diese Datei (verschlüsselte Dateien ändern sich sonst bei jedem Lauf)
+  const only = process.argv.find((arg) => arg.startsWith('--only='))?.slice('--only='.length);
   const write = (name: string, data: Uint8Array) => {
+    if (only && only !== name) return;
     writeFileSync(path.join(outDir, name), data);
     console.log(`${name}: ${(data.length / 1024).toFixed(1)} KB`);
   };
@@ -310,6 +393,7 @@ async function main(): Promise<void> {
   const text = await buildTextPdf();
   write('text.pdf', text);
   write('formular.pdf', await buildFormPdf());
+  write('kommentare.pdf', await buildCommentsPdf());
   write(
     'verschluesselt.pdf',
     await encrypt(text, {
@@ -326,7 +410,7 @@ async function main(): Promise<void> {
   write('abgeschnitten.pdf', text.subarray(0, Math.floor(text.length * 0.7)));
   write('kein-pdf.pdf', Buffer.from('Das ist kein PDF, sondern einfacher Text.\n', 'utf8'));
 
-  const scan = await buildScanPdf(text);
+  const scan = only && only !== 'scan.pdf' ? null : await buildScanPdf(text);
   if (scan) write('scan.pdf', scan);
   else if (!existsSync(path.join(outDir, 'scan.pdf'))) console.warn('scan.pdf kann nur unter macOS erzeugt werden.');
 

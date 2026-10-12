@@ -54,6 +54,12 @@ select {
   box-shadow: var(--shadow-page);
 }
 
+/* Inhalte von Kommentaren zeigt die Kommentarliste; die eingebauten Hinweisfenster von pdf.js bleiben aus,
+   sie würden nach dem Bearbeiten veraltete Texte zeigen. */
+.pdfViewer .annotationLayer .popupAnnotation {
+  display: none !important;
+}
+
 /* Druckbereich: nur beim Drucken sichtbar, die App selbst wird ausgeblendet. */
 #print-container {
   display: none;

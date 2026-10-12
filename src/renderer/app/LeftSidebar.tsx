@@ -1,6 +1,7 @@
-import { Bookmark, LayoutGrid } from 'lucide-react';
+import { Bookmark, LayoutGrid, MessageSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '../components/IconButton';
+import { CommentsPanel } from '../features/annotations/CommentsPanel';
 import { Outline } from '../features/outline/Outline';
 import { Thumbnails } from '../features/thumbnails/Thumbnails';
 import { useDocuments, type TabState } from '../state/documents-store';
@@ -31,12 +32,21 @@ export function LeftSidebar({ tab }: { tab: TabState }) {
           onClick={() => updateTab(tab.id, { sidebarTab: 'bookmarks' })}
           data-testid="sidebar-bookmarks"
         />
-        <span className={styles.switcherTitle}>
-          {tab.sidebarTab === 'pages' ? t('sidebar.pages') : t('sidebar.bookmarks')}
-        </span>
+        <IconButton
+          icon={MessageSquare}
+          label={t('sidebar.comments')}
+          role="tab"
+          aria-selected={tab.sidebarTab === 'comments'}
+          pressed={tab.sidebarTab === 'comments'}
+          onClick={() => updateTab(tab.id, { sidebarTab: 'comments' })}
+          data-testid="sidebar-comments"
+        />
+        <span className={styles.switcherTitle}>{t(`sidebar.${tab.sidebarTab}`)}</span>
       </div>
       <div className={styles.content}>
-        {tab.sidebarTab === 'pages' ? <Thumbnails key={tab.id} tab={tab} /> : <Outline key={tab.id} tab={tab} />}
+        {tab.sidebarTab === 'pages' && <Thumbnails key={tab.id} tab={tab} />}
+        {tab.sidebarTab === 'bookmarks' && <Outline key={tab.id} tab={tab} />}
+        {tab.sidebarTab === 'comments' && <CommentsPanel key={tab.id} tab={tab} />}
       </div>
     </aside>
   );

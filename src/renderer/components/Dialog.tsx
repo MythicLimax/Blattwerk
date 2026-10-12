@@ -56,9 +56,10 @@ interface ButtonProps {
   type?: 'button' | 'submit';
   disabled?: boolean;
   autoFocus?: boolean;
+  testId?: string;
 }
 
-export function DialogButton({ children, onClick, primary, type = 'button', disabled, autoFocus }: ButtonProps) {
+export function DialogButton({ children, onClick, primary, type = 'button', disabled, autoFocus, testId }: ButtonProps) {
   return (
     <button
       type={type}
@@ -66,6 +67,7 @@ export function DialogButton({ children, onClick, primary, type = 'button', disa
       onClick={onClick}
       disabled={disabled}
       autoFocus={autoFocus}
+      data-testid={testId}
     >
       {children}
     </button>

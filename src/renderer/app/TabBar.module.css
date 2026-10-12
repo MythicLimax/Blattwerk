@@ -71,3 +71,12 @@
     transform: rotate(360deg);
   }
 }
+
+/* Punkt für ungespeicherte Änderungen */
+.dirty {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}

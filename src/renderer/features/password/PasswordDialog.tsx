@@ -12,12 +12,12 @@ export function PasswordDialog({ tab }: { tab: TabState }) {
   return (
     <Dialog
       title={t('password.title')}
-      onClose={() => closeTab(tab.id)}
+      onClose={() => void closeTab(tab.id)}
       onSubmit={() => submitPassword(tab.id, password)}
       testId="password-dialog"
       actions={
         <>
-          <DialogButton onClick={() => closeTab(tab.id)}>{t('password.cancel')}</DialogButton>
+          <DialogButton onClick={() => void closeTab(tab.id)}>{t('password.cancel')}</DialogButton>
           <DialogButton type="submit" primary disabled={password.length === 0}>
             {t('password.ok')}
           </DialogButton>

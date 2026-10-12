@@ -5,6 +5,8 @@ import { api } from '../api';
 import { getRuntime } from '../engine/runtime';
 import { executeCommand, handleOpenResult } from '../engine/session';
 import { isPagedMode } from '../features/viewer/view-modes';
+import { syncHiddenAnnotations } from '../features/annotations/controller';
+import { isDirty, useAnnotations } from '../state/annotations-store';
 import { getActiveTab, useDocuments } from '../state/documents-store';
 import { useUi } from '../state/ui-store';
 
@@ -13,6 +15,8 @@ function computeMenuState(): MenuState {
   const ui = useUi.getState();
   const active = tabs.find((tab) => tab.id === activeId);
   const ready = active?.status === 'ready';
+  const annotations = useAnnotations.getState().tabs;
+  const activeAnnotations = active ? annotations[active.id] : undefined;
   return {
     hasDocument: ready,
     canPrint: ready && active.canPrint,
@@ -20,6 +24,11 @@ function computeMenuState(): MenuState {
     sidebarVisible: ui.sidebarVisible,
     rightPanelVisible: ui.rightPanelVisible,
     tabCount: tabs.length,
+    dirtyCount: tabs.filter((tab) => isDirty(annotations[tab.id])).length,
+    canUndo: Boolean(activeAnnotations?.undo.length),
+    canRedo: Boolean(activeAnnotations?.redo.length),
+    activeDirty: ready && isDirty(activeAnnotations),
+    commentToolsVisible: ui.commentToolsVisible,
   };
 }
 
@@ -38,9 +47,11 @@ export function useMenuStateSync(): void {
     push();
     const offDocs = useDocuments.subscribe(push);
     const offUi = useUi.subscribe(push);
+    const offAnnotations = useAnnotations.subscribe(push);
     return () => {
       offDocs();
       offUi();
+      offAnnotations();
     };
   }, []);
 }
@@ -58,7 +69,8 @@ export function useGlobalKeys(): void {
       if (document.querySelector('dialog[open]')) return;
       const tab = getActiveTab();
       if (!tab || tab.status !== 'ready') return;
-      const command = matchRendererShortcut(event);
+      // Entfernen (Windows) löscht wie die Rückschritttaste den ausgewählten Kommentar.
+      const command = event.key === 'Delete' ? 'edit.delete' : matchRendererShortcut(event);
       if (command) {
         event.preventDefault();
         executeCommand(command);
@@ -136,5 +148,18 @@ export function useFileDrop(): void {
       window.removeEventListener('dragleave', onDragLeave);
       window.removeEventListener('drop', onDrop);
     };
+  }, []);
+}
+
+// Geänderte oder gelöschte vorhandene Kommentare in der pdf.js-Anzeige ausblenden.
+export function useAnnotationSync(): void {
+  useEffect(() => {
+    return useAnnotations.subscribe((state, previous) => {
+      for (const [tabId, tab] of Object.entries(state.tabs)) {
+        const before = previous.tabs[tabId];
+        if (before && before.items === tab.items && before.originals === tab.originals) continue;
+        syncHiddenAnnotations(tabId);
+      }
+    });
   }, []);
 }

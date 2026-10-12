@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { ViewMode } from '../../shared/ipc';
 
 export type TabStatus = 'loading' | 'password' | 'ready' | 'error';
-export type SidebarTab = 'pages' | 'bookmarks';
+export type SidebarTab = 'pages' | 'bookmarks' | 'comments';
 export type SearchStatus = 'idle' | 'pending' | 'found' | 'not-found' | 'wrapped-top' | 'wrapped-bottom';
 
 export interface SearchState {
@@ -37,6 +37,9 @@ export interface TabState {
   viewMode: ViewMode;
   rotation: number;
   canPrint: boolean;
+  // false, wenn das PDF Kommentieren verbietet (Berechtigungen)
+  canAnnotate: boolean;
+  saving: boolean;
   sidebarTab: SidebarTab;
   search: SearchState;
 }
@@ -84,6 +87,8 @@ export const useDocuments = create<DocumentsState>((set) => ({
           viewMode: 'continuous',
           rotation: 0,
           canPrint: true,
+          canAnnotate: true,
+          saving: false,
           sidebarTab: 'pages',
           search: EMPTY_SEARCH,
         },

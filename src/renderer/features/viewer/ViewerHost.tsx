@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { attachViewer, getRuntime } from '../../engine/runtime';
+import { AnnotationLayer } from '../annotations/AnnotationLayer';
 import type { TabState } from '../../state/documents-store';
 import styles from './ViewerHost.module.css';
 import { PageFlipAccumulator, SCROLL_MODE, wheelDeltaPixels } from './view-modes';
@@ -102,6 +103,7 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
   return (
     <div ref={containerRef} className={styles.container} tabIndex={0} data-testid="viewer-container">
       <div ref={viewerRef} className="pdfViewer" />
+      <AnnotationLayer tabId={tab.id} active={active} />
     </div>
   );
 }

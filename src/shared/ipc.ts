@@ -15,13 +15,20 @@ export const IPC = {
   appInfo: 'app:info',
   print: 'print:run',
   openExternal: 'shell:open-external',
+  saveFile: 'file:save',
+  saveFileAs: 'file:save-as',
+  settingsGet: 'settings:get',
+  settingsSetAuthor: 'settings:set-author',
   // Renderer → Hauptprozess (send)
   menuState: 'app:menu-state',
   rendererReady: 'app:renderer-ready',
+  closeConfirmed: 'app:close-confirmed',
+  closeCancelled: 'app:close-cancelled',
   // Hauptprozess → Renderer
   fileOpened: 'file:opened',
   menuCommand: 'menu:command',
   recentChanged: 'recent:changed',
+  requestClose: 'app:request-close',
 } as const;
 
 export interface FileInfo {
@@ -53,6 +60,20 @@ export interface MenuState {
   sidebarVisible: boolean;
   rightPanelVisible: boolean;
   tabCount: number;
+  // Tabs mit ungespeicherten Änderungen (für Schließen-Rückfrage und den Punkt im Schließen-Knopf)
+  dirtyCount: number;
+  canUndo: boolean;
+  canRedo: boolean;
+  activeDirty: boolean;
+  commentToolsVisible: boolean;
+}
+
+export type SaveErrorCode = 'changed-externally' | 'cancelled' | 'write-failed' | 'unknown-file' | 'invalid-data';
+
+export type SaveResult = { ok: true; file: FileInfo } | { ok: false; error: SaveErrorCode; detail?: string };
+
+export interface AppSettings {
+  authorName: string;
 }
 
 export interface AppInfo {

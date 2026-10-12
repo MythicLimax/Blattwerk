@@ -1,8 +1,10 @@
 import { app, BrowserWindow, dialog, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { execFileSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { CommandId } from '../shared/commands';
-import { IPC, type MenuState, type OpenResult, type RecentFile } from '../shared/ipc';
+import { IPC, type AppSettings, type MenuState, type OpenResult, type RecentFile } from '../shared/ipc';
 import { APP_ID, APP_ORIGIN, PRODUCT_NAME } from '../shared/product';
 import { FileRegistry } from './files/file-registry';
 import { RecentFiles } from './files/recent-files';
@@ -12,7 +14,7 @@ import { registerIpc, showOpenDialog } from './ipc';
 import { applyMenu } from './menu';
 import { handleAppScheme, registerAppScheme } from './protocol';
 import { hardenSession, hardenWebContents, isTrustedAppUrl } from './security';
-import { createMainWindow, createSettingsStore, type WindowState } from './window';
+import { createMainWindow, createSettingsStore, type SettingsData, type WindowState } from './window';
 
 // Testschalter wirken nur beim Entwickeln, nie in der installierten App.
 const isE2E = !app.isPackaged && Boolean(process.env.BLATTWERK_E2E);
@@ -54,7 +56,15 @@ let menuState: MenuState = {
   sidebarVisible: true,
   rightPanelVisible: false,
   tabCount: 0,
+  dirtyCount: 0,
+  canUndo: false,
+  canRedo: false,
+  activeDirty: false,
+  commentToolsVisible: false,
 };
+// Schließen mit ungespeicherten Änderungen: Der Renderer fragt nach und bestätigt dann.
+let allowClose = false;
+let quitting = false;
 
 // Dateien, die vor dem Start des Renderers angefordert wurden (Doppelklick im Finder, Kommandozeile).
 const pendingPaths: string[] = [];
@@ -176,6 +186,32 @@ function isTrustedSender(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
 
 const settingsStore = createSettingsStore(app.getPath('userData'));
 let windowState: WindowState = { bounds: null, maximized: false };
+let settings: SettingsData = { version: 1, window: windowState, authorName: null };
+
+function saveSettings(patch: Partial<SettingsData>): void {
+  settings = { ...settings, ...patch };
+  void settingsStore.write(settings);
+}
+
+// Vorgabe für den Autor von Kommentaren: vollständiger Name (macOS) oder Benutzername.
+let systemAuthor: string | null = null;
+function defaultAuthor(): string {
+  if (systemAuthor) return systemAuthor;
+  let name = '';
+  if (process.platform === 'darwin') {
+    try {
+      name = execFileSync('/usr/bin/id', ['-F'], { encoding: 'utf8', timeout: 2000 }).trim();
+    } catch {
+      name = '';
+    }
+  }
+  systemAuthor = name || os.userInfo().username;
+  return systemAuthor;
+}
+
+function currentSettings(): AppSettings {
+  return { authorName: settings.authorName ?? defaultAuthor() };
+}
 
 async function createWindow(): Promise<BrowserWindow> {
   rendererReady = false;
@@ -185,10 +221,16 @@ async function createWindow(): Promise<BrowserWindow> {
     devTools: !app.isPackaged || isE2E,
     onStateChange: (state) => {
       windowState = state;
-      void settingsStore.write({ version: 1, window: state });
+      saveSettings({ window: state });
     },
   });
   mainWindow = win;
+  allowClose = false;
+  win.on('close', (event) => {
+    if (allowClose || menuState.dirtyCount === 0 || !rendererReady) return;
+    event.preventDefault();
+    win.webContents.send(IPC.requestClose);
+  });
   const ownerId = win.webContents.id;
   win.on('closed', () => {
     void files.closeAllOwnedBy(ownerId);
@@ -236,6 +278,10 @@ async function createWindow(): Promise<BrowserWindow> {
 
 app.on('web-contents-created', (_event, contents) => hardenWebContents(contents, devServerOrigin));
 
+app.on('before-quit', () => {
+  quitting = true;
+});
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
@@ -248,7 +294,8 @@ void app.whenReady().then(async () => {
   hardenSession(devServerOrigin);
   handleAppScheme(rendererDir);
   recent = new RecentFiles(path.join(app.getPath('userData'), 'recent-files.json'));
-  windowState = (await settingsStore.read()).window;
+  settings = await settingsStore.read();
+  windowState = settings.window;
   if (process.platform === 'darwin') {
     app.setAboutPanelOptions({ applicationName: PRODUCT_NAME, applicationVersion: app.getVersion() });
   }
@@ -261,6 +308,7 @@ void app.whenReady().then(async () => {
     onMenuState: (win, state) => {
       if (win !== mainWindow) return;
       menuState = state;
+      if (process.platform === 'darwin') win.setDocumentEdited(state.dirtyCount > 0);
       refreshMenu();
     },
     onRendererReady: (win) => {
@@ -271,6 +319,31 @@ void app.whenReady().then(async () => {
     onRecentChanged: () => refreshMenu(),
     clearRecent: clearRecentEverywhere,
     openPathFor,
+    onSavedAs: async (filePath) => {
+      try {
+        await recent.add(filePath);
+      } catch (error) {
+        console.error('Zuletzt-Liste konnte nicht gespeichert werden', error);
+      }
+      if (process.platform === 'darwin' || process.platform === 'win32') app.addRecentDocument(filePath);
+      refreshMenu();
+      mainWindow?.webContents.send(IPC.recentChanged);
+    },
+    getSettings: currentSettings,
+    setAuthorName: async (name) => {
+      saveSettings({ authorName: name });
+      return currentSettings();
+    },
+    onCloseConfirmed: (win) => {
+      if (win !== mainWindow) return;
+      allowClose = true;
+      win.close();
+      // Unter macOS beendet das Schließen des letzten Fensters die App nicht von selbst.
+      if (quitting) app.quit();
+    },
+    onCloseCancelled: () => {
+      quitting = false;
+    },
   });
 
   refreshMenu();

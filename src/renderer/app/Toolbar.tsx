@@ -3,10 +3,12 @@ import {
   ChevronUp,
   FolderOpen,
   Info,
+  MessageSquare,
   PanelLeft,
   Printer,
   RotateCcw,
   RotateCw,
+  Save,
   Search,
   ZoomIn,
   ZoomOut,
@@ -17,6 +19,7 @@ import type { ViewMode } from '../../shared/ipc';
 import { IconButton } from '../components/IconButton';
 import { focusViewer, getRuntime } from '../engine/runtime';
 import { executeCommand, goToPage, openWithDialog, printTab, setScaleValue, setViewMode } from '../engine/session';
+import { isDirty, useTabAnnotations } from '../state/annotations-store';
 import { VIEW_MODES } from '../features/viewer/view-modes';
 import { isPresetScaleValue, scaleToPercent, ZOOM_MENU_PERCENTS } from '../features/viewer/zoom';
 import { useActiveTab, type TabState } from '../state/documents-store';
@@ -145,7 +148,10 @@ export function Toolbar() {
   const tab = useActiveTab();
   const sidebarVisible = useUi((s) => s.sidebarVisible);
   const rightPanelVisible = useUi((s) => s.rightPanelVisible);
+  const commentToolsVisible = useUi((s) => s.commentToolsVisible);
+  const annotations = useTabAnnotations(tab?.id);
   const ready = tab?.status === 'ready';
+  const dirty = ready && isDirty(annotations);
 
   return (
     <header
@@ -167,6 +173,15 @@ export function Toolbar() {
           />
         )}
         <IconButton icon={FolderOpen} label={t('toolbar.open')} onClick={() => void openWithDialog()} data-testid="open-button" />
+        {ready && (
+          <IconButton
+            icon={Save}
+            label={t('toolbar.save')}
+            disabled={!dirty || tab.saving}
+            onClick={() => executeCommand('file.save')}
+            data-testid="save-button"
+          />
+        )}
         {ready && (
           <IconButton
             icon={Printer}
@@ -220,6 +235,13 @@ export function Toolbar() {
 
       {ready && (
         <div className={styles.group}>
+          <IconButton
+            icon={MessageSquare}
+            label={t('toolbar.comment')}
+            pressed={commentToolsVisible}
+            onClick={() => executeCommand('view.toggleCommentTools')}
+            data-testid="comment-tools-button"
+          />
           <IconButton
             icon={Info}
             label={t('toolbar.properties')}

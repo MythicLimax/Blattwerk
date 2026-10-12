@@ -13,8 +13,15 @@ export interface Shortcut {
 export const SHORTCUTS: Partial<Record<CommandId, Shortcut>> = {
   'file.open': { accelerator: 'CmdOrCtrl+O' },
   'file.close': { accelerator: 'CmdOrCtrl+W' },
+  'file.save': { accelerator: 'CmdOrCtrl+S' },
+  'file.saveAs': { accelerator: 'Shift+CmdOrCtrl+S' },
   'file.print': { accelerator: 'CmdOrCtrl+P' },
   'file.properties': { accelerator: 'CmdOrCtrl+D' },
+  'app.settings': { accelerator: 'CmdOrCtrl+,' },
+  'edit.undo': { accelerator: 'CmdOrCtrl+Z' },
+  'edit.redo': { accelerator: 'Shift+CmdOrCtrl+Z' },
+  // Entfernen löscht den ausgewählten Kommentar; in Eingabefeldern bleibt die Taste unberührt.
+  'edit.delete': { accelerator: 'Backspace', rendererHandled: true },
   'edit.find': { accelerator: 'CmdOrCtrl+F' },
   'edit.findNext': { accelerator: 'CmdOrCtrl+G' },
   'edit.findPrevious': { accelerator: 'Shift+CmdOrCtrl+G' },

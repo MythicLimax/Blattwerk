@@ -29,6 +29,10 @@ export interface DocumentRuntime {
   pageTexts: Map<number, Promise<PageText>>;
   // Container der Seitenansicht, um den Tastaturfokus dorthin zurückzugeben
   container: HTMLDivElement | null;
+  // Vorhandene Anmerkungen, die pdf.js gerade nicht zeichnet (geändert oder gelöscht): ref → Seite
+  hiddenRefs: Map<string, number>;
+  // Kennwort, mit dem das Dokument geöffnet wurde (nur im Speicher, für Speichern und Neuladen)
+  password: string | null;
   // true, solange die Suche geschlossen ist. pdf.js meldet beim Schließen noch einmal den alten
   // Trefferstand; der darf den Zustand nicht überschreiben.
   findClosed: boolean;
@@ -67,6 +71,8 @@ export function createRuntime(tabId: string, file: FileInfo, terminate: () => vo
     pageTexts: new Map(),
     container: null,
     findClosed: true,
+    hiddenRefs: new Map(),
+    password: null,
     terminate,
   };
   runtimes.set(tabId, runtime);
@@ -108,7 +114,8 @@ export function attachViewer(runtime: DocumentRuntime, container: HTMLDivElement
     findController: runtime.findController,
     l10n: l10n(),
     textLayerMode: 1,
-    annotationMode: pdfjs.AnnotationMode.ENABLE,
+    // ENABLE_STORAGE: pdf.js berücksichtigt den Anmerkungsspeicher, so lassen sich geänderte Kommentare ausblenden.
+    annotationMode: pdfjs.AnnotationMode.ENABLE_STORAGE,
     annotationEditorMode: pdfjs.AnnotationEditorType.DISABLE,
     imageResourcesPath: PDFJS_ASSETS.imageResourcesPath,
     enablePermissions: true,
@@ -124,6 +131,8 @@ export function attachViewer(runtime: DocumentRuntime, container: HTMLDivElement
     viewer.scrollMode = layout.scrollMode;
     viewer.spreadMode = layout.spreadMode;
     viewer.currentScaleValue = current?.scaleValue ?? 'auto';
+    // Nach dem Neuladen (Speichern) an derselben Stelle weitermachen
+    if (current && current.currentPage > 1) viewer.currentPageNumber = Math.min(current.currentPage, viewer.pagesCount);
   };
   runtime.eventBus.on('pagesinit', onPagesInit);
   viewer.setDocument(runtime.pdf);

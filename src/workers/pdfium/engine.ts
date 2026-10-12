@@ -1,0 +1,371 @@
+// Bearbeitungs- und Speicher-Engine auf Basis von PDFium (WASM). Einziger Ort, der PDFium direkt anspricht.
+// Läuft im Web Worker der App und in Node (Tests).
+import type {
+  Annotation,
+  AnnotationChanges,
+  AnnotationUpsert,
+  Point,
+  Quad,
+  Rect,
+  Reply,
+  Rgb,
+  StampAnnotation,
+  StatusEntry,
+} from '../../shared/annotations';
+import { STAMP_STYLES, toPdfDate } from '../../shared/annotations';
+import { copyOut, withBuffer, withFloats, withWString, type Pdfium } from './memory';
+
+// Werte aus PDFium bzw. @embedpdf/models (siehe docs/entscheidungen/0005-kommentare.md)
+const SUBTYPE = {
+  text: 1,
+  freetext: 3,
+  line: 4,
+  square: 5,
+  circle: 6,
+  highlight: 9,
+  underline: 10,
+  squiggly: 11,
+  strikeout: 12,
+  stamp: 13,
+  ink: 15,
+} as const;
+
+const COLOR_TYPE = { color: 0, interior: 1 } as const;
+const BORDER_SOLID = 1;
+const LINE_END = { none: 0, openArrow: 4 } as const;
+const REPLY_TYPE_REPLY = 1;
+const FONT_HELVETICA = 4;
+const NOTE_ICONS: Record<string, number> = {
+  Comment: 0,
+  Key: 1,
+  Note: 2,
+  Help: 3,
+  NewParagraph: 4,
+  Paragraph: 5,
+  Insert: 6,
+};
+
+// Annotationsflags (PDF 32000, Tabelle 165)
+const FLAG = { hidden: 2, print: 4, noZoom: 8, noRotate: 16 } as const;
+
+const SAVE_INCREMENTAL = 1;
+const SAVE_FULL = 2;
+
+export class PdfiumError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PdfiumError';
+  }
+}
+
+export interface SaveOptions {
+  incremental: boolean;
+  // Für Datumsfelder; in Tests fest vorgegeben
+  now?: Date;
+}
+
+function objectNumber(ref: string): number {
+  const match = /^(\d+)R$/.exec(ref);
+  if (!match) throw new PdfiumError(`Ungültige Objektreferenz: ${ref}`);
+  return Number(match[1]);
+}
+
+const byte = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
+
+export class PdfiumEngine {
+  readonly #m: Pdfium;
+
+  constructor(module: Pdfium) {
+    this.#m = module;
+  }
+
+  // Öffnet die Datei, wendet die Änderungen an und liefert die neuen Bytes.
+  // Inkrementell: Die ursprünglichen Bytes bleiben unverändert am Anfang der Datei (Signaturen bleiben gültig).
+  applyAndSave(bytes: Uint8Array, password: string | null, changes: AnnotationChanges, options: SaveOptions): Uint8Array {
+    const m = this.#m;
+    return withBuffer(m, bytes.length, (dataPtr) => {
+      m.pdfium.HEAPU8.set(bytes, dataPtr);
+      const doc = m.FPDF_LoadMemDocument(dataPtr, bytes.length, password ?? '');
+      if (!doc) throw new PdfiumError(`Dokument lässt sich nicht öffnen (Fehler ${m.FPDF_GetLastError()})`);
+      try {
+        const pages = new Map<number, number>();
+        const page = (index: number) => {
+          let ptr = pages.get(index);
+          if (!ptr) {
+            ptr = m.FPDF_LoadPage(doc, index);
+            if (!ptr) throw new PdfiumError(`Seite ${index + 1} lässt sich nicht laden`);
+            pages.set(index, ptr);
+          }
+          return ptr;
+        };
+        try {
+          // Zuerst löschen: Die Referenzen beziehen sich auf den Stand der Datei.
+          for (const ref of changes.deletions) this.#deleteByRef(doc, page, ref);
+          for (const upsert of changes.upserts) this.#upsert(doc, page(upsert.annotation.pageIndex), upsert, options);
+        } finally {
+          for (const ptr of pages.values()) m.FPDF_ClosePage(ptr);
+        }
+        return this.#save(doc, options.incremental ? SAVE_INCREMENTAL : SAVE_FULL);
+      } finally {
+        m.FPDF_CloseDocument(doc);
+      }
+    });
+  }
+
+  // Prüft, ob sich Bytes als PDF öffnen lassen (Kontrolle vor dem Schreiben auf die Platte).
+  canOpen(bytes: Uint8Array, password: string | null): boolean {
+    const m = this.#m;
+    return withBuffer(m, bytes.length, (dataPtr) => {
+      m.pdfium.HEAPU8.set(bytes, dataPtr);
+      const doc = m.FPDF_LoadMemDocument(dataPtr, bytes.length, password ?? '');
+      if (!doc) return false;
+      const ok = m.FPDF_GetPageCount(doc) > 0;
+      m.FPDF_CloseDocument(doc);
+      return ok;
+    });
+  }
+
+  #save(doc: number, flags: number): Uint8Array {
+    const m = this.#m;
+    const writer = m.PDFiumExt_OpenFileWriter();
+    try {
+      if (!m.FPDF_SaveAsCopy(doc, writer, flags)) throw new PdfiumError('Speichern fehlgeschlagen');
+      const size = m.PDFiumExt_GetFileWriterSize(writer);
+      return withBuffer(m, size, (ptr) => {
+        m.PDFiumExt_GetFileWriterData(writer, ptr, size);
+        return copyOut(m, ptr, size);
+      });
+    } finally {
+      m.PDFiumExt_CloseFileWriter(writer);
+    }
+  }
+
+  // Sucht eine Anmerkung über alle Seiten (für Löschungen, deren Seite der Aufrufer nicht kennen muss).
+  #deleteByRef(doc: number, page: (index: number) => number, ref: string): void {
+    const m = this.#m;
+    const number = objectNumber(ref);
+    const count = m.FPDF_GetPageCount(doc);
+    for (let index = 0; index < count; index++) {
+      const pagePtr = page(index);
+      const annot = m.EPDFPage_GetAnnotByObjectNumber(pagePtr, number);
+      if (!annot) continue;
+      // Zugehöriges Popup mit entfernen, sonst bleibt ein verwaistes Objekt in /Annots.
+      const popup = m.FPDFAnnot_GetLinkedAnnot(annot, 'Popup');
+      const popupNumber = popup ? m.EPDFAnnot_GetObjectNumber(popup) : 0;
+      if (popup) m.FPDFPage_CloseAnnot(popup);
+      m.FPDFPage_CloseAnnot(annot);
+      m.EPDFPage_RemoveAnnotByObjectNumber(pagePtr, number);
+      if (popupNumber > 0) m.EPDFPage_RemoveAnnotByObjectNumber(pagePtr, popupNumber);
+      return;
+    }
+  }
+
+  #upsert(doc: number, pagePtr: number, upsert: AnnotationUpsert, options: SaveOptions): void {
+    const m = this.#m;
+    const a = upsert.annotation;
+    const isNew = a.ref === null;
+    const annot = isNew
+      ? m.EPDFPage_CreateAnnot(pagePtr, SUBTYPE[a.kind === 'arrow' ? 'line' : a.kind === 'note' ? 'text' : a.kind])
+      : m.EPDFPage_GetAnnotByObjectNumber(pagePtr, objectNumber(a.ref as string));
+    if (!annot) throw new PdfiumError(`Anmerkung ${a.ref ?? a.id} nicht gefunden`);
+    try {
+      const now = options.now ?? new Date();
+      this.#setCommon(annot, a, isNew, now);
+      if (isNew || upsert.appearance) {
+        this.#setKindSpecific(doc, annot, a, isNew);
+        if (a.kind !== 'stamp') m.EPDFAnnot_GenerateAppearance(annot);
+      }
+      for (const reply of a.replies) this.#upsertReply(pagePtr, annot, a, reply, now);
+      for (const status of a.statuses) if (status.ref === null) this.#addStatus(pagePtr, annot, a, status, now);
+    } finally {
+      m.FPDFPage_CloseAnnot(annot);
+    }
+  }
+
+  #setString(annot: number, key: string, value: string): void {
+    const m = this.#m;
+    withWString(m, value, (ptr) => m.FPDFAnnot_SetStringValue(annot, key, ptr));
+  }
+
+  // Text des Kommentars. Hat die Anmerkung schon formatierten Text (/RC, so legt Acrobat Kommentare an),
+  // wird er mit ersetzt; sonst zeigen solche Programme weiter den alten Text. Entfernen kann PDFium den Eintrag nicht.
+  #setContents(annot: number, text: string, isNew: boolean): void {
+    this.#setString(annot, 'Contents', text);
+    if (!isNew && this.#m.FPDFAnnot_HasKey(annot, 'RC')) this.#setString(annot, 'RC', richText(text));
+  }
+
+  #setRect(annot: number, rect: Rect): void {
+    const m = this.#m;
+    const [left, bottom, right, top] = rect;
+    // FS_RECTF: left, top, right, bottom
+    withFloats(m, [left, top, right, bottom], (ptr) => m.FPDFAnnot_SetRect(annot, ptr));
+  }
+
+  #setColor(annot: number, type: number, color: Rgb): void {
+    this.#m.EPDFAnnot_SetColor(annot, type, byte(color.r), byte(color.g), byte(color.b));
+  }
+
+  #setCommon(annot: number, a: Annotation, isNew: boolean, now: Date): void {
+    const m = this.#m;
+    this.#setRect(annot, a.rect);
+    this.#setContents(annot, a.contents, isNew);
+    this.#setString(annot, 'T', a.author);
+    this.#setString(annot, 'M', a.modified || toPdfDate(now));
+    if (isNew) {
+      this.#setString(annot, 'CreationDate', a.created || toPdfDate(now));
+      this.#setString(annot, 'NM', a.id);
+    }
+    if (a.kind !== 'stamp' && a.kind !== 'freetext') this.#setColor(annot, COLOR_TYPE.color, a.color);
+    m.EPDFAnnot_SetOpacity(annot, byte(a.opacity));
+    // Vorhandene Anmerkungen behalten ihre Merkmale (z. B. gesperrt, nicht drucken).
+    if (isNew) m.FPDFAnnot_SetFlags(annot, a.kind === 'note' ? FLAG.print | FLAG.noZoom | FLAG.noRotate : FLAG.print);
+  }
+
+  #setKindSpecific(doc: number, annot: number, a: Annotation, isNew: boolean): void {
+    const m = this.#m;
+    switch (a.kind) {
+      case 'highlight':
+      case 'underline':
+      case 'strikeout':
+      case 'squiggly':
+        if (isNew) for (const quad of a.quads) this.#appendQuad(annot, quad);
+        break;
+      case 'note':
+        m.EPDFAnnot_SetName(annot, NOTE_ICONS[a.icon] ?? NOTE_ICONS.Comment ?? 0);
+        break;
+      case 'freetext':
+        m.EPDFAnnot_SetDefaultAppearance(annot, FONT_HELVETICA, a.fontSize, byte(a.color.r), byte(a.color.g), byte(a.color.b));
+        m.EPDFAnnot_SetBorderStyle(annot, BORDER_SOLID, 0);
+        break;
+      case 'ink':
+        if (!isNew) m.FPDFAnnot_RemoveInkList(annot);
+        for (const path of a.paths) this.#addInkStroke(annot, path);
+        m.EPDFAnnot_SetBorderStyle(annot, BORDER_SOLID, a.width);
+        break;
+      case 'square':
+      case 'circle':
+        m.EPDFAnnot_SetBorderStyle(annot, BORDER_SOLID, a.width);
+        if (a.fill) this.#setColor(annot, COLOR_TYPE.interior, a.fill);
+        else if (a.fill === null) m.EPDFAnnot_ClearColor(annot, COLOR_TYPE.interior);
+        break;
+      case 'line':
+      case 'arrow':
+        withFloats(m, [a.start.x, a.start.y, a.end.x, a.end.y], (ptr) => m.EPDFAnnot_SetLine(annot, ptr, ptr + 8));
+        m.EPDFAnnot_SetLineEndings(annot, LINE_END.none, a.kind === 'arrow' ? LINE_END.openArrow : LINE_END.none);
+        m.EPDFAnnot_SetBorderStyle(annot, BORDER_SOLID, a.width);
+        break;
+      case 'stamp':
+        if (isNew) this.#buildStampAppearance(doc, annot, a);
+        break;
+    }
+  }
+
+  #appendQuad(annot: number, quad: Quad): void {
+    const m = this.#m;
+    // FS_QUADPOINTSF: x1,y1 (oben links), x2,y2 (oben rechts), x3,y3 (unten links), x4,y4 (unten rechts)
+    const values = quad.flatMap((p: Point) => [p.x, p.y]);
+    withFloats(m, values, (ptr) => m.FPDFAnnot_AppendAttachmentPoints(annot, ptr));
+  }
+
+  #addInkStroke(annot: number, path: Point[]): void {
+    const m = this.#m;
+    if (path.length === 0) return;
+    withFloats(m, path.flatMap((p) => [p.x, p.y]), (ptr) => m.FPDFAnnot_AddInkStroke(annot, ptr, path.length));
+  }
+
+  // Stempel: Rahmen und Beschriftung als Seitenobjekte; PDFium erzeugt daraus den Appearance Stream.
+  #buildStampAppearance(doc: number, annot: number, a: StampAnnotation): void {
+    const m = this.#m;
+    const [left, bottom, right, top] = a.rect;
+    const width = right - left;
+    const height = top - bottom;
+    const color = STAMP_STYLES[a.stamp].color;
+    const border = Math.max(1.5, height * 0.06);
+
+    const frame = m.FPDFPageObj_CreateNewRect(left + border / 2, bottom + border / 2, width - border, height - border);
+    m.FPDFPageObj_SetStrokeColor(frame, byte(color.r), byte(color.g), byte(color.b), 255);
+    m.FPDFPageObj_SetStrokeWidth(frame, border);
+    m.FPDFPath_SetDrawMode(frame, 0, true);
+    m.FPDFAnnot_AppendObject(annot, frame);
+
+    const font = m.FPDFText_LoadStandardFont(doc, 'Helvetica-Bold');
+    let fontSize = height * 0.5;
+    const text = m.FPDFPageObj_CreateTextObj(doc, font, fontSize);
+    withWString(m, a.label, (ptr) => m.FPDFText_SetText(text, ptr));
+    // Textbreite messen und Schriftgröße so anpassen, dass die Beschriftung in den Rahmen passt.
+    const measured = withBuffer(m, 16, (ptr) => {
+      m.FPDFPageObj_GetBounds(text, ptr, ptr + 4, ptr + 8, ptr + 12);
+      const l = m.pdfium.getValue(ptr, 'float');
+      const r = m.pdfium.getValue(ptr + 8, 'float');
+      return r - l;
+    });
+    const available = width - border * 4;
+    const scale = measured > available && measured > 0 ? available / measured : 1;
+    fontSize *= scale;
+    const textWidth = measured * scale;
+    const x = left + (width - textWidth) / 2;
+    const y = bottom + (height - fontSize * 0.72) / 2;
+    m.FPDFPageObj_Transform(text, scale, 0, 0, scale, x, y);
+    m.FPDFPageObj_SetFillColor(text, byte(color.r), byte(color.g), byte(color.b), 255);
+    m.FPDFAnnot_AppendObject(annot, text);
+    m.FPDFFont_Close(font);
+  }
+
+  // Antworten sind Text-Anmerkungen mit /IRT auf den Kommentar (ISO 32000, 12.5.6.4).
+  #upsertReply(pagePtr: number, parent: number, a: Annotation, reply: Reply, now: Date): void {
+    const m = this.#m;
+    const isNew = reply.ref === null;
+    const annot = isNew
+      ? m.EPDFPage_CreateAnnot(pagePtr, SUBTYPE.text)
+      : m.EPDFPage_GetAnnotByObjectNumber(pagePtr, objectNumber(reply.ref as string));
+    if (!annot) return;
+    try {
+      this.#setContents(annot, reply.contents, isNew);
+      this.#setString(annot, 'T', reply.author);
+      this.#setString(annot, 'M', reply.modified || toPdfDate(now));
+      if (isNew) {
+        const [left, , , top] = a.rect;
+        this.#setRect(annot, [left, top - 20, left + 20, top]);
+        this.#setString(annot, 'CreationDate', reply.modified || toPdfDate(now));
+        this.#setString(annot, 'NM', reply.id);
+        m.EPDFAnnot_SetLinkedAnnot(annot, 'IRT', parent);
+        m.EPDFAnnot_SetReplyType(annot, REPLY_TYPE_REPLY);
+        m.EPDFAnnot_SetName(annot, NOTE_ICONS.Comment ?? 0);
+        // Antworten erscheinen nur in der Kommentarliste, nicht als eigenes Symbol auf der Seite.
+        m.FPDFAnnot_SetFlags(annot, FLAG.hidden | FLAG.noZoom | FLAG.noRotate);
+      }
+    } finally {
+      m.FPDFPage_CloseAnnot(annot);
+    }
+  }
+
+  // Prüfstatus: unsichtbare Text-Anmerkung mit /IRT, /State und /StateModel /Review.
+  #addStatus(pagePtr: number, parent: number, a: Annotation, status: StatusEntry, now: Date): void {
+    const m = this.#m;
+    const annot = m.EPDFPage_CreateAnnot(pagePtr, SUBTYPE.text);
+    if (!annot) return;
+    try {
+      const [left, , , top] = a.rect;
+      this.#setRect(annot, [left, top - 20, left + 20, top]);
+      this.#setString(annot, 'T', status.author);
+      this.#setString(annot, 'M', status.modified || toPdfDate(now));
+      this.#setString(annot, 'NM', status.id);
+      this.#setString(annot, 'State', status.status);
+      this.#setString(annot, 'StateModel', 'Review');
+      m.EPDFAnnot_SetLinkedAnnot(annot, 'IRT', parent);
+      m.FPDFAnnot_SetFlags(annot, FLAG.hidden | FLAG.noZoom | FLAG.noRotate);
+    } finally {
+      m.FPDFPage_CloseAnnot(annot);
+    }
+  }
+}
+
+// Formatierter Text (XHTML nach PDF 32000, 12.7.3.4) aus einfachem Text: je Zeile ein Absatz.
+export function richText(text: string): string {
+  const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const paragraphs = text.split(/\r\n|\r|\n/).map((line) => `<p>${escape(line)}</p>`).join('');
+  return (
+    '<?xml version="1.0"?><body xmlns="http://www.w3.org/1999/xhtml" ' +
+    `xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/" xfa:spec="2.0.2">${paragraphs}</body>`
+  );
+}

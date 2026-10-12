@@ -1,0 +1,378 @@
+// Phase 2: Kommentieren. Alle Tests arbeiten auf Kopien der Test-PDFs in einem temporären Ordner.
+import { expect, test, type Page } from '@playwright/test';
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { COMMENTS_PDF, fixture, TEXT_PDF } from '../fixtures/expectations';
+import { launchApp, menuClick, waitForDocument, type AppHandle } from './app';
+import { inspectWithPdfKit } from './pdfkit';
+
+// Temporäre Ordner mit den Kopien; werden erst am Ende gelöscht, damit gespeicherte Dateien neu geöffnet werden können.
+const tempDirs: string[] = [];
+test.afterAll(() => {
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+// Startet die App mit einer Kopie des Test-PDFs und blendet Kommentarliste und Werkzeuge ein.
+async function openCopy(name: string, pages: number): Promise<AppHandle & { file: string }> {
+  const userData = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+  tempDirs.push(userData);
+  const file = path.join(userData, `kopie-${name}`);
+  copyFileSync(fixture(name), file);
+  const handle = await launchApp([file], { userData });
+  await waitForDocument(handle.page, pages);
+  await handle.page.getByTestId('sidebar-comments').click();
+  await handle.page.getByTestId('comment-tools-button').click();
+  await expect(handle.page.getByTestId('comment-toolbar')).toBeVisible();
+  // Ganze Seite sichtbar, damit alle Stellen der Seite im Fenster liegen
+  await menuClick(handle.app, 'view.fitPage');
+  await expect(handle.page.getByTestId('zoom-select')).toHaveValue('page-fit');
+  return { ...handle, file };
+}
+
+// Liefert eine Umrechnung von PDF-Punkten (A4, Ursprung oben links wie im Bild) in Fensterkoordinaten.
+async function pageSpace(page: Page, pageIndex = 0) {
+  const overlay = page.getByTestId(`annotation-overlay-${pageIndex}`);
+  await expect(overlay).toBeVisible();
+  const box = await overlay.boundingBox();
+  if (!box) throw new Error('Kommentarebene ohne Größe');
+  return (x: number, y: number) => ({ x: box.x + (x / 595.28) * box.width, y: box.y + (y / 841.89) * box.height });
+}
+
+async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 8 });
+  await page.mouse.up();
+}
+
+// Wählt den Text eines Textebenen-Abschnitts mit der Maus aus.
+async function selectText(page: Page, text: string) {
+  const span = page.locator('[data-page-number="1"] .textLayer span', { hasText: text }).first();
+  const box = await span.boundingBox();
+  if (!box) throw new Error(`Text „${text}“ nicht gefunden`);
+  await drag(page, { x: box.x + 1, y: box.y + box.height / 2 }, { x: box.x + box.width - 1, y: box.y + box.height / 2 });
+}
+
+const cards = (page: Page) => page.getByTestId('comment-card');
+
+async function save(page: Page, app: AppHandle['app']) {
+  await menuClick(app, 'file.save');
+  await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+  await expect(page.getByTestId('comments-panel')).toBeVisible();
+}
+
+// Farbe eines Pixels im Seitenbild von pdf.js an einer Stelle in PDF-Punkten (ungedrehte A4-Seite).
+async function canvasPixel(page: Page, pageNumber: number, pdfX: number, pdfY: number): Promise<number[]> {
+  return page.evaluate(
+    ({ pageNumber, pdfX, pdfY }) => {
+      const canvas = document.querySelector<HTMLCanvasElement>(`[data-testid="active-pane"] .page[data-page-number="${pageNumber}"] canvas`);
+      if (!canvas) return [];
+      const x = Math.round((pdfX / 595.28) * canvas.width);
+      const y = Math.round(((841.89 - pdfY) / 841.89) * canvas.height);
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      return Array.from(context?.getImageData(x, y, 1, 1).data ?? []);
+    },
+    { pageNumber, pdfX, pdfY },
+  );
+}
+
+test.describe('Kommentieren', () => {
+  test('zeigt vorhandene Kommentare mit Antworten und Prüfstatus', async () => {
+    const { page, close } = await launchApp([fixture(COMMENTS_PDF.file)]);
+    await waitForDocument(page, COMMENTS_PDF.pages);
+    await page.getByTestId('sidebar-comments').click();
+    await expect(cards(page)).toHaveCount(COMMENTS_PDF.comments);
+    const note = cards(page).filter({ hasText: COMMENTS_PDF.noteText });
+    await expect(note.getByTestId('comment-reply')).toHaveCount(1);
+    await expect(note.getByTestId('comment-reply')).toContainText(COMMENTS_PDF.replyText);
+    await expect(note.getByTestId('comment-status-badge')).toHaveText(COMMENTS_PDF.status);
+    // Klick in der Liste springt zur Seite des Kommentars
+    await cards(page).last().click();
+    await expect(page.getByTestId('page-input')).toHaveValue('2');
+    await close();
+  });
+
+  test('legt alle Kommentararten an, speichert inkrementell und öffnet sie wieder', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page, app, file } = handle;
+    const original = readFileSync(file);
+    const at = await pageSpace(page);
+
+    // Textmarkierungen aus der Textauswahl
+    await page.getByTestId('tool-highlight').click();
+    await selectText(page, 'Testdokument für Blattwerk');
+    await page.getByTestId('tool-underline').click();
+    await selectText(page, 'Die Umlaute');
+    // Erst Text auswählen, dann Werkzeug wählen: markiert sofort
+    await page.getByTestId('tool-select').click();
+    await selectText(page, 'Ein PDF besteht');
+    await page.getByTestId('tool-strikeout').click();
+    await expect(cards(page)).toHaveCount(3);
+
+    await page.getByTestId('tool-note').click();
+    await page.mouse.click(at(540, 100).x, at(540, 100).y);
+    await expect(page.getByTestId('comment-text')).toBeFocused();
+    await page.keyboard.type('Meine Notiz mit Umlauten: äöü');
+    await page.getByTestId('tool-freetext').click();
+    await drag(page, at(60, 480), at(300, 520));
+    await expect(page.getByTestId('freetext-editor')).toBeFocused();
+    await page.keyboard.type('Hallo Textfeld');
+    await page.keyboard.press('Escape');
+
+    await page.getByTestId('tool-ink').click();
+    await page.mouse.move(at(60, 560).x, at(60, 560).y);
+    await page.mouse.down();
+    for (let i = 1; i <= 12; i++) await page.mouse.move(at(60 + i * 15, 560 + (i % 2) * 20).x, at(60 + i * 15, 560 + (i % 2) * 20).y);
+    await page.mouse.up();
+
+    await page.getByTestId('tool-square').click();
+    await drag(page, at(330, 480), at(440, 560));
+    await page.getByTestId('tool-circle').click();
+    await drag(page, at(460, 480), at(560, 560));
+    await page.getByTestId('tool-line').click();
+    await drag(page, at(60, 620), at(250, 620));
+    await page.getByTestId('tool-arrow').click();
+    await drag(page, at(280, 660), at(450, 610));
+    await page.getByTestId('tool-stamp').click();
+    await page.getByTestId('stamp-select').selectOption('final');
+    await page.mouse.click(at(450, 720).x, at(450, 720).y);
+
+    await expect(cards(page)).toHaveCount(11);
+    await expect(cards(page).filter({ hasText: 'ENDGÜLTIG' })).toHaveCount(1);
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+    await save(page, app);
+    await expect(cards(page)).toHaveCount(11);
+
+    // Inkrementell gespeichert: Die alte Datei steht unverändert am Anfang der neuen.
+    const saved = readFileSync(file);
+    expect(saved.length).toBeGreaterThan(original.length);
+    expect(saved.subarray(0, original.length).equals(original)).toBe(true);
+    await handle.close();
+
+    // Apple PDFKit (Vorschau) erkennt alle Kommentare
+    if (process.platform === 'darwin') {
+      const result = inspectWithPdfKit(file);
+      expect(result.ok).toBe(true);
+      const types = (result.pages[0] ?? []).filter((type) => type !== 'Link').sort();
+      expect(types).toEqual(
+        ['Circle', 'FreeText', 'Highlight', 'Ink', 'Line', 'Line', 'Square', 'Stamp', 'StrikeOut', 'Text', 'Underline'].sort(),
+      );
+    }
+
+    // Frisch geöffnet: alle Kommentare mit Text und Verfasser
+    const again = await launchApp([file]);
+    await waitForDocument(again.page, TEXT_PDF.pages);
+    await again.page.getByTestId('sidebar-comments').click();
+    await expect(cards(again.page)).toHaveCount(11);
+    await expect(cards(again.page).filter({ hasText: 'Meine Notiz mit Umlauten: äöü' })).toHaveCount(1);
+    await expect(cards(again.page).filter({ hasText: 'Hallo Textfeld' })).toHaveCount(1);
+    await expect(cards(again.page).filter({ hasText: 'Stempel' })).toHaveCount(1);
+    await again.close();
+  });
+
+  test('Widerrufen und Wiederholen', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page, app } = handle;
+    const at = await pageSpace(page);
+    await page.getByTestId('tool-square').click();
+    await drag(page, at(80, 600), at(200, 680));
+    await expect(cards(page)).toHaveCount(1);
+    await menuClick(app, 'edit.undo');
+    await expect(cards(page)).toHaveCount(0);
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    await menuClick(app, 'edit.redo');
+    await expect(cards(page)).toHaveCount(1);
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+    // Löschen per Taste und wieder zurückholen
+    await cards(page).first().click();
+    await page.getByTestId('viewer-container').focus();
+    await page.keyboard.press('Backspace');
+    await expect(cards(page)).toHaveCount(0);
+    await page.getByTestId('comment-undo').click();
+    await expect(cards(page)).toHaveCount(1);
+    await handle.close();
+  });
+
+  test('verschiebt Kommentare und ändert ihre Größe', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page } = handle;
+    const at = await pageSpace(page);
+    await page.getByTestId('tool-square').click();
+    await drag(page, at(80, 600), at(200, 680));
+    const hit = page.locator('[data-annotation-hit]').first();
+    const before = await hit.boundingBox();
+    if (!before) throw new Error('Kein Rechteck');
+    // Am Rand anfassen (Rahmen ohne Füllung reagiert nur auf den Strich)
+    await drag(page, { x: before.x + 2, y: before.y + before.height / 2 }, { x: before.x + 102, y: before.y + before.height / 2 + 50 });
+    await expect.poll(async () => (await hit.boundingBox())?.x).toBeCloseTo(before.x + 100, 0);
+    const moved = await hit.boundingBox();
+    if (!moved) throw new Error('Rechteck verschwunden');
+    expect(moved.y).toBeCloseTo(before.y + 50, 0);
+    // Größe ändern über den Griff unten rechts
+    const handleBox = await page.locator('[data-handle="corner-1"]').boundingBox();
+    if (!handleBox) throw new Error('Kein Griff');
+    const grip = { x: handleBox.x + handleBox.width / 2, y: handleBox.y + handleBox.height / 2 };
+    await drag(page, grip, { x: grip.x + 60, y: grip.y + 40 });
+    await expect.poll(async () => (await hit.boundingBox())?.width).toBeCloseTo(moved.width + 60, 0);
+    await page.getByTestId('comment-undo').click();
+    await expect.poll(async () => (await hit.boundingBox())?.width).toBeCloseTo(moved.width, 0);
+    await handle.close();
+  });
+
+  test('Textfeld per Doppelklick weiter bearbeiten', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page } = handle;
+    const at = await pageSpace(page);
+    await page.getByTestId('tool-freetext').click();
+    await drag(page, at(60, 600), at(300, 640));
+    await page.keyboard.type('Erster Teil');
+    await page.keyboard.press('Escape');
+    await expect(cards(page)).toContainText('Erster Teil');
+    await page.mouse.dblclick(at(120, 615).x, at(120, 615).y);
+    await expect(page.getByTestId('freetext-editor')).toBeFocused();
+    await page.keyboard.type(', zweiter Teil');
+    await page.keyboard.press('Escape');
+    await expect(cards(page)).toContainText('Erster Teil, zweiter Teil');
+    // Ein neues Textfeld ohne Text verschwindet wieder
+    await page.getByTestId('tool-freetext').click();
+    await drag(page, at(320, 600), at(500, 640));
+    await page.keyboard.press('Escape');
+    await expect(cards(page)).toHaveCount(1);
+    await handle.close();
+  });
+
+  test('gesperrte Dokumente: Kommentieren ist nicht möglich', async () => {
+    const { page, close } = await launchApp([fixture('eingeschraenkt.pdf')]);
+    await waitForDocument(page, TEXT_PDF.pages);
+    await page.getByTestId('comment-tools-button').click();
+    await expect(page.getByTestId('comments-not-allowed')).toBeVisible();
+    await expect(page.getByTestId('tool-square')).toBeDisabled();
+    await expect(page.getByTestId('tool-select')).toBeEnabled();
+    await close();
+  });
+
+  test('Antworten, Status und Löschen vorhandener Kommentare werden gespeichert', async () => {
+    const handle = await openCopy(COMMENTS_PDF.file, COMMENTS_PDF.pages);
+    const { page, app, file } = handle;
+    await expect(cards(page)).toHaveCount(COMMENTS_PDF.comments);
+
+    const note = cards(page).filter({ hasText: COMMENTS_PDF.noteText });
+    await note.click();
+    await note.getByTestId('comment-reply-input').fill('Neue Antwort');
+    await note.getByTestId('comment-reply-input').press('Enter');
+    await expect(note.getByTestId('comment-reply')).toHaveCount(2);
+    await note.getByTestId('comment-status').selectOption('Completed');
+    await expect(note.getByTestId('comment-status-badge')).toHaveText('Erledigt');
+
+    // Vorhandenes Rechteck löschen: pdf.js zeichnet es danach nicht mehr.
+    const { x, y } = COMMENTS_PDF.squareTopLeft;
+    await expect.poll(async () => (await canvasPixel(page, 1, x + 30, y))[1]).toBeLessThan(100);
+    const square = cards(page).filter({ hasText: COMMENTS_PDF.squareText });
+    await square.click();
+    await square.getByTestId('comment-card-delete').click();
+    await expect(cards(page)).toHaveCount(COMMENTS_PDF.comments - 1);
+    await expect.poll(async () => (await canvasPixel(page, 1, x + 30, y))[1]).toBeGreaterThan(200);
+
+    await save(page, app);
+    await handle.close();
+
+    const again = await launchApp([file]);
+    await waitForDocument(again.page, COMMENTS_PDF.pages);
+    await again.page.getByTestId('sidebar-comments').click();
+    await expect(cards(again.page)).toHaveCount(COMMENTS_PDF.comments - 1);
+    const reopened = cards(again.page).filter({ hasText: COMMENTS_PDF.noteText });
+    await expect(reopened.getByTestId('comment-reply')).toHaveCount(2);
+    await expect(reopened.getByTestId('comment-reply').last()).toContainText('Neue Antwort');
+    await expect(reopened.getByTestId('comment-status-badge')).toHaveText('Erledigt');
+    await expect(cards(again.page).filter({ hasText: COMMENTS_PDF.squareText })).toHaveCount(0);
+    await again.close();
+  });
+
+  test('fragt beim Schließen nach ungespeicherten Änderungen', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page, app, file } = handle;
+    const size = statSync(file).size;
+    const at = await pageSpace(page);
+    await page.getByTestId('tool-circle').click();
+    await drag(page, at(80, 600), at(200, 680));
+
+    await menuClick(app, 'file.close');
+    await expect(page.getByTestId('prompt-unsaved')).toBeVisible();
+    await page.getByTestId('prompt-cancel').click();
+    await expect(page.getByTestId('tab')).toHaveCount(1);
+    expect(statSync(file).size).toBe(size);
+
+    await menuClick(app, 'file.close');
+    await page.getByTestId('prompt-save').click();
+    await expect(page.getByTestId('tab')).toHaveCount(0);
+    expect(statSync(file).size).toBeGreaterThan(size);
+    await handle.close();
+  });
+
+  test('fragt nach, wenn die Datei inzwischen von außen geändert wurde', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page, app, file } = handle;
+    const at = await pageSpace(page);
+    await page.getByTestId('tool-square').click();
+    await drag(page, at(80, 600), at(200, 680));
+    // Ein anderes Programm hängt etwas an die Datei an
+    const bytes = readFileSync(file);
+    writeFileSync(file, Buffer.concat([bytes, Buffer.from('\n% von außen geändert\n')]));
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('prompt-changed')).toBeVisible();
+    await page.getByTestId('prompt-overwrite').click();
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    expect(readFileSync(file).toString('latin1')).toMatch(/\/Subtype\s*\/Square/);
+    await handle.close();
+  });
+
+  test('Speichern unter legt eine neue Datei an und lässt das Original unverändert', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page, app, file } = handle;
+    const original = readFileSync(file);
+    const target = path.join(path.dirname(file), 'neu');
+    // Den Sichern-Dialog des Systems im Hauptprozess ersetzen
+    await app.evaluate(({ dialog }, filePath) => {
+      dialog.showSaveDialog = (async () => ({ canceled: false, filePath })) as typeof dialog.showSaveDialog;
+    }, target);
+    const at = await pageSpace(page);
+    await page.getByTestId('tool-square').click();
+    await drag(page, at(80, 600), at(200, 680));
+    await menuClick(app, 'file.saveAs');
+    await expect(page.getByTestId('tab')).toContainText('neu.pdf');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    expect(readFileSync(file).equals(original)).toBe(true);
+    expect(readFileSync(`${target}.pdf`).toString('latin1')).toMatch(/\/Subtype\s*\/Square/);
+    await handle.close();
+  });
+
+  test('Drucken mit ungespeicherten Kommentaren ändert die Datei nicht', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page, file, printDir } = handle;
+    const original = readFileSync(file);
+    const at = await pageSpace(page);
+    await page.getByTestId('tool-square').click();
+    await drag(page, at(80, 600), at(200, 680));
+    await page.getByTestId('print-button').click();
+    await expect.poll(() => (existsSync(printDir) ? readdirSync(printDir).length : 0), { timeout: 60_000 }).toBe(1);
+    await expect(page.getByTestId('print-progress')).toHaveCount(0);
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+    expect(readFileSync(file).equals(original)).toBe(true);
+    await handle.close();
+  });
+
+  test('Name für Kommentare in den Einstellungen', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page, app } = handle;
+    await menuClick(app, 'app.settings');
+    await expect(page.getByTestId('settings-dialog')).toBeVisible();
+    await page.getByTestId('settings-author').fill('Testperson Zwei');
+    await page.getByTestId('settings-save').click();
+    const at = await pageSpace(page);
+    await page.getByTestId('tool-note').click();
+    await page.mouse.click(at(400, 600).x, at(400, 600).y);
+    await expect(cards(page).first()).toContainText('Testperson Zwei');
+    await handle.close();
+  });
+});

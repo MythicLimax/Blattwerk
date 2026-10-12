@@ -6,7 +6,8 @@
       "hide": "{{appName}} ausblenden",
       "hideOthers": "Andere ausblenden",
       "showAll": "Alle einblenden",
-      "quit": "{{appName}} beenden"
+      "quit": "{{appName}} beenden",
+      "settings": "Einstellungen …"
     },
     "file": {
       "title": "Ablage",
@@ -20,7 +21,9 @@
       "print": "Drucken …",
       "properties": "Dokumenteigenschaften …",
       "setDefault": "Als Standardprogramm für PDFs festlegen …",
-      "quit": "Beenden"
+      "quit": "Beenden",
+      "save": "Speichern",
+      "saveAs": "Speichern unter …"
     },
     "edit": {
       "title": "Bearbeiten",
@@ -32,7 +35,8 @@
       "selectAll": "Alles auswählen",
       "find": "Suchen …",
       "findNext": "Weitersuchen",
-      "findPrevious": "Rückwärts suchen"
+      "findPrevious": "Rückwärts suchen",
+      "delete": "Löschen"
     },
     "view": {
       "title": "Anzeige",
@@ -52,7 +56,8 @@
       "toggleSidebar": "Seitenleiste",
       "toggleRightPanel": "Suchbereich",
       "fullscreen": "Vollbild",
-      "devTools": "Entwicklerwerkzeuge"
+      "devTools": "Entwicklerwerkzeuge",
+      "toggleCommentTools": "Kommentieren"
     },
     "nav": {
       "title": "Gehe zu",
@@ -95,7 +100,8 @@
       "macSuccess": "{{appName}} ist jetzt das Standardprogramm für PDF-Dateien.",
       "winMessage": "In den Windows-Einstellungen unter „Standard-Apps“ kannst du {{appName}} für PDF-Dateien auswählen.",
       "ok": "OK"
-    }
+    },
+    "saveAsTitle": "Speichern unter"
   },
   "errors": {
     "open": {
@@ -114,7 +120,10 @@
     "print": {
       "failed": "Das Drucken ist fehlgeschlagen."
     },
-    "dismiss": "Schließen"
+    "dismiss": "Schließen",
+    "save": {
+      "failed": "Das Dokument konnte nicht gespeichert werden."
+    }
   },
   "start": {
     "title": "Willkommen bei {{appName}}",
@@ -147,7 +156,9 @@
       "pageFit": "Ganze Seite",
       "pageActual": "Originalgröße",
       "percent": "{{value}} %"
-    }
+    },
+    "save": "Speichern",
+    "comment": "Kommentieren"
   },
   "viewMode": {
     "single": "Einzelne Seite",
@@ -158,7 +169,8 @@
   "tabs": {
     "label": "Geöffnete Dokumente",
     "close": "Tab schließen",
-    "loading": "Wird geladen …"
+    "loading": "Wird geladen …",
+    "unsaved": "Ungespeicherte Änderungen"
   },
   "sidebar": {
     "label": "Seitenleiste",
@@ -168,7 +180,8 @@
     "noOutline": "Dieses Dokument enthält keine Lesezeichen.",
     "loadingOutline": "Lesezeichen werden geladen …",
     "expand": "Aufklappen",
-    "collapse": "Zuklappen"
+    "collapse": "Zuklappen",
+    "comments": "Kommentare"
   },
   "search": {
     "title": "Suchen",
@@ -263,5 +276,93 @@
   "viewer": {
     "loading": "Dokument wird geladen …",
     "closeTab": "Tab schließen"
+  },
+  "tools": {
+    "select": "Auswählen",
+    "highlight": "Text hervorheben",
+    "underline": "Text unterstreichen",
+    "strikeout": "Text durchstreichen",
+    "note": "Notiz",
+    "freetext": "Textfeld",
+    "ink": "Freihand zeichnen",
+    "square": "Rechteck",
+    "circle": "Ellipse",
+    "line": "Linie",
+    "arrow": "Pfeil",
+    "stamp": "Stempel"
+  },
+  "colors": {
+    "yellow": "Gelb",
+    "green": "Grün",
+    "blue": "Blau",
+    "red": "Rot",
+    "purple": "Violett",
+    "orange": "Orange",
+    "black": "Schwarz"
+  },
+  "stamps": {
+    "approved": "GENEHMIGT",
+    "rejected": "ABGELEHNT",
+    "reviewed": "GEPRÜFT",
+    "draft": "ENTWURF",
+    "final": "ENDGÜLTIG",
+    "confidential": "VERTRAULICH",
+    "forComment": "ZUR KOMMENTIERUNG"
+  },
+  "comments": {
+    "toolbar": "Kommentarwerkzeuge",
+    "color": "Farbe",
+    "width": "Linienstärke",
+    "widthValue": "{{value}} pt",
+    "fontSize": "Schriftgröße",
+    "fontSizeValue": "{{value}} pt",
+    "stamp": "Stempel",
+    "delete": "Kommentar löschen",
+    "undo": "Widerrufen",
+    "redo": "Wiederholen",
+    "freeTextInput": "Text des Textfelds",
+    "unknownAuthor": "Unbekannt",
+    "text": "Kommentartext",
+    "textPlaceholder": "Kommentar hinzufügen …",
+    "reply": "Antwort",
+    "replyPlaceholder": "Antworten …",
+    "replyText": "Text der Antwort",
+    "deleteReply": "Antwort löschen",
+    "statusLabel": "Status",
+    "status": {
+      "None": "Kein Status",
+      "Accepted": "Angenommen",
+      "Rejected": "Abgelehnt",
+      "Cancelled": "Abgebrochen",
+      "Completed": "Erledigt"
+    },
+    "loading": "Kommentare werden geladen …",
+    "count_one": "{{count}} Kommentar",
+    "count_other": "{{count}} Kommentare",
+    "empty": "Dieses Dokument enthält noch keine Kommentare. Über „Kommentieren“ in der Werkzeugleiste kannst du welche hinzufügen.",
+    "page": "Seite {{page}}",
+    "notAllowed": "Kommentieren ist für dieses Dokument nicht erlaubt."
+  },
+  "prompt": {
+    "cancel": "Abbrechen",
+    "unsaved": {
+      "title": "Ungespeicherte Änderungen",
+      "message": "Möchtest du die Änderungen an „{{name}}“ speichern?",
+      "save": "Speichern",
+      "discard": "Nicht speichern"
+    },
+    "changed": {
+      "title": "Datei wurde geändert",
+      "message": "„{{name}}“ wurde seit dem Öffnen von einem anderen Programm geändert. Wenn du überschreibst, gehen diese Änderungen verloren.",
+      "overwrite": "Überschreiben",
+      "saveAs": "Speichern unter …"
+    }
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "authorName": "Name für Kommentare",
+    "authorHint": "Dieser Name steht als Verfasser bei neuen Kommentaren und Antworten.",
+    "save": "Übernehmen",
+    "cancel": "Abbrechen"
   }
 }

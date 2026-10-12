@@ -71,6 +71,9 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       },
       { label: t('menu.file.openRecent'), submenu: recentItems },
       { type: 'separator' },
+      cmd('file.save', t('menu.file.save'), { enabled: doc && state.activeDirty }),
+      cmd('file.saveAs', t('menu.file.saveAs'), { enabled: doc }),
+      { type: 'separator' },
       // Schließen wirkt auf jeden Tab, auch während des Ladens, bei Kennwortabfrage oder Fehler.
       // Ohne Tabs schließt dasselbe Kürzel unter macOS das Fenster, wie in anderen Mac-Apps.
       ...(isMac && state.tabCount === 0
@@ -88,18 +91,21 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
   const editMenu: MenuItemConstructorOptions = {
     label: t('menu.edit.title'),
     submenu: [
-      // Rollen wirken in Eingabefeldern (z. B. Suchfeld). Für Dokumentänderungen kommt Rückgängig in Phase 2.
-      { role: 'undo', label: t('menu.edit.undo') },
-      { role: 'redo', label: t('menu.edit.redo') },
+      // Rückgängig/Wiederholen gehen an den Renderer: In Eingabefeldern wirken sie auf den Text,
+      // sonst auf die Kommentare des Dokuments. Deshalb immer aktiv.
+      cmd('edit.undo', t('menu.edit.undo')),
+      cmd('edit.redo', t('menu.edit.redo')),
       { type: 'separator' },
       { role: 'cut', label: t('menu.edit.cut') },
       { role: 'copy', label: t('menu.edit.copy') },
       { role: 'paste', label: t('menu.edit.paste') },
+      cmd('edit.delete', t('menu.edit.delete'), { enabled: doc }),
       { role: 'selectAll', label: t('menu.edit.selectAll') },
       { type: 'separator' },
       cmd('edit.find', t('menu.edit.find'), { enabled: doc }),
       cmd('edit.findNext', t('menu.edit.findNext'), { enabled: doc }),
       cmd('edit.findPrevious', t('menu.edit.findPrevious'), { enabled: doc }),
+      ...(isMac ? [] : [{ type: 'separator' as const }, cmd('app.settings', t('menu.app.settings'))]),
     ],
   };
 
@@ -149,6 +155,11 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
         checked: doc && state.rightPanelVisible,
         enabled: doc,
       }),
+      cmd('view.toggleCommentTools', t('menu.view.toggleCommentTools'), {
+        type: 'checkbox',
+        checked: doc && state.commentToolsVisible,
+        enabled: doc,
+      }),
       { type: 'separator' },
       { role: 'togglefullscreen', label: t('menu.view.fullscreen') },
       ...(ctx.devTools ? [{ role: 'toggleDevTools' as const, label: t('menu.view.devTools') }] : []),
@@ -186,6 +197,8 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
           role: 'appMenu',
           submenu: [
             { role: 'about', label: t('menu.app.about') },
+            { type: 'separator' },
+            cmd('app.settings', t('menu.app.settings')),
             { type: 'separator' },
             { role: 'services', label: t('menu.app.services') },
             { type: 'separator' },

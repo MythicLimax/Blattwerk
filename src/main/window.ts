@@ -8,9 +8,11 @@ export interface WindowState {
   maximized: boolean;
 }
 
-interface SettingsData {
+export interface SettingsData {
   version: 1;
   window: WindowState;
+  // Name, der als Autor in Kommentaren steht; null = Benutzername des Systems
+  authorName: string | null;
 }
 
 function isRect(value: unknown): value is Rectangle {
@@ -21,21 +23,23 @@ function isRect(value: unknown): value is Rectangle {
 
 function validateSettings(raw: unknown): SettingsData | null {
   if (typeof raw !== 'object' || raw === null) return null;
-  const data = raw as { version?: unknown; window?: { bounds?: unknown; maximized?: unknown } };
+  const data = raw as { version?: unknown; window?: { bounds?: unknown; maximized?: unknown }; authorName?: unknown };
   if (data.version !== 1 || typeof data.window !== 'object' || data.window === null) return null;
+  const author = typeof data.authorName === 'string' ? data.authorName.trim().slice(0, 200) : '';
   return {
     version: 1,
     window: {
       bounds: isRect(data.window.bounds) ? data.window.bounds : null,
       maximized: data.window.maximized === true,
     },
+    authorName: author || null,
   };
 }
 
 export function createSettingsStore(userDataDir: string): JsonStore<SettingsData> {
   return new JsonStore(
     path.join(userDataDir, 'settings.json'),
-    () => ({ version: 1, window: { bounds: null, maximized: false } }),
+    () => ({ version: 1, window: { bounds: null, maximized: false }, authorName: null }),
     validateSettings,
   );
 }

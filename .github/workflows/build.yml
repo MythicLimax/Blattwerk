@@ -23,6 +23,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: qpdf für die Ausgabeprüfung installieren
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then brew install qpdf; else choco install qpdf --no-progress -y; fi
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run licenses

@@ -23,3 +23,15 @@ export const TEXT_PDF = {
 };
 
 export const PASSWORDS = { user: 'geheim', owner: 'besitzer' };
+
+export const COMMENTS_PDF = {
+  file: 'kommentare.pdf',
+  pages: 2,
+  comments: 4,
+  noteText: 'Vorhandene Notiz',
+  replyText: 'Erledigt, danke',
+  status: 'Angenommen',
+  // Rechteck auf Seite 1 (PDF-Punkte): Rect [300, 560, 420, 640], Rand 2 pt rot
+  squareText: 'Rahmen um den Absatz',
+  squareTopLeft: { x: 300, y: 640 },
+};

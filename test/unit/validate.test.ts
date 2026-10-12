@@ -97,6 +97,11 @@ describe('validateMenuState', () => {
     sidebarVisible: true,
     rightPanelVisible: false,
     tabCount: 2,
+    dirtyCount: 1,
+    canUndo: true,
+    canRedo: false,
+    activeDirty: true,
+    commentToolsVisible: false,
   };
   it('übernimmt einen gültigen Zustand', () => {
     expect(validateMenuState(valid)).toEqual(valid);
@@ -106,6 +111,8 @@ describe('validateMenuState', () => {
     expect(validateMenuState({ ...valid, viewMode: 'quer' })).toBeNull();
     expect(validateMenuState({ ...valid, tabCount: -1 })).toBeNull();
     expect(validateMenuState({ ...valid, hasDocument: 'ja' })).toBeNull();
+    expect(validateMenuState({ ...valid, dirtyCount: 1.5 })).toBeNull();
+    expect(validateMenuState({ ...valid, canUndo: 'ja' })).toBeNull();
     expect(validateMenuState(null)).toBeNull();
   });
 });
