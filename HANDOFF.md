@@ -1,6 +1,6 @@
 # Übergabe: Blattwerk
 
-Stand: 2026-10-12 · letzter Commit `4bc3829` („Phase 2 abgeschlossen“) · Version 0.2.0
+Stand: 2026-10-13 · Phase 3 abgeschlossen (Version 0.3.0). Aktueller Stand und Regeln: CLAUDE.md; Ergebnisse je Phase: docs/phasen/. Die Abschnitte 4–7 unten beschreiben den Stand vor Phase 3 und sind überholt.
 
 Dieses Dokument reicht, um ohne den bisherigen Chat weiterzuarbeiten. Verbindliche Regeln stehen in [CLAUDE.md](CLAUDE.md), die vollständige Vorgabe des Auftraggebers in [docs/spezifikation.md](docs/spezifikation.md). Beides zuerst lesen.
 

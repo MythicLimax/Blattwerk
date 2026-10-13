@@ -13,8 +13,8 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | 0 | Grundlagen: Spezifikation, Bibliotheksauswahl, CLAUDE.md | erledigt |
 | 1 | Viewer | erledigt ([Bericht](docs/phasen/phase-1.md)) |
 | 2 | Kommentieren | erledigt ([Bericht](docs/phasen/phase-2.md)) |
-| 3 | Seiten organisieren | als Nächstes |
-| 4 | Formulare und Unterschrift | offen |
+| 3 | Seiten organisieren | erledigt ([Bericht](docs/phasen/phase-3.md)) |
+| 4 | Formulare und Unterschrift | als Nächstes |
 | 5 | Bearbeiten (inkl. Schwärzen) | offen |
 | 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | offen |
 | 7 | Profi (PAdES, PDF/A, Tags) | offen |
@@ -59,13 +59,17 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Kommentare** ([ADR 0005](docs/entscheidungen/0005-kommentare.md)): Modell in `src/shared/annotations.ts`, Koordinaten im PDF-Benutzerraum (Punkte, Ursprung unten links, ungedrehte Seite), Umrechnung nur über `src/renderer/engine/coords.ts`. Zustand je Tab in `src/renderer/state/annotations-store.ts` (Liste, Stand beim Laden, Rückgängig-Stapel als Befehle, Auswahl, Werkzeug). Ablauf in `src/renderer/features/annotations/controller.ts`.
 - **Anzeige der Kommentare:** pdf.js zeichnet vorhandene, unveränderte Kommentare. Neue und geänderte zeichnet je sichtbarer Seite eine SVG-Ebene (`AnnotationLayer` → `PageOverlay`), die in der Seite von pdf.js hängt. Geänderte und gelöschte vorhandene blendet pdf.js über seinen Anmerkungsspeicher aus (`syncHiddenAnnotations`).
 - **Speichern:** `computeChanges` (`features/annotations/changes.ts`) ermittelt neue, geänderte und gelöschte Kommentare; PDFium schreibt sie inkrementell; danach lädt der Tab die Datei neu. Drucken mit ungespeicherten Kommentaren nutzt denselben Weg im Speicher.
-- Für Inhaltsänderungen (Phase 5) ist Undo per Snapshot der Dokumentbytes geplant.
+- **Seiten organisieren** ([ADR 0006](docs/entscheidungen/0006-seiten-organisieren.md)): Jede Seitenoperation erzeugt PDFium sofort als neuen Stand im Arbeitsspeicher (`applyPageOperations` in `session.ts`), der Tab lädt ihn neu (`showState`); die Datei ändert sich erst beim Speichern. Ungespeicherte Kommentare werden dabei eingearbeitet.
+- **Verlauf:** `src/renderer/state/history-store.ts` hält je Tab die Dokumentstände (Bytes oder `null` = Datei, Kommentarzustand, Seite, Auswahl), höchstens 768 MB. Rückgängig nimmt erst Kommentarbefehle zurück, dann Stände (`undoTab`/`redoTab`). Seitenoperationen, Rückgängig und Wiederholen laufen je Tab in einer Warteschlange (`enqueue`); solange sie läuft, ist `TabState.working` gesetzt. „Ungespeichert“ nur über `src/renderer/state/dirty.ts`.
+- Vor Seitenoperationen, Speichern, Drucken und Schließen übernimmt `commitPendingEdits` offene Texteingaben.
+- Dieses Verfahren (Snapshot der Dokumentbytes) gilt auch für die Inhaltsänderungen ab Phase 5.
 
 ### Speichern (Grundregeln aus der Spezifikation, ab Phase 2)
 
 1. PDFium erzeugt die neuen Bytes, standardmäßig **inkrementell** (`FPDF_INCREMENTAL`).
 2. **Vollständig neu geschrieben** wird nur, wenn es nötig ist: Schwärzen, Verschlüsselung ändern, Komprimieren, „Speichern unter → optimiert“. Haben Signaturen im Dokument, fragt die App vorher nach.
 3. Prüfen: Die neuen Bytes werden in PDFium als neues Dokument geöffnet (dieselbe WASM-Instanz, siehe ADR 0005). Schlägt das fehl, wird nicht gespeichert.
+   Neue Dokumente (Zusammenführen, Extrahieren, Teilen, Bilder → PDF) werden vollständig geschrieben, an einen im Systemdialog gewählten Ort (`files:save-new`, `files:save-to-folder`; Namen nur über `sanitizeFileName`).
 4. Hauptprozess: Prüfen, ob die Datei auf der Platte noch dem Stand beim Öffnen entspricht. Sonst nachfragen.
 5. **Atomar schreiben** mit `src/main/files/atomic-write.ts`: temporäre Datei im *selben* Ordner, `fsync`, `rename` über das Original, unter Windows mit Wiederholungen bei `EPERM`/`EBUSY`. Die Originaldatei wird nie direkt beschrieben.
 
@@ -75,7 +79,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - Alle App-Dateien kommen über `app://bundle/` (`src/main/protocol.ts`). Die CSP (`script-src 'self' 'wasm-unsafe-eval'`, `default-src 'none'`) steht in **jeder** Antwort, damit sie auch für Worker gilt. **Netzwerk ist komplett gesperrt** (`session.webRequest`), nur `app:`, `blob:`, `data:` sind erlaubt.
 - **JavaScript in PDFs wird nie ausgeführt:** pdf.js bekommt keinen Scripting-Manager (ohne ihn läuft kein PDF-JavaScript), `enableXfa: false`. Die frühere Option `isEvalSupported` gibt es in pdf.js 6 nicht mehr; pdf.js nutzt kein `eval`.
 - Externe Links: nur `http`, `https`, `mailto`, keine Zugangsdaten im Host-Teil, nur nach Rückfrage mit angezeigtem Zielserver (Punycode).
-- IPC: feste Kanalliste (`src/shared/ipc.ts`), Absender wird geprüft, Argumente validiert (`src/shared/validate.ts`). Drop-Pfade nur absolut und lokal (keine UNC-Pfade).
+- IPC: feste Kanalliste (`src/shared/ipc.ts`), Absender wird geprüft, Argumente validiert (`src/shared/validate.ts`). Drop-Pfade nur absolut und lokal (keine UNC-Pfade). Quelldateien (PDF, JPEG, PNG) werden am Inhalt erkannt (`file-registry.ts`), Bilder über 100 Megapixel abgelehnt.
 - Testschalter (`BLATTWERK_E2E`, `BLATTWERK_E2E_PRINT_DIR`) wirken nur in der unpaketierten App. `BLATTWERK_USER_DATA` (Profilordner) wirkt immer, wird vom Rauchtest der fertigen App genutzt.
 - Electron-Fuses in `electron-builder.yml`: `RunAsNode` aus, `NODE_OPTIONS` aus, Inspect-Argumente aus, ASAR-Integrität an, `OnlyLoadAppFromAsar` an.
 
@@ -92,7 +96,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0005)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0006)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
@@ -103,19 +107,21 @@ src/
   renderer/
     app/                    Shell: Layout, Werkzeugleiste, Tabs, Seitenleisten, Startbildschirm, globale Tasten, Drag & Drop
     features/               viewer, thumbnails, outline, search, properties, print, password, goto,
-                            annotations (Kommentare), prompt (Rückfragen), settings
+                            annotations (Kommentare), prompt (Rückfragen), settings,
+                            pages (Seitenraster, Seiten-Dialoge, Abläufe für Seiten und neue Dokumente)
     components/             generische UI-Bausteine (IconButton, Dialog)
-    state/                  zustand-Stores (documents-store, ui-store, annotations-store)
+    state/                  zustand-Stores (documents-store, ui-store, annotations-store, history-store), dirty.ts
     engine/                 pdf.js-Einrichtung, Laden, Range-Transport, Laufzeit je Dokument, Befehle (session.ts),
                             coords.ts, pdfium-client.ts
     styles/                 Design-Tokens, hell/dunkel
     public/                 beim Build kopierte pdf.js-Ressourcen (nicht eingecheckt)
-  workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, memory, protocol, worker)
+  workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, pages, memory, protocol, worker)
 resources/icon.svg          eigenes App-Symbol (Quelle)
 build/                      icon.png (aus resources/icon.svg erzeugt), after-pack.cjs
 scripts/                    build, dev, generate-fixtures, check-licenses, dist-mac-local, smoke-packaged, make-icon, dev-env.sh
 test/
   fixtures/pdfs/            kleine Test-PDFs (eingecheckt), expectations.ts mit den erwarteten Eigenschaften
+  fixtures/images/          Testbilder (JPEG, PNG, PNG mit Transparenz; eingecheckt)
   fixtures/generated/       große Datei (nicht eingecheckt, `npm run fixtures -- --large`)
   unit/  integration/  e2e/
 .github/workflows/build.yml
@@ -159,8 +165,8 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 
 ## Tests
 
-- **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js; PDFium-WASM läuft ebenfalls in Node (`test/integration/pdfium-annotations.test.ts`).
-- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
+- **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js; PDFium-WASM läuft ebenfalls in Node (`test/integration/pdfium-annotations.test.ts`, `pdfium-pages.test.ts`).
+- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
 - **Fertige App:** `node scripts/smoke-packaged.mjs <Pfad zur .app>` startet das Paket, prüft die Anzeige und speichert einen Kommentar (PDFium aus dem Paket).
 - **Ausgabeprüfung für jede gespeicherte Datei:** `qpdf --check` (in CI installiert, lokal übersprungen, wenn nicht vorhanden), Öffnen mit pdf.js, PDFium und `@cantoo/pdf-lib`, Annotationen haben /AP. Unter macOS zusätzlich mit PDFKit (die Engine von Apple Vorschau): `test/e2e/pdfkit.ts` (JavaScript for Automation). Acrobat Reader: manuelle Checkliste im Phasenbericht.
 - **Test-PDFs** (`test/fixtures/pdfs/`): Text, Scan (nur Bild), Formular (AcroForm), verschlüsselt (Benutzer- und Besitzerpasswort), eingeschränkt, beschädigt (kaputte xref, abgeschnitten), mit Links und Lesezeichen, mit Kommentaren (`kommentare.pdf`: Antwort, Prüfstatus). Signiert folgt in Phase 4. „Sehr groß“ (600 Seiten, mehr als 100 MB) erzeugt `scripts/generate-fixtures.ts` nach `test/fixtures/generated/`.
@@ -208,3 +214,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 - pdf.js leert eine Seite bei `reset()` komplett; eigene Elemente in der Seite müssen wieder eingehängt werden (`MutationObserver`). `mix-blend-mode` wirkt nur ohne eigenen Stapelkontext (kein `z-index` an der Kommentarebene).
 - pdf.js liefert `State`/`StateModel` als rohe PDF-Zeichenketten (UTF-16 mit BOM möglich) und den `/Name` von Stempeln gar nicht.
 - `python3` ist auf diesem Mac nicht nutzbar (Xcode-Lizenz nicht bestätigt). Für Skripte Node verwenden.
+- pdf.js gibt den Puffer von `getDocument({ data })` an seinen Worker ab (danach leer). Bytes, die man behalten will, als Kopie übergeben (`document-loader.ts`).
+- PDFium: `FPDF_MovePages` erwartet als Ziel den Index in der Liste **ohne** die verschobenen Seiten (`moveTarget` in `src/shared/pages.ts`). `EPDFImageObj_SetJpeg/SetPng(0, 0, Bildobjekt, Datenzeiger, Länge)`.
+- Native Menü-Kürzel (z. B. Cmd+A mit `role: selectAll`) erreichen den Renderer auf dem Mac nicht als Tastendruck.
+- Große parallele Prüf-Workflows mit vielen Agenten haben das Nutzungslimit des Auftraggebers zweimal ausgeschöpft. Nur sparsam einsetzen.
