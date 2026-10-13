@@ -1,0 +1,150 @@
+.view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-viewer-bg);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--toolbar-height);
+  padding: 0 var(--space-2);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  flex: none;
+  overflow-x: auto;
+}
+
+.status {
+  margin: 0 var(--space-2);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.separator {
+  width: 1px;
+  height: 20px;
+  margin: 0 var(--space-1);
+  background: var(--color-border);
+  flex: none;
+}
+
+.notice {
+  margin-left: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.scroller {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  outline: none;
+}
+
+.inner {
+  position: relative;
+  width: 100%;
+}
+
+.row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding-top: 16px;
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 168px;
+  padding: 6px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: default;
+}
+
+.cell:hover {
+  background: var(--color-hover);
+}
+
+.selected,
+.selected:hover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+/* Einfügemarke beim Ziehen */
+.dropBefore::before,
+.dropAfter::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--color-accent);
+}
+
+.dropBefore::before {
+  left: -10px;
+}
+
+.dropAfter::after {
+  right: -10px;
+}
+
+.frame {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  box-shadow: var(--shadow-page);
+}
+
+.frame img {
+  display: block;
+  pointer-events: none;
+}
+
+/* Oben am Rand, damit ein Klick in die Seitenmitte immer auswählt und nie dreht oder löscht */
+.hoverTools {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  display: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-popover);
+  transform: translateX(-50%);
+}
+
+.cell:hover .hoverTools {
+  display: flex;
+}
+
+.label {
+  height: 22px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.selected .label {
+  color: var(--color-accent);
+  font-weight: 600;
+}

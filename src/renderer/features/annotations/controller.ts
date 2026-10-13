@@ -9,6 +9,7 @@ import type {
 import { toPdfDate } from '../../../shared/annotations';
 import { getRuntime } from '../../engine/runtime';
 import { useAnnotations, tabAnnotations } from '../../state/annotations-store';
+import { useHistory } from '../../state/history-store';
 import { useUi } from '../../state/ui-store';
 import { hiddenOriginals } from './changes';
 import { convertPageAnnotations, type PdfjsAnnotationData } from './from-pdfjs';
@@ -107,13 +108,20 @@ export function hideDomAnnotations(tabId: string, root: HTMLElement): void {
   }
 }
 
+// Jede neue Kommentaraktion macht das Wiederholen zurückgenommener Seitenoperationen unmöglich.
+function newAction(tabId: string): void {
+  useHistory.getState().dropRedo(tabId);
+}
+
 export function addAnnotation(tabId: string, annotation: Annotation): void {
+  newAction(tabId);
   useAnnotations.getState().apply(tabId, { type: 'add', annotation });
   useAnnotations.getState().select(tabId, annotation.id);
 }
 
 export function updateAnnotation(tabId: string, before: Annotation, after: Annotation): void {
   if (JSON.stringify(before) === JSON.stringify(after)) return;
+  newAction(tabId);
   useAnnotations.getState().apply(tabId, { type: 'update', before, after: { ...after, modified: now() } as Annotation });
 }
 
@@ -122,6 +130,7 @@ export function deleteAnnotation(tabId: string, id: string): void {
   const index = tab?.items.findIndex((a) => a.id === id) ?? -1;
   const annotation = index >= 0 ? tab?.items[index] : undefined;
   if (!annotation) return;
+  newAction(tabId);
   useAnnotations.getState().apply(tabId, { type: 'remove', annotation, index });
 }
 

@@ -39,7 +39,17 @@ export interface TabState {
   canPrint: boolean;
   // false, wenn das PDF Kommentieren verbietet (Berechtigungen)
   canAnnotate: boolean;
+  // false, wenn das PDF Seiten einfügen, drehen und löschen verbietet (Berechtigungen)
+  canAssemble: boolean;
+  // false, wenn das PDF das Kopieren von Inhalten verbietet (dann auch kein Extrahieren und Teilen)
+  canExtract: boolean;
   saving: boolean;
+  // Eine Seitenoperation läuft (Engine arbeitet, danach lädt der Tab neu)
+  working: boolean;
+  // Hauptansicht oder Raster „Seiten organisieren“
+  mode: 'view' | 'organize';
+  // Ausgewählte Seiten im Raster (0-basiert)
+  pageSelection: number[];
   sidebarTab: SidebarTab;
   search: SearchState;
 }
@@ -88,7 +98,12 @@ export const useDocuments = create<DocumentsState>((set) => ({
           rotation: 0,
           canPrint: true,
           canAnnotate: true,
+          canAssemble: true,
+          canExtract: true,
           saving: false,
+          working: false,
+          mode: 'view',
+          pageSelection: [],
           sidebarTab: 'pages',
           search: EMPTY_SEARCH,
         },

@@ -542,6 +542,13 @@ function FreeTextEditor({ tabId, annotation: a, geometry }: { tabId: string; ann
     store.setEditing(tabId, null);
   };
 
+  // Auch beim Verschwinden des Editors (z. B. Wechsel ins Seitenraster) den Text übernehmen
+  const commitRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    commitRef.current = commit;
+  });
+  useEffect(() => () => commitRef.current(), []);
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     event.stopPropagation();
     if (event.key === 'Escape' || (event.key === 'Enter' && (event.metaKey || event.ctrlKey))) {

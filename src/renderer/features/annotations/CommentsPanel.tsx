@@ -99,6 +99,20 @@ function EditableText({
   const ref = useRef<HTMLTextAreaElement>(null);
   const skip = useRef(false);
   const shown = draft ?? value;
+
+  // Verschwindet das Feld während der Eingabe (Seitenleiste zu, Ansicht gewechselt), wird der Text trotzdem übernommen.
+  const latest = useRef({ draft, value, onCommit });
+  useEffect(() => {
+    latest.current = { draft, value, onCommit };
+  });
+  useEffect(
+    () => () => {
+      const { draft: pending, value: saved, onCommit: commit } = latest.current;
+      if (!skip.current && pending !== null && pending !== saved) commit(pending);
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!autoFocus) return;
     const area = ref.current;

@@ -3,6 +3,7 @@ import {
   ChevronUp,
   FolderOpen,
   Info,
+  LayoutGrid,
   MessageSquare,
   PanelLeft,
   Printer,
@@ -19,7 +20,7 @@ import type { ViewMode } from '../../shared/ipc';
 import { IconButton } from '../components/IconButton';
 import { focusViewer, getRuntime } from '../engine/runtime';
 import { executeCommand, goToPage, openWithDialog, printTab, setScaleValue, setViewMode } from '../engine/session';
-import { isDirty, useTabAnnotations } from '../state/annotations-store';
+import { useTabDirty } from '../state/dirty';
 import { VIEW_MODES } from '../features/viewer/view-modes';
 import { isPresetScaleValue, scaleToPercent, ZOOM_MENU_PERCENTS } from '../features/viewer/zoom';
 import { useActiveTab, type TabState } from '../state/documents-store';
@@ -149,9 +150,11 @@ export function Toolbar() {
   const sidebarVisible = useUi((s) => s.sidebarVisible);
   const rightPanelVisible = useUi((s) => s.rightPanelVisible);
   const commentToolsVisible = useUi((s) => s.commentToolsVisible);
-  const annotations = useTabAnnotations(tab?.id);
+  const tabDirty = useTabDirty(tab?.id);
   const ready = tab?.status === 'ready';
-  const dirty = ready && isDirty(annotations);
+  const dirty = ready && tabDirty;
+  // Im Raster „Seiten organisieren“ gibt es keine Hauptansicht: Zoom, Blättern, Suche und Kommentare entfallen.
+  const viewing = ready && tab.mode === 'view';
 
   return (
     <header
@@ -168,7 +171,8 @@ export function Toolbar() {
           <IconButton
             icon={PanelLeft}
             label={t('toolbar.sidebar')}
-            pressed={sidebarVisible}
+            pressed={sidebarVisible && viewing}
+            disabled={!viewing}
             onClick={() => executeCommand('view.toggleSidebar')}
           />
         )}
@@ -193,7 +197,7 @@ export function Toolbar() {
         )}
       </div>
 
-      {ready && (
+      {viewing && (
         <div className={styles.center}>
           <div className={styles.group}>
             <IconButton
@@ -236,9 +240,17 @@ export function Toolbar() {
       {ready && (
         <div className={styles.group}>
           <IconButton
+            icon={LayoutGrid}
+            label={t('toolbar.organize')}
+            pressed={tab.mode === 'organize'}
+            onClick={() => executeCommand('pages.organize')}
+            data-testid="organize-button"
+          />
+          <IconButton
             icon={MessageSquare}
             label={t('toolbar.comment')}
-            pressed={commentToolsVisible}
+            pressed={commentToolsVisible && viewing}
+            disabled={!viewing}
             onClick={() => executeCommand('view.toggleCommentTools')}
             data-testid="comment-tools-button"
           />
@@ -251,7 +263,8 @@ export function Toolbar() {
           <IconButton
             icon={Search}
             label={t('toolbar.search')}
-            pressed={rightPanelVisible}
+            pressed={rightPanelVisible && viewing}
+            disabled={!viewing}
             onClick={() => (rightPanelVisible ? executeCommand('view.toggleRightPanel') : executeCommand('edit.find'))}
             data-testid="search-button"
           />

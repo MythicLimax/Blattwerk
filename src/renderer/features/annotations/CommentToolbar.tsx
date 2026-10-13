@@ -23,6 +23,7 @@ import { IconButton } from '../../components/IconButton';
 import { executeCommand } from '../../engine/session';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { MARKUP_TOOLS, useAnnotations, useTabAnnotations, type Tool } from '../../state/annotations-store';
+import { canRedoState, canUndoState, useTabHistory } from '../../state/dirty';
 import type { TabState } from '../../state/documents-store';
 import { cachedGeometry, markupSelection } from './AnnotationLayer';
 import { updateAnnotation } from './controller';
@@ -62,6 +63,7 @@ const toCss = ({ r, g, b }: Rgb) => `rgb(${Math.round(r * 255)} ${Math.round(g *
 export function CommentToolbar({ tab }: { tab: TabState }) {
   const { t } = useTranslation();
   const annotations = useTabAnnotations(tab.id);
+  const history = useTabHistory(tab.id);
   const tool = useAnnotations((s) => s.tool);
   const colors = useAnnotations((s) => s.colors);
   const width = useAnnotations((s) => s.width);
@@ -227,14 +229,14 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
         <IconButton
           icon={Undo2}
           label={t('comments.undo')}
-          disabled={!annotations?.undo.length}
+          disabled={!canUndoState(annotations, history)}
           onClick={() => executeCommand('edit.undo')}
           data-testid="comment-undo"
         />
         <IconButton
           icon={Redo2}
           label={t('comments.redo')}
-          disabled={!annotations?.redo.length}
+          disabled={!canRedoState(annotations, history)}
           onClick={() => executeCommand('edit.redo')}
           data-testid="comment-redo"
         />

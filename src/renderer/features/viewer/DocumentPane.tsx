@@ -1,6 +1,7 @@
 import { Loader2, Lock, TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { closeTab } from '../../engine/session';
+import { OrganizeView } from '../pages/OrganizeView';
 import type { TabState } from '../../state/documents-store';
 import styles from './DocumentPane.module.css';
 import { ViewerHost } from './ViewerHost';
@@ -15,7 +16,13 @@ export function DocumentPane({ tab, active }: { tab: TabState; active: boolean }
       aria-hidden={!active}
       data-testid={active ? 'active-pane' : undefined}
     >
-      {tab.status === 'ready' && <ViewerHost tab={tab} active={active} />}
+      {tab.status === 'ready' && (tab.mode === 'organize' ? <OrganizeView tab={tab} /> : <ViewerHost tab={tab} active={active} />)}
+      {tab.working && (
+        <div className={styles.working} role="status" data-testid="pages-working">
+          <Loader2 size={22} className={styles.spin} aria-hidden="true" />
+          <span>{t('pages.busy.working')}</span>
+        </div>
+      )}
       {tab.status === 'loading' && (
         <div className={styles.center}>
           <Loader2 size={28} className={styles.spin} aria-hidden="true" />

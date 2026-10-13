@@ -6,7 +6,9 @@ import { getRuntime } from '../engine/runtime';
 import { executeCommand, handleOpenResult } from '../engine/session';
 import { isPagedMode } from '../features/viewer/view-modes';
 import { syncHiddenAnnotations } from '../features/annotations/controller';
-import { isDirty, useAnnotations } from '../state/annotations-store';
+import { useAnnotations } from '../state/annotations-store';
+import { canRedoState, canUndoState, isDirtyState } from '../state/dirty';
+import { useHistory } from '../state/history-store';
 import { getActiveTab, useDocuments } from '../state/documents-store';
 import { useUi } from '../state/ui-store';
 
@@ -16,7 +18,9 @@ function computeMenuState(): MenuState {
   const active = tabs.find((tab) => tab.id === activeId);
   const ready = active?.status === 'ready';
   const annotations = useAnnotations.getState().tabs;
+  const histories = useHistory.getState().tabs;
   const activeAnnotations = active ? annotations[active.id] : undefined;
+  const activeHistory = active ? histories[active.id] : undefined;
   return {
     hasDocument: ready,
     canPrint: ready && active.canPrint,
@@ -24,11 +28,14 @@ function computeMenuState(): MenuState {
     sidebarVisible: ui.sidebarVisible,
     rightPanelVisible: ui.rightPanelVisible,
     tabCount: tabs.length,
-    dirtyCount: tabs.filter((tab) => isDirty(annotations[tab.id])).length,
-    canUndo: Boolean(activeAnnotations?.undo.length),
-    canRedo: Boolean(activeAnnotations?.redo.length),
-    activeDirty: ready && isDirty(activeAnnotations),
+    dirtyCount: tabs.filter((tab) => isDirtyState(annotations[tab.id], histories[tab.id])).length,
+    canUndo: canUndoState(activeAnnotations, activeHistory),
+    canRedo: canRedoState(activeAnnotations, activeHistory),
+    activeDirty: ready && isDirtyState(activeAnnotations, activeHistory),
     commentToolsVisible: ui.commentToolsVisible,
+    organizeMode: ready && active.mode === 'organize',
+    canAssemble: ready && active.canAssemble,
+    canExtract: ready && active.canExtract,
   };
 }
 
@@ -48,10 +55,12 @@ export function useMenuStateSync(): void {
     const offDocs = useDocuments.subscribe(push);
     const offUi = useUi.subscribe(push);
     const offAnnotations = useAnnotations.subscribe(push);
+    const offHistory = useHistory.subscribe(push);
     return () => {
       offDocs();
       offUi();
       offAnnotations();
+      offHistory();
     };
   }, []);
 }
@@ -100,6 +109,14 @@ export function useGlobalKeys(): void {
   }, []);
 }
 
+// Drops, die schon ein Bereich der Oberfläche verarbeitet hat (z. B. Dateien ins Seitenraster einfügen).
+// Das Fenster setzt dann nur seinen Zustand zurück und öffnet die Dateien nicht zusätzlich als Tabs.
+const handledDrops = new WeakSet<Event>();
+
+export function markDropHandled(event: Event): void {
+  handledDrops.add(event);
+}
+
 function hasFiles(event: DragEvent): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes('Files');
 }
@@ -129,6 +146,8 @@ export function useFileDrop(): void {
       event.preventDefault();
       depth = 0;
       setDragging(false);
+      useUi.getState().setFileDropInsert(false);
+      if (handledDrops.has(event)) return;
       const files = Array.from(event.dataTransfer?.files ?? []);
       // Nacheinander beim Hauptprozess anmelden (Reihenfolge der Tabs), aber nicht auf das Laden warten:
       // Eine Kennwortabfrage soll die übrigen Dateien nicht aufhalten.

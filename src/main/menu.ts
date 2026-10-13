@@ -27,6 +27,8 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
   const isMac = ctx.platform === 'darwin';
   const { state } = ctx;
   const doc = state.hasDocument;
+  // Hauptansicht sichtbar (im Raster „Seiten organisieren“ gibt es kein Zoomen, Blättern und Suchen)
+  const viewing = doc && !state.organizeMode;
 
   // Menüpunkt, der einen Befehl an den Renderer schickt. Kürzel kommen aus der zentralen Tabelle.
   const cmd = (
@@ -71,6 +73,9 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       },
       { label: t('menu.file.openRecent'), submenu: recentItems },
       { type: 'separator' },
+      cmd('file.combine', t('menu.file.combine')),
+      cmd('file.fromImages', t('menu.file.fromImages')),
+      { type: 'separator' },
       cmd('file.save', t('menu.file.save'), { enabled: doc && state.activeDirty }),
       cmd('file.saveAs', t('menu.file.saveAs'), { enabled: doc }),
       { type: 'separator' },
@@ -102,9 +107,9 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       cmd('edit.delete', t('menu.edit.delete'), { enabled: doc }),
       { role: 'selectAll', label: t('menu.edit.selectAll') },
       { type: 'separator' },
-      cmd('edit.find', t('menu.edit.find'), { enabled: doc }),
-      cmd('edit.findNext', t('menu.edit.findNext'), { enabled: doc }),
-      cmd('edit.findPrevious', t('menu.edit.findPrevious'), { enabled: doc }),
+      cmd('edit.find', t('menu.edit.find'), { enabled: viewing }),
+      cmd('edit.findNext', t('menu.edit.findNext'), { enabled: viewing }),
+      cmd('edit.findPrevious', t('menu.edit.findPrevious'), { enabled: viewing }),
       ...(isMac ? [] : [{ type: 'separator' as const }, cmd('app.settings', t('menu.app.settings'))]),
     ],
   };
@@ -113,22 +118,22 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
     cmd(VIEW_MODE_COMMANDS[mode], label, {
       type: 'radio',
       checked: state.viewMode === mode,
-      enabled: doc,
+      enabled: viewing,
     });
 
   const viewMenu: MenuItemConstructorOptions = {
     label: t('menu.view.title'),
     submenu: [
-      cmd('view.zoomIn', t('menu.view.zoomIn'), { enabled: doc }),
-      cmd('view.zoomOut', t('menu.view.zoomOut'), { enabled: doc }),
+      cmd('view.zoomIn', t('menu.view.zoomIn'), { enabled: viewing }),
+      cmd('view.zoomOut', t('menu.view.zoomOut'), { enabled: viewing }),
       { type: 'separator' },
-      cmd('view.fitPage', t('menu.view.fitPage'), { enabled: doc }),
-      cmd('view.actualSize', t('menu.view.actualSize'), { enabled: doc }),
-      cmd('view.fitWidth', t('menu.view.fitWidth'), { enabled: doc }),
+      cmd('view.fitPage', t('menu.view.fitPage'), { enabled: viewing }),
+      cmd('view.actualSize', t('menu.view.actualSize'), { enabled: viewing }),
+      cmd('view.fitWidth', t('menu.view.fitWidth'), { enabled: viewing }),
       { type: 'separator' },
       {
         label: t('menu.view.pageDisplay'),
-        enabled: doc,
+        enabled: viewing,
         submenu: [
           modeItem('single', t('menu.view.modeSingle')),
           modeItem('continuous', t('menu.view.modeContinuous')),
@@ -138,27 +143,27 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       },
       {
         label: t('menu.view.rotate'),
-        enabled: doc,
+        enabled: viewing,
         submenu: [
-          cmd('view.rotateClockwise', t('menu.view.rotateClockwise'), { enabled: doc }),
-          cmd('view.rotateCounterClockwise', t('menu.view.rotateCounterClockwise'), { enabled: doc }),
+          cmd('view.rotateClockwise', t('menu.view.rotateClockwise'), { enabled: viewing }),
+          cmd('view.rotateCounterClockwise', t('menu.view.rotateCounterClockwise'), { enabled: viewing }),
         ],
       },
       { type: 'separator' },
       cmd('view.toggleSidebar', t('menu.view.toggleSidebar'), {
         type: 'checkbox',
-        checked: doc && state.sidebarVisible,
-        enabled: doc,
+        checked: viewing && state.sidebarVisible,
+        enabled: viewing,
       }),
       cmd('view.toggleRightPanel', t('menu.view.toggleRightPanel'), {
         type: 'checkbox',
-        checked: doc && state.rightPanelVisible,
-        enabled: doc,
+        checked: viewing && state.rightPanelVisible,
+        enabled: viewing,
       }),
       cmd('view.toggleCommentTools', t('menu.view.toggleCommentTools'), {
         type: 'checkbox',
-        checked: doc && state.commentToolsVisible,
-        enabled: doc,
+        checked: viewing && state.commentToolsVisible,
+        enabled: viewing,
       }),
       { type: 'separator' },
       { role: 'togglefullscreen', label: t('menu.view.fullscreen') },
@@ -166,15 +171,45 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
     ],
   };
 
+  // Seiten organisieren (wie das frühere Menü „Dokument“ in Acrobat)
+  const assemble = doc && state.canAssemble;
+  const documentMenu: MenuItemConstructorOptions = {
+    label: t('menu.pages.title'),
+    submenu: [
+      cmd('pages.organize', t('menu.pages.organize'), { type: 'checkbox', checked: doc && state.organizeMode, enabled: doc }),
+      { type: 'separator' },
+      {
+        label: t('menu.pages.rotate'),
+        enabled: assemble,
+        submenu: [
+          cmd('pages.rotateClockwise', t('menu.pages.rotateClockwise'), { enabled: assemble }),
+          cmd('pages.rotateCounterClockwise', t('menu.pages.rotateCounterClockwise'), { enabled: assemble }),
+        ],
+      },
+      cmd('pages.delete', t('menu.pages.delete'), { enabled: assemble }),
+      {
+        label: t('menu.pages.insert'),
+        enabled: assemble,
+        submenu: [
+          cmd('pages.insertFromFile', t('menu.pages.insertFromFile'), { enabled: assemble }),
+          cmd('pages.insertBlank', t('menu.pages.insertBlank'), { enabled: assemble }),
+        ],
+      },
+      { type: 'separator' },
+      cmd('pages.extract', t('menu.pages.extract'), { enabled: doc && state.canExtract }),
+      cmd('pages.split', t('menu.pages.split'), { enabled: doc && state.canExtract }),
+    ],
+  };
+
   const navMenu: MenuItemConstructorOptions = {
     label: t('menu.nav.title'),
     submenu: [
-      cmd('nav.firstPage', t('menu.nav.firstPage'), { enabled: doc }),
-      cmd('nav.previousPage', t('menu.nav.previousPage'), { enabled: doc }),
-      cmd('nav.nextPage', t('menu.nav.nextPage'), { enabled: doc }),
-      cmd('nav.lastPage', t('menu.nav.lastPage'), { enabled: doc }),
+      cmd('nav.firstPage', t('menu.nav.firstPage'), { enabled: viewing }),
+      cmd('nav.previousPage', t('menu.nav.previousPage'), { enabled: viewing }),
+      cmd('nav.nextPage', t('menu.nav.nextPage'), { enabled: viewing }),
+      cmd('nav.lastPage', t('menu.nav.lastPage'), { enabled: viewing }),
       { type: 'separator' },
-      cmd('nav.goToPage', t('menu.nav.goToPage'), { enabled: doc }),
+      cmd('nav.goToPage', t('menu.nav.goToPage'), { enabled: viewing }),
     ],
   };
 
@@ -212,7 +247,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       ]
     : [];
 
-  return [...appMenu, fileMenu, editMenu, viewMenu, navMenu, windowMenu];
+  return [...appMenu, fileMenu, editMenu, viewMenu, documentMenu, navMenu, windowMenu];
 }
 
 export function applyMenu(ctx: MenuContext): void {

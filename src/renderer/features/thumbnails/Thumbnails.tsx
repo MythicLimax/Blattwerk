@@ -10,7 +10,7 @@ import styles from './Thumbnails.module.css';
 const LABEL_HEIGHT = 22;
 const ITEM_PADDING = 16;
 
-function useThumbnail(runtime: DocumentRuntime, pageNumber: number, rotation: number) {
+export function useThumbnail(runtime: DocumentRuntime, pageNumber: number, rotation: number) {
   const subscribe = (notify: () => void) => runtime.thumbnails.subscribe(notify);
   const getSnapshot = () => runtime.thumbnails.get(pageNumber, rotation);
   return useSyncExternalStore(subscribe, getSnapshot);

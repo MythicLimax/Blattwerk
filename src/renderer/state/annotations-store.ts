@@ -74,6 +74,8 @@ interface AnnotationsState {
   fontSize: number;
   stamp: StampId;
   init: (tabId: string) => void;
+  // Gesicherten Zustand eines Dokumentstands wiederherstellen (Rückgängig/Wiederholen von Seitenoperationen)
+  restore: (tabId: string, tab: TabAnnotations) => void;
   drop: (tabId: string) => void;
   addLoaded: (tabId: string, items: Annotation[], done: boolean) => void;
   apply: (tabId: string, command: Command) => void;
@@ -134,6 +136,8 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     fontSize: 12,
     stamp: 'approved',
     init: (tabId) => set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...EMPTY } } })),
+    restore: (tabId, tab) =>
+      set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...tab, loaded: true, editingId: null } } })),
     drop: (tabId) =>
       set((state) => {
         const tabs = { ...state.tabs };

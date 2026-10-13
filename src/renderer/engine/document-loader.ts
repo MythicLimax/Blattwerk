@@ -25,6 +25,9 @@ export interface LoadCallbacks {
   password?: string | null;
   onPassword: (reason: 'need' | 'incorrect', submit: (password: string) => void) => void;
   onRangeError: (error: unknown) => void;
+  // Dokument aus dem Arbeitsspeicher statt aus der Datei (Stand nach Seitenänderungen). Wird kopiert,
+  // weil pdf.js den Puffer an seinen Worker abgibt und der Aufrufer ihn behalten will.
+  data?: Uint8Array;
 }
 
 // Sicherheitsrelevant: kein JavaScript aus PDFs, kein XFA, keine Netzwerkzugriffe aus dem Dokument.
@@ -70,7 +73,9 @@ export async function startLoading(file: FileInfo, callbacks: LoadCallbacks): Pr
 
   let task: PDFDocumentLoadingTask;
   try {
-    if (file.size <= WHOLE_FILE_LIMIT) {
+    if (callbacks.data) {
+      task = pdfjs.getDocument({ ...common, data: callbacks.data.slice() });
+    } else if (file.size <= WHOLE_FILE_LIMIT) {
       const data = await readChunked(read, 0, file.size);
       task = pdfjs.getDocument({ ...common, data });
     } else {

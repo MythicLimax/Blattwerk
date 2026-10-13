@@ -7,6 +7,7 @@ import {
   looksLikePdf,
   validateMenuState,
   validateReadRange,
+  sanitizeFileName,
 } from '../../src/shared/validate';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
@@ -102,6 +103,9 @@ describe('validateMenuState', () => {
     canRedo: false,
     activeDirty: true,
     commentToolsVisible: false,
+    organizeMode: true,
+    canAssemble: true,
+    canExtract: false,
   };
   it('übernimmt einen gültigen Zustand', () => {
     expect(validateMenuState(valid)).toEqual(valid);
@@ -114,5 +118,26 @@ describe('validateMenuState', () => {
     expect(validateMenuState({ ...valid, dirtyCount: 1.5 })).toBeNull();
     expect(validateMenuState({ ...valid, canUndo: 'ja' })).toBeNull();
     expect(validateMenuState(null)).toBeNull();
+  });
+});
+
+describe('sanitizeFileName', () => {
+  it('entfernt Pfadanteile und verbotene Zeichen', () => {
+    expect(sanitizeFileName('Bericht')).toBe('Bericht.pdf');
+    expect(sanitizeFileName('a/b\\c')).toBe('a-b-c.pdf');
+    expect(sanitizeFileName('../../etc/passwd')).toBe('-..-etc-passwd.pdf');
+    expect(sanitizeFileName('Teil:1?*')).toBe('Teil-1--.pdf');
+    expect(sanitizeFileName('Zeile\nUmbruch')).toBe('Zeile-Umbruch.pdf');
+  });
+  it('vermeidet leere, versteckte und reservierte Namen', () => {
+    expect(sanitizeFileName('')).toBe('Dokument.pdf');
+    expect(sanitizeFileName('  ..Name..  ')).toBe('Name.pdf');
+    expect(sanitizeFileName('CON')).toBe('_CON.pdf');
+    expect(sanitizeFileName('com1.txt')).toBe('_com1.txt.pdf');
+    expect(sanitizeFileName(42)).toBe('Dokument.pdf');
+  });
+  it('behält Umlaute und eine vorhandene Endung, begrenzt die Länge', () => {
+    expect(sanitizeFileName('Ünïcödé Name.PDF')).toBe('Ünïcödé Name.pdf');
+    expect(sanitizeFileName('x'.repeat(300))).toHaveLength(150);
   });
 });

@@ -38,6 +38,10 @@ export const SHORTCUTS: Partial<Record<CommandId, Shortcut>> = {
   'nav.nextPage': { accelerator: 'Right', rendererHandled: true },
   'nav.lastPage': { accelerator: 'End', rendererHandled: true },
   'nav.goToPage': { accelerator: 'Shift+CmdOrCtrl+N' },
+  // Seiten: dieselben Kürzel wie in Acrobat
+  'pages.rotateClockwise': { accelerator: 'Shift+CmdOrCtrl+R' },
+  'pages.delete': { accelerator: 'Shift+CmdOrCtrl+D' },
+  'pages.insertFromFile': { accelerator: 'Shift+CmdOrCtrl+I' },
   'window.nextTab': { accelerator: 'Ctrl+Tab' },
   'window.previousTab': { accelerator: 'Ctrl+Shift+Tab' },
 };

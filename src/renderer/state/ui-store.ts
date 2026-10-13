@@ -1,5 +1,30 @@
 import { create } from 'zustand';
-import type { RecentFile } from '../../shared/ipc';
+import type { FileKind, RecentFile } from '../../shared/ipc';
+import type { ImageInfo } from '../../shared/image-info';
+
+// Gelesene Quelldatei zum Einfügen oder Zusammenführen (Bytes im Speicher, Kennwort bereits geprüft)
+export interface SourceFile {
+  name: string;
+  kind: FileKind;
+  bytes: Uint8Array;
+  password: string | null;
+  pageCount: number;
+  image: ImageInfo | null;
+}
+
+// Offener Dialog für Seitenoperationen (Seiten 0-basiert)
+export type PageDialog =
+  | { kind: 'delete'; tabId: string; pages: number[] }
+  | { kind: 'insertBlank'; tabId: string; after: number }
+  | { kind: 'insertFiles'; tabId: string; after: number; sources: SourceFile[] }
+  | { kind: 'extract'; tabId: string; pages: number[] }
+  | { kind: 'split'; tabId: string };
+
+export interface PasswordRequest {
+  name: string;
+  incorrect: boolean;
+  resolve: (password: string | null) => void;
+}
 
 export interface Notice {
   id: number;
@@ -32,6 +57,14 @@ interface UiState {
   settingsOpen: boolean;
   // Offene Rückfrage (ungespeicherte Änderungen, von außen geänderte Datei)
   prompt: Prompt | null;
+  pageDialog: PageDialog | null;
+  // Dialog „Dateien zusammenführen“ mit den bisher gewählten Dateien
+  combine: SourceFile[] | null;
+  passwordRequest: PasswordRequest | null;
+  // Lang laufende Aufgabe ohne Tab (Zusammenführen, Extrahieren …): Übersetzungsschlüssel der Meldung
+  busy: string | null;
+  // Dateien werden gerade über das Seitenraster gezogen (dort einfügen statt als Tab öffnen)
+  fileDropInsert: boolean;
   setSidebarVisible: (visible: boolean) => void;
   setRightPanelVisible: (visible: boolean) => void;
   openProperties: (tabId: string | null) => void;
@@ -47,6 +80,11 @@ interface UiState {
   setCommentToolsVisible: (visible: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setPrompt: (prompt: Prompt | null) => void;
+  setPageDialog: (dialog: PageDialog | null) => void;
+  setCombine: (files: SourceFile[] | null) => void;
+  setPasswordRequest: (request: PasswordRequest | null) => void;
+  setBusy: (busy: string | null) => void;
+  setFileDropInsert: (value: boolean) => void;
 }
 
 export type PromptAnswer = 'save' | 'discard' | 'cancel' | 'overwrite' | 'saveAs';
@@ -75,6 +113,11 @@ export const useUi = create<UiState>((set) => ({
   commentToolsVisible: false,
   settingsOpen: false,
   prompt: null,
+  pageDialog: null,
+  combine: null,
+  passwordRequest: null,
+  busy: null,
+  fileDropInsert: false,
   setSidebarVisible: (sidebarVisible) => set({ sidebarVisible }),
   setRightPanelVisible: (rightPanelVisible) => set({ rightPanelVisible }),
   openProperties: (propertiesTabId) => set({ propertiesTabId }),
@@ -92,4 +135,9 @@ export const useUi = create<UiState>((set) => ({
   setCommentToolsVisible: (commentToolsVisible) => set({ commentToolsVisible }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPrompt: (prompt) => set({ prompt }),
+  setPageDialog: (pageDialog) => set({ pageDialog }),
+  setCombine: (combine) => set({ combine }),
+  setPasswordRequest: (passwordRequest) => set({ passwordRequest }),
+  setBusy: (busy) => set({ busy }),
+  setFileDropInsert: (fileDropInsert) => set({ fileDropInsert }),
 }));

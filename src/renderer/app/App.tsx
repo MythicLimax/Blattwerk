@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { api } from '../api';
 import { handleCloseRequest, handleOpenResult, executeCommand } from '../engine/session';
 import { CommentToolbar } from '../features/annotations/CommentToolbar';
+import { BusyOverlay } from '../features/pages/BusyOverlay';
+import { CombineDialog, PageDialogs, SourcePasswordDialog } from '../features/pages/PageDialogs';
 import { GoToPageDialog } from '../features/goto/GoToPageDialog';
 import { PasswordDialog } from '../features/password/PasswordDialog';
 import { PrintProgressDialog } from '../features/print/PrintProgressDialog';
@@ -34,6 +36,8 @@ export function App() {
   const prompt = useUi((s) => s.prompt);
   const settingsOpen = useUi((s) => s.settingsOpen);
   const commentToolsVisible = useUi((s) => s.commentToolsVisible);
+  const pageDialog = useUi((s) => s.pageDialog);
+  const combine = useUi((s) => s.combine);
 
   useEffect(() => {
     const offOpened = api.onFileOpened((result) => void handleOpenResult(result));
@@ -68,19 +72,19 @@ export function App() {
     <div className={styles.app}>
       <Toolbar />
       {tabs.length > 0 && <TabBar />}
-      {commentToolsVisible && active?.status === 'ready' && <CommentToolbar tab={active} />}
+      {commentToolsVisible && active?.status === 'ready' && active.mode === 'view' && <CommentToolbar tab={active} />}
       <div className={styles.workspace}>
         {!showDocumentChrome ? (
           <StartScreen />
         ) : (
           <>
-            {sidebarVisible && active.status === 'ready' && <LeftSidebar tab={active} />}
+            {sidebarVisible && active.status === 'ready' && active.mode === 'view' && <LeftSidebar tab={active} />}
             <main className={styles.documents}>
               {tabs.map((tab) => (
                 <DocumentPane key={tab.id} tab={tab} active={tab.id === activeId} />
               ))}
             </main>
-            {rightPanelVisible && active.status === 'ready' && <RightPanel tab={active} />}
+            {rightPanelVisible && active.status === 'ready' && active.mode === 'view' && <RightPanel tab={active} />}
           </>
         )}
       </div>
@@ -89,6 +93,10 @@ export function App() {
       {goToPageOpen && active?.status === 'ready' && <GoToPageDialog tab={active} />}
       {print && <PrintProgressDialog progress={print} />}
       {settingsOpen && <SettingsDialog />}
+      {pageDialog && <PageDialogs key={`${pageDialog.kind}-${pageDialog.tabId}`} dialog={pageDialog} />}
+      {combine && <CombineDialog sources={combine} />}
+      <SourcePasswordDialog />
+      <BusyOverlay />
       {prompt && <PromptDialog key={`${prompt.kind}-${prompt.tabId}`} prompt={prompt} />}
       <Notices />
       <DropOverlay />

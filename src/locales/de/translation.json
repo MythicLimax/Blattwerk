@@ -23,7 +23,9 @@
       "setDefault": "Als Standardprogramm für PDFs festlegen …",
       "quit": "Beenden",
       "save": "Speichern",
-      "saveAs": "Speichern unter …"
+      "saveAs": "Speichern unter …",
+      "combine": "Dateien zusammenführen …",
+      "fromImages": "PDF aus Bildern erstellen …"
     },
     "edit": {
       "title": "Bearbeiten",
@@ -75,6 +77,19 @@
       "front": "Alle nach vorne bringen",
       "nextTab": "Nächster Tab",
       "previousTab": "Vorheriger Tab"
+    },
+    "pages": {
+      "title": "Dokument",
+      "organize": "Seiten organisieren",
+      "rotate": "Seiten drehen",
+      "rotateClockwise": "Im Uhrzeigersinn",
+      "rotateCounterClockwise": "Gegen den Uhrzeigersinn",
+      "delete": "Seiten löschen …",
+      "insert": "Seiten einfügen",
+      "insertFromFile": "Aus Datei …",
+      "insertBlank": "Leere Seite …",
+      "extract": "Seiten extrahieren …",
+      "split": "Dokument teilen …"
     }
   },
   "dialog": {
@@ -101,7 +116,17 @@
       "winMessage": "In den Windows-Einstellungen unter „Standard-Apps“ kannst du {{appName}} für PDF-Dateien auswählen.",
       "ok": "OK"
     },
-    "saveAsTitle": "Speichern unter"
+    "saveAsTitle": "Speichern unter",
+    "filterImages": "Bilder (JPEG, PNG)",
+    "filterPdfImages": "PDF-Dokumente und Bilder",
+    "pickTitle": {
+      "pdf": "PDF auswählen",
+      "images": "Bilder auswählen",
+      "pdf-or-images": "PDFs oder Bilder auswählen"
+    },
+    "saveNewTitle": "Neues Dokument speichern",
+    "chooseFolderTitle": "Ordner für die neuen Dateien wählen",
+    "chooseFolderButton": "Hier speichern"
   },
   "errors": {
     "open": {
@@ -123,6 +148,17 @@
     "dismiss": "Schließen",
     "save": {
       "failed": "Das Dokument konnte nicht gespeichert werden."
+    },
+    "pages": {
+      "notAllowed": "Dieses Dokument erlaubt kein Einfügen, Drehen oder Löschen von Seiten.",
+      "password": "Für eine der Dateien fehlt das Kennwort oder es ist falsch.",
+      "invalid": "Eine der Dateien ist beschädigt oder kein gültiges PDF.",
+      "range": "Die angegebenen Seiten gibt es in diesem Dokument nicht.",
+      "all-pages": "Ein Dokument braucht mindestens eine Seite. Es können nicht alle Seiten gelöscht werden.",
+      "image": "Das Bild konnte nicht eingefügt werden.",
+      "import": "Die Seiten konnten nicht übernommen werden.",
+      "verify": "Das Ergebnis ließ sich nicht prüfen. Das Dokument wurde nicht verändert.",
+      "failed": "Die Seiten konnten nicht bearbeitet werden."
     }
   },
   "start": {
@@ -158,7 +194,8 @@
       "percent": "{{value}} %"
     },
     "save": "Speichern",
-    "comment": "Kommentieren"
+    "comment": "Kommentieren",
+    "organize": "Seiten organisieren"
   },
   "viewMode": {
     "single": "Einzelne Seite",
@@ -364,5 +401,104 @@
     "authorHint": "Dieser Name steht als Verfasser bei neuen Kommentaren und Antworten.",
     "save": "Übernehmen",
     "cancel": "Abbrechen"
+  },
+  "pages": {
+    "savedToFolder_one": "{{count}} Datei im Ordner „{{folder}}“ gespeichert.",
+    "savedToFolder_other": "{{count}} Dateien im Ordner „{{folder}}“ gespeichert.",
+    "busy": {
+      "reading": "Dateien werden gelesen …",
+      "extracting": "Seiten werden extrahiert …",
+      "splitting": "Dokument wird geteilt …",
+      "combining": "Dateien werden zusammengeführt …",
+      "working": "Seiten werden bearbeitet …"
+    },
+    "names": {
+      "extract": "{{name}} – Seiten {{pages}}",
+      "page": "{{name}} – Seite {{page}}",
+      "part": "{{name}} – Teil {{part}}",
+      "images": "Bilder",
+      "combined": "Zusammengeführt"
+    },
+    "errors": {
+      "invalidFile": "„{{name}}“ ist beschädigt oder kein gültiges PDF und wurde übersprungen.",
+      "invalidImage": "„{{name}}“ ist kein lesbares JPEG- oder PNG-Bild oder zu groß und wurde übersprungen.",
+      "rejected": "Diese Dateien sind weder PDF noch JPEG/PNG: {{names}}",
+      "save": {
+        "write-failed": "Die Datei konnte nicht gespeichert werden.",
+        "invalid-data": "Die Daten für die neue Datei sind ungültig.",
+        "target-open": "Diese Datei ist gerade in {{appName}} geöffnet. Bitte einen anderen Namen wählen."
+      }
+    },
+    "dialog": {
+      "pages_one": "Seiten (das Dokument hat {{count}} Seite)",
+      "pages_other": "Seiten (das Dokument hat {{count}} Seiten)",
+      "pagesHint": "Zum Beispiel 1-3, 5 oder 8- (bis zum Ende).",
+      "invalidPages": "Bitte gültige Seiten zwischen 1 und {{count}} angeben, z. B. 1-3, 5.",
+      "invalidPage": "Bitte eine Seite zwischen 1 und {{count}} angeben.",
+      "invalidCount": "Bitte eine Anzahl zwischen 1 und 100 angeben.",
+      "cancel": "Abbrechen",
+      "ok": "OK",
+      "delete": "Löschen",
+      "deleteTitle": "Seiten löschen",
+      "insert": "Einfügen",
+      "insertBlankTitle": "Leere Seiten einfügen",
+      "insertFilesTitle": "Seiten aus Datei einfügen",
+      "insertFilesSummary_one": "{{count}} Seite wird eingefügt:",
+      "insertFilesSummary_other": "{{count}} Seiten werden eingefügt:",
+      "pageCount_one": "{{count}} Seite",
+      "pageCount_other": "{{count}} Seiten",
+      "image": "Bild",
+      "count": "Anzahl leerer Seiten",
+      "blankHint": "Neue Seiten haben die Größe der Seite an der Einfügestelle.",
+      "position": "Einfügen",
+      "relation": "Vor oder nach",
+      "anchor": "Bezugsseite",
+      "before": "vor",
+      "after": "nach",
+      "firstPage": "der ersten Seite",
+      "lastPage": "der letzten Seite",
+      "page": "Seite",
+      "pageNumber": "Seitenzahl (1 bis {{count}})",
+      "extract": "Extrahieren …",
+      "extractTitle": "Seiten extrahieren",
+      "separateFiles": "Jede Seite als eigene Datei speichern",
+      "deleteAfter": "Seiten danach aus diesem Dokument löschen",
+      "split": "Teilen …",
+      "splitTitle": "Dokument teilen",
+      "splitByCount": "Nach Seitenanzahl, je Datei:",
+      "splitSize": "Seiten je Datei",
+      "splitByBookmarks": "An den Lesezeichen der obersten Ebene",
+      "splitResult_one": "Ergibt {{count}} Datei.",
+      "splitResult_other": "Ergibt {{count}} Dateien.",
+      "splitNothing": "So ergäbe sich nur eine einzige Datei.",
+      "combineTitle": "Dateien zusammenführen",
+      "combineEmpty": "Füge PDFs oder Bilder (JPEG, PNG) hinzu. Sie werden in der angezeigten Reihenfolge zu einem neuen Dokument zusammengeführt.",
+      "combineSummary_one": "Das neue Dokument hat {{count}} Seite.",
+      "combineSummary_other": "Das neue Dokument hat {{count}} Seiten.",
+      "addFiles": "Dateien hinzufügen …",
+      "combine": "Zusammenführen …",
+      "moveUp": "Nach oben",
+      "moveDown": "Nach unten",
+      "remove": "Entfernen"
+    }
+  },
+  "organize": {
+    "label": "Seiten des Dokuments",
+    "toolbar": "Seiten organisieren",
+    "page": "Seite {{page}}",
+    "close": "Zurück zur Ansicht",
+    "pages_one": "{{count}} Seite",
+    "pages_other": "{{count}} Seiten",
+    "selected_one": "{{count}} Seite ausgewählt",
+    "selected_other": "{{count}} Seiten ausgewählt",
+    "selectAll": "Alle Seiten auswählen",
+    "selectNone": "Auswahl aufheben",
+    "rotateLeft": "Gegen den Uhrzeigersinn drehen",
+    "rotateRight": "Im Uhrzeigersinn drehen",
+    "delete": "Seiten löschen",
+    "insertFromFile": "Seiten aus Datei einfügen …",
+    "insertBlank": "Leere Seite einfügen …",
+    "extract": "Seiten extrahieren …",
+    "split": "Dokument teilen …"
   }
 }

@@ -19,6 +19,11 @@ export const IPC = {
   saveFileAs: 'file:save-as',
   settingsGet: 'settings:get',
   settingsSetAuthor: 'settings:set-author',
+  // Phase 3: Quelldateien wählen (PDFs, Bilder) und neue Dokumente speichern
+  pickFiles: 'files:pick',
+  registerDropped: 'files:register-dropped',
+  saveNewFile: 'files:save-new',
+  saveToFolder: 'files:save-to-folder',
   // Renderer → Hauptprozess (send)
   menuState: 'app:menu-state',
   rendererReady: 'app:renderer-ready',
@@ -31,12 +36,46 @@ export const IPC = {
   requestClose: 'app:request-close',
 } as const;
 
+export type FileKind = 'pdf' | 'jpeg' | 'png';
+
 export interface FileInfo {
   fileId: string;
   name: string;
   dir: string;
   size: number;
+  // Art der Datei (nur Quelldateien zum Einfügen und Zusammenführen können Bilder sein)
+  kind?: FileKind;
 }
+
+// Welche Dateien ein Auswahldialog anbietet
+export type PickKind = 'pdf' | 'images' | 'pdf-or-images';
+
+export interface PickResult {
+  files: FileInfo[];
+  // Namen gewählter Dateien, die weder PDF noch JPEG/PNG sind oder sich nicht lesen ließen
+  rejected: string[];
+}
+
+// target-open: Die gewählte Zieldatei ist gerade in einem Tab geöffnet und darf so nicht ersetzt werden.
+export type SaveNewErrorCode = 'cancelled' | 'write-failed' | 'invalid-data' | 'target-open';
+
+// Neues Dokument gespeichert; open ist das Ergebnis des anschließenden Öffnens im Tab (falls gewünscht)
+export type SaveNewResult =
+  | { ok: true; name: string; open: OpenResult | null }
+  | { ok: false; error: SaveNewErrorCode; detail?: string };
+
+export interface NamedBytes {
+  name: string;
+  bytes: Uint8Array;
+}
+
+export type SaveToFolderResult =
+  | { ok: true; folder: string; names: string[] }
+  | { ok: false; error: SaveNewErrorCode; detail?: string };
+
+// Obergrenzen für neue Dokumente über IPC
+export const MAX_NEW_FILES = 1000;
+export const MAX_FILE_NAME = 150;
 
 export type OpenErrorCode = 'not-found' | 'not-a-file' | 'not-pdf' | 'unreadable' | 'cancelled';
 
@@ -66,6 +105,10 @@ export interface MenuState {
   canRedo: boolean;
   activeDirty: boolean;
   commentToolsVisible: boolean;
+  // Phase 3: Raster „Seiten organisieren“ aktiv, Seiten zusammenstellen bzw. extrahieren erlaubt
+  organizeMode: boolean;
+  canAssemble: boolean;
+  canExtract: boolean;
 }
 
 export type SaveErrorCode = 'changed-externally' | 'cancelled' | 'write-failed' | 'unknown-file' | 'invalid-data';

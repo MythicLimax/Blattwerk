@@ -1,8 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { FileInfo, OpenResult } from '../../shared/ipc';
+import type { FileInfo, FileKind, OpenResult, PickKind } from '../../shared/ipc';
 import { looksLikePdf, validateReadRange } from '../../shared/validate';
+
+// Erkennt die Dateiart am Inhalt, nicht an der Endung.
+function detectKind(head: Uint8Array): FileKind | null {
+  if (looksLikePdf(head)) return 'pdf';
+  if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) return 'png';
+  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return 'jpeg';
+  return null;
+}
+
+function accepts(accept: PickKind | 'pdf-only', kind: FileKind): boolean {
+  if (accept === 'pdf-only' || accept === 'pdf') return kind === 'pdf';
+  if (accept === 'images') return kind !== 'pdf';
+  return true;
+}
 
 interface OpenFile {
   info: FileInfo;
@@ -25,7 +39,8 @@ export class FileChangedError extends Error {
 export class FileRegistry {
   #files = new Map<string, OpenFile>();
 
-  async open(filePath: string, ownerId: number): Promise<OpenResult> {
+  // Öffnet eine Datei zum Lesen. Standard: nur PDFs (Tabs). Quelldateien zum Einfügen dürfen auch Bilder sein.
+  async open(filePath: string, ownerId: number, accept: PickKind | 'pdf-only' = 'pdf-only'): Promise<OpenResult> {
     const name = path.basename(filePath);
     let stat;
     try {
@@ -43,10 +58,12 @@ export class FileRegistry {
       return { ok: false, error: 'unreadable', name };
     }
 
+    let kind: FileKind | null;
     try {
       const head = new Uint8Array(1024);
       const { bytesRead } = await handle.read(head, 0, head.length, 0);
-      if (!looksLikePdf(head.subarray(0, bytesRead))) {
+      kind = detectKind(head.subarray(0, bytesRead));
+      if (!kind || !accepts(accept, kind)) {
         await handle.close();
         return { ok: false, error: 'not-pdf', name };
       }
@@ -63,7 +80,7 @@ export class FileRegistry {
       await handle.close().catch(() => undefined);
       return { ok: false, error: 'unreadable', name };
     }
-    const info: FileInfo = { fileId: randomUUID(), name, dir: path.dirname(filePath), size: opened.size };
+    const info: FileInfo = { fileId: randomUUID(), name, dir: path.dirname(filePath), size: opened.size, kind };
     this.#files.set(info.fileId, { info, path: filePath, handle, ownerId, mtimeMs: opened.mtimeMs });
     return { ok: true, file: info };
   }
@@ -107,6 +124,17 @@ export class FileRegistry {
     if (!file || file.ownerId !== ownerId) return { ok: false, error: 'not-found' };
     await this.close(fileId, ownerId);
     return this.open(newPath ?? file.path, ownerId);
+  }
+
+  // true, wenn diese Datei (gleicher Pfad) gerade in irgendeinem Tab geöffnet ist
+  isOpenPath(filePath: string): boolean {
+    const normalize = (p: string) => {
+      const resolved = path.resolve(p);
+      // macOS und Windows unterscheiden Groß- und Kleinschreibung in Dateinamen normalerweise nicht
+      return process.platform === 'linux' ? resolved : resolved.toLowerCase();
+    };
+    const wanted = normalize(filePath);
+    return [...this.#files.values()].some((file) => normalize(file.path) === wanted);
   }
 
   pathOf(fileId: string, ownerId: number): string | null {

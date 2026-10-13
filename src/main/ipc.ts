@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import {
   IPC,
@@ -6,12 +7,25 @@ import {
   type AppSettings,
   type MenuState,
   type OpenResult,
+  type PickKind,
+  type PickResult,
   type PrintRequest,
   type RecentFile,
+  type SaveNewResult,
   type SaveResult,
+  type SaveToFolderResult,
 } from '../shared/ipc';
 import { PRODUCT_NAME } from '../shared/product';
-import { isFileId, isPdfBytes, isSafeLocalPath, validateAuthorName, validateMenuState } from '../shared/validate';
+import {
+  isFileId,
+  isPdfBytes,
+  isPickKind,
+  isSafeLocalPath,
+  sanitizeFileName,
+  validateAuthorName,
+  validateMenuState,
+  validateNamedPdfs,
+} from '../shared/validate';
 import { atomicWrite } from './files/atomic-write';
 import type { FileRegistry } from './files/file-registry';
 import type { RecentFiles } from './files/recent-files';
@@ -45,6 +59,35 @@ export async function showOpenDialog(win: BrowserWindow | null): Promise<string[
   };
   const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
   return result.canceled ? [] : result.filePaths;
+}
+
+function pickFilters(kind: PickKind): Electron.FileFilter[] {
+  const pdf = { name: t('dialog.filterPdf'), extensions: ['pdf'] };
+  const images = { name: t('dialog.filterImages'), extensions: ['jpg', 'jpeg', 'png'] };
+  if (kind === 'pdf') return [pdf];
+  if (kind === 'images') return [images];
+  return [{ name: t('dialog.filterPdfImages'), extensions: ['pdf', 'jpg', 'jpeg', 'png'] }, pdf, images];
+}
+
+const withPdfExtension = (filePath: string) => (path.extname(filePath).toLowerCase() === '.pdf' ? filePath : `${filePath}.pdf`);
+
+async function exists(filePath: string): Promise<boolean> {
+  try {
+    await fsp.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Freier Dateiname im Ordner: „Name.pdf“, sonst „Name (2).pdf“, „Name (3).pdf“ …
+async function uniquePath(dir: string, fileName: string): Promise<string> {
+  const base = fileName.replace(/\.pdf$/i, '');
+  for (let n = 1; n < 10000; n++) {
+    const candidate = path.join(dir, n === 1 ? fileName : `${base} (${n}).pdf`);
+    if (!(await exists(candidate))) return candidate;
+  }
+  throw new Error('no-free-name');
 }
 
 export function registerIpc(ctx: IpcContext): void {
@@ -167,6 +210,88 @@ export function registerIpc(ctx: IpcContext): void {
     if (!reopened.ok) return { ok: false, error: 'write-failed', detail: reopened.error };
     await ctx.onSavedAs(target);
     return { ok: true, file: reopened.file };
+  });
+
+  // Quelldateien zum Einfügen oder Zusammenführen wählen (PDFs und/oder JPEG/PNG). Öffnet keinen Tab.
+  handle(IPC.pickFiles, async (event, kind: unknown): Promise<PickResult> => {
+    const win = windowOf(event);
+    if (!win || !isPickKind(kind)) return { files: [], rejected: [] };
+    const result = await dialog.showOpenDialog(win, {
+      title: t(`dialog.pickTitle.${kind}`),
+      properties: ['openFile', 'multiSelections'],
+      filters: pickFilters(kind),
+    });
+    const picked: PickResult = { files: [], rejected: [] };
+    if (result.canceled) return picked;
+    for (const filePath of result.filePaths) {
+      const opened = await ctx.files.open(filePath, event.sender.id, kind);
+      if (opened.ok) picked.files.push(opened.file);
+      else picked.rejected.push(path.basename(filePath));
+    }
+    return picked;
+  });
+
+  // Per Drag & Drop abgelegte Quelldatei anmelden (Pfad kommt aus dem Preload, nur absolut und lokal)
+  handle(IPC.registerDropped, async (event, filePath: unknown): Promise<OpenResult> => {
+    if (!isSafeLocalPath(filePath, process.platform)) return { ok: false, error: 'unreadable' };
+    return ctx.files.open(filePath, event.sender.id, 'pdf-or-images');
+  });
+
+  // Neues Dokument speichern (Zusammenführen, Extrahieren, Bilder → PDF). Den Ort wählt der Nutzer im Dialog.
+  handle(
+    IPC.saveNewFile,
+    async (event, bytes: unknown, suggestedName: unknown, referenceFileId: unknown, openAfter: unknown): Promise<SaveNewResult> => {
+      const win = windowOf(event);
+      if (!win) return { ok: false, error: 'cancelled' };
+      if (!isPdfBytes(bytes)) return { ok: false, error: 'invalid-data' };
+      const reference = isFileId(referenceFileId) ? ctx.files.pathOf(referenceFileId, event.sender.id) : null;
+      const dir = reference ? path.dirname(reference) : app.getPath('documents');
+      const result = await dialog.showSaveDialog(win, {
+        title: t('dialog.saveNewTitle'),
+        defaultPath: path.join(dir, sanitizeFileName(suggestedName)),
+        filters: [{ name: t('dialog.filterPdf'), extensions: ['pdf'] }],
+        properties: ['createDirectory', 'showOverwriteConfirmation'],
+      });
+      if (result.canceled || !result.filePath) return { ok: false, error: 'cancelled' };
+      const target = withPdfExtension(result.filePath);
+      if (ctx.files.isOpenPath(target)) return { ok: false, error: 'target-open' };
+      try {
+        await atomicWrite(target, bytes);
+      } catch (error) {
+        return { ok: false, error: 'write-failed', detail: String(error) };
+      }
+      const open = openAfter === true ? await ctx.openPathFor(win, target) : null;
+      return { ok: true, name: path.basename(target), open };
+    },
+  );
+
+  // Mehrere neue Dokumente in einen gewählten Ordner (Teilen, Extrahieren als einzelne Dateien).
+  // Vorhandene Dateien werden nie überschrieben; bei gleichem Namen kommt eine Nummer dazu.
+  handle(IPC.saveToFolder, async (event, files: unknown, referenceFileId: unknown): Promise<SaveToFolderResult> => {
+    const win = windowOf(event);
+    const valid = validateNamedPdfs(files);
+    if (!win) return { ok: false, error: 'cancelled' };
+    if (!valid) return { ok: false, error: 'invalid-data' };
+    const reference = isFileId(referenceFileId) ? ctx.files.pathOf(referenceFileId, event.sender.id) : null;
+    const result = await dialog.showOpenDialog(win, {
+      title: t('dialog.chooseFolderTitle'),
+      buttonLabel: t('dialog.chooseFolderButton'),
+      defaultPath: reference ? path.dirname(reference) : app.getPath('documents'),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    const folder = result.filePaths[0];
+    if (result.canceled || !folder) return { ok: false, error: 'cancelled' };
+    const names: string[] = [];
+    try {
+      for (const file of valid) {
+        const target = await uniquePath(folder, sanitizeFileName(file.name));
+        await atomicWrite(target, file.bytes);
+        names.push(path.basename(target));
+      }
+    } catch (error) {
+      return { ok: false, error: 'write-failed', detail: `${names.length}/${valid.length}: ${String(error)}` };
+    }
+    return { ok: true, folder: path.basename(folder), names };
   });
 
   handle(IPC.settingsGet, () => ctx.getSettings());

@@ -76,7 +76,7 @@ describe('Menü und Tastenkürzel', () => {
     for (const platform of ['darwin', 'win32'] as const) {
       const template = buildMenuTemplate({
         platform,
-        state: { hasDocument: true, canPrint: true, viewMode: 'continuous', sidebarVisible: true, rightPanelVisible: false, tabCount: 2, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, },
+        state: { hasDocument: true, canPrint: true, viewMode: 'continuous', sidebarVisible: true, rightPanelVisible: false, tabCount: 2, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true },
         recent: [],
         devTools: false,
         sendCommand: () => undefined,
@@ -103,7 +103,7 @@ describe('Menü und Tastenkürzel', () => {
       clearRecent: () => undefined,
       setDefaultApp: () => undefined,
     };
-    const state = { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, };
+    const state = { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true };
     const flatten = (items: Electron.MenuItemConstructorOptions[]): Electron.MenuItemConstructorOptions[] =>
       items.flatMap((item) => [item, ...(Array.isArray(item.submenu) ? flatten(item.submenu) : [])]);
 
@@ -121,7 +121,7 @@ describe('Menü und Tastenkürzel', () => {
     const { buildMenuTemplate } = await import('../../src/main/menu');
     const template = buildMenuTemplate({
       platform: 'win32',
-      state: { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, tabCount: 0, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, },
+      state: { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, tabCount: 0, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true },
       recent: [{ path: 'C:\\A & B\\AGB & Datenschutz.pdf', name: 'AGB & Datenschutz.pdf', dir: 'C:\\A & B', openedAt: 1 }],
       devTools: false,
       sendCommand: () => undefined,

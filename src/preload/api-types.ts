@@ -4,11 +4,16 @@ import type {
   AppInfo,
   AppSettings,
   MenuState,
+  NamedBytes,
   OpenResult,
+  PickKind,
+  PickResult,
   PrintRequest,
   PrintResult,
   RecentFile,
+  SaveNewResult,
   SaveResult,
+  SaveToFolderResult,
 } from '../shared/ipc';
 
 export interface BlattwerkApi {
@@ -28,6 +33,12 @@ export interface BlattwerkApi {
   // Speichert neue Bytes über die geöffnete Datei. force überschreibt auch bei Änderungen von außen.
   saveFile(fileId: string, bytes: Uint8Array, force?: boolean): Promise<SaveResult>;
   saveFileAs(fileId: string, bytes: Uint8Array): Promise<SaveResult>;
+  // Quelldateien (PDFs, Bilder) wählen bzw. per Drag & Drop anmelden; gelesen wird danach über readRange.
+  pickFiles(kind: PickKind): Promise<PickResult>;
+  registerDroppedFile(file: File): Promise<OpenResult>;
+  // Neues Dokument über den Sichern-Dialog speichern, auf Wunsch danach im Tab öffnen
+  saveNewFile(bytes: Uint8Array, suggestedName: string, referenceFileId: string | null, openAfter: boolean): Promise<SaveNewResult>;
+  saveFilesToFolder(files: NamedBytes[], referenceFileId: string | null): Promise<SaveToFolderResult>;
   getSettings(): Promise<AppSettings>;
   setAuthorName(name: string): Promise<AppSettings>;
   confirmClose(): void;

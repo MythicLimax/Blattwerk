@@ -3,14 +3,19 @@ import type { FileInfo, OpenResult, ViewMode } from '../../shared/ipc';
 import { api } from '../api';
 import { computeChanges, hasChanges } from '../features/annotations/changes';
 import { deleteAnnotation, loadAnnotations } from '../features/annotations/controller';
+import { deletePages, targetPages } from '../features/pages/actions';
+import { runPageCommand } from '../features/pages/commands';
 import { printDocument } from '../features/print/print-service';
 import { layoutForMode } from '../features/viewer/view-modes';
 import { t } from '../i18n';
-import { isDirty, tabAnnotations, useAnnotations } from '../state/annotations-store';
+import { tabAnnotations, useAnnotations, type TabAnnotations } from '../state/annotations-store';
+import { isTabDirty } from '../state/dirty';
+import { historyDirty, tabHistory, useHistory, type DocState } from '../state/history-store';
+import type { PageOperation } from '../../shared/pages';
 import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
 import { useUi, type PromptAnswer } from '../state/ui-store';
 import { openTemporary, startLoading } from './document-loader';
-import { saveAnnotationChanges } from './pdfium-client';
+import { PdfiumClientError, processDocument, saveAnnotationChanges } from './pdfium-client';
 import { pdfjs } from './pdfjs';
 import { createRuntime, destroyRuntime, dispatchFind, getRuntime, setRuntimeDocument } from './runtime';
 
@@ -39,10 +44,18 @@ function loadErrorKey(error: unknown): string {
 const tabExists = (tabId: string) => useDocuments.getState().tabs.some((tab) => tab.id === tabId);
 const findTab = (tabId: string) => useDocuments.getState().tabs.find((tab) => tab.id === tabId);
 
+interface LoadOptions {
+  // Stand aus dem Arbeitsspeicher statt der Datei
+  data?: Uint8Array;
+  // Gesicherter Kommentarzustand dieses Stands (sonst aus dem Dokument einlesen)
+  annotations?: TabAnnotations | null;
+}
+
 // Lädt eine Datei in einen (neuen oder vorhandenen) Tab. Mit bekanntem Kennwort entfällt die Abfrage.
-async function loadIntoTab(tabId: string, file: FileInfo, knownPassword: string | null): Promise<void> {
+async function loadIntoTab(tabId: string, file: FileInfo, knownPassword: string | null, options: LoadOptions = {}): Promise<void> {
   try {
     const handle = await startLoading(file, {
+      data: options.data,
       password: knownPassword,
       onPassword: (reason, submit) => {
         passwordCallbacks.set(tabId, submit);
@@ -82,8 +95,15 @@ async function loadIntoTab(tabId: string, file: FileInfo, knownPassword: string 
       title,
       canPrint: permissions === null || permissions.has(pdfjs.PermissionFlag.PRINT),
       canAnnotate: permissions === null || permissions.has(pdfjs.PermissionFlag.MODIFY_ANNOTATIONS),
+      // Seiten zusammenstellen erlaubt „Ändern“ oder (ab 128 Bit) das eigene Recht „Zusammenstellen“
+      canAssemble:
+        permissions === null ||
+        permissions.has(pdfjs.PermissionFlag.MODIFY_CONTENTS) ||
+        permissions.has(pdfjs.PermissionFlag.ASSEMBLE),
+      canExtract: permissions === null || permissions.has(pdfjs.PermissionFlag.COPY),
     });
-    void loadAnnotations(tabId);
+    if (options.annotations) useAnnotations.getState().restore(tabId, options.annotations);
+    else void loadAnnotations(tabId);
   } catch (error) {
     if (!tabExists(tabId)) return;
     useDocuments.getState().updateTab(tabId, {
@@ -118,6 +138,7 @@ export async function handleOpenResult(result: OpenResult): Promise<void> {
   const tabId = crypto.randomUUID();
   documents.addTab({ id: tabId, fileId: file.fileId, name: file.name, dir: file.dir, size: file.size });
   useAnnotations.getState().init(tabId);
+  useHistory.getState().reset(tabId);
   await loadIntoTab(tabId, file, null);
 }
 
@@ -164,6 +185,7 @@ function closeTabNow(tabId: string): void {
   void api.closeFile(tab.fileId);
   useDocuments.getState().removeTab(tabId);
   useAnnotations.getState().drop(tabId);
+  useHistory.getState().drop(tabId);
   if (ui.propertiesTabId === tabId) ui.openProperties(null);
   // „Gehe zu Seite“ gilt immer dem aktiven Tab; nach dem Schließen ist das ein anderer.
   ui.setGoToPageOpen(false);
@@ -171,9 +193,10 @@ function closeTabNow(tabId: string): void {
 
 // Schließt einen Tab. Bei ungespeicherten Änderungen wird vorher gefragt. Liefert false bei Abbruch.
 export async function closeTab(tabId: string): Promise<boolean> {
+  commitPendingEdits();
   const tab = findTab(tabId);
   if (!tab) return true;
-  if (isDirty(tabAnnotations(tabId))) {
+  if (isTabDirty(tabId)) {
     useDocuments.getState().setActive(tabId);
     const answer = await ask('unsaved', tab);
     if (answer === 'cancel') return false;
@@ -185,7 +208,8 @@ export async function closeTab(tabId: string): Promise<boolean> {
 
 // Fenster schließen oder App beenden: alle Tabs mit Änderungen nacheinander abfragen.
 export async function handleCloseRequest(): Promise<void> {
-  const dirtyTabs = useDocuments.getState().tabs.filter((tab) => isDirty(tabAnnotations(tab.id)));
+  commitPendingEdits();
+  const dirtyTabs = useDocuments.getState().tabs.filter((tab) => isTabDirty(tab.id));
   for (const tab of dirtyTabs) {
     useDocuments.getState().setActive(tab.id);
     const answer = await ask('unsaved', tab);
@@ -203,6 +227,7 @@ async function reloadTab(tabId: string, file: FileInfo): Promise<void> {
   const password = getRuntime(tabId)?.password ?? null;
   destroyRuntime(tabId);
   useAnnotations.getState().init(tabId);
+  useHistory.getState().reset(tabId);
   useDocuments.getState().updateTab(tabId, {
     fileId: file.fileId,
     name: file.name,
@@ -216,12 +241,15 @@ async function reloadTab(tabId: string, file: FileInfo): Promise<void> {
 
 // Speichert die Kommentare. „save“ überschreibt die Datei (inkrementell), „saveAs“ fragt nach einem neuen Namen.
 export async function saveTab(tabId: string, mode: 'save' | 'saveAs'): Promise<boolean> {
+  commitPendingEdits();
+  await settled(tabId);
   const tab = findTab(tabId);
   const runtime = getRuntime(tabId);
   const annotations = tabAnnotations(tabId);
-  if (!tab || tab.status !== 'ready' || !runtime?.pdf || !annotations || tab.saving) return false;
+  if (!tab || tab.status !== 'ready' || !runtime?.pdf || !annotations || tab.saving || tab.working) return false;
   const changes = computeChanges(annotations.items, annotations.originals);
-  if (mode === 'save' && !hasChanges(changes)) {
+  // Nichts zu schreiben: keine Kommentaränderungen und der angezeigte Stand ist die Datei auf der Platte
+  if (mode === 'save' && !hasChanges(changes) && !historyDirty(tabHistory(tabId))) {
     useAnnotations.getState().markSaved(tabId);
     return true;
   }
@@ -249,6 +277,152 @@ export async function saveTab(tabId: string, mode: 'save' | 'saveAs'): Promise<b
   } finally {
     if (tabExists(tabId)) useDocuments.getState().updateTab(tabId, { saving: false });
   }
+}
+
+const fileOf = (tab: TabState): FileInfo => ({ fileId: tab.fileId, name: tab.name, dir: tab.dir, size: tab.size });
+
+// Zeigt einen Dokumentstand an: lädt ihn (Datei oder Arbeitsspeicher) neu in den Tab.
+async function showState(tabId: string, state: DocState): Promise<void> {
+  const tab = findTab(tabId);
+  if (!tab) return;
+  const password = getRuntime(tabId)?.password ?? null;
+  destroyRuntime(tabId);
+  useAnnotations.getState().init(tabId);
+  useDocuments.getState().updateTab(tabId, {
+    status: 'loading',
+    search: EMPTY_SEARCH,
+    currentPage: state.page,
+    pageSelection: state.selection,
+  });
+  await loadIntoTab(tabId, fileOf(tab), password, { data: state.bytes ?? undefined, annotations: state.annotations });
+}
+
+// Kommentarzustand beim Verlassen eines Stands: ohne offenen Editor und ohne Auswahl
+function leavingAnnotations(tabId: string, keepRedo: boolean): TabAnnotations | null {
+  const annotations = tabAnnotations(tabId);
+  if (!annotations) return null;
+  return { ...annotations, redo: keepRedo ? annotations.redo : [], editingId: null, selectedId: null };
+}
+
+function pageErrorMessage(error: unknown): string {
+  const code = error instanceof PdfiumClientError ? error.code : 'failed';
+  return t(`errors.pages.${code}`);
+}
+
+export interface AfterOperation {
+  // Seite, die danach angezeigt wird (1-basiert)
+  page?: number;
+  // Auswahl im Raster danach (0-basiert)
+  selection?: number[];
+}
+
+// Je Tab laufen Seitenoperationen, Rückgängig und Wiederholen nacheinander. Rückgängig/Wiederholen
+// warten auf eine laufende Operation statt verloren zu gehen (z. B. zweimal schnell Cmd+Z).
+const tabQueues = new Map<string, Promise<unknown>>();
+
+// Solange die Warteschlange eines Tabs nicht leer ist, gilt er als „wird bearbeitet“ (Oberfläche gesperrt).
+function enqueue<T>(tabId: string, task: () => Promise<T>): Promise<T> {
+  const previous = tabQueues.get(tabId) ?? Promise.resolve();
+  useDocuments.getState().updateTab(tabId, { working: true });
+  const next = previous.catch(() => undefined).then(task);
+  tabQueues.set(tabId, next);
+  void next
+    .catch(() => undefined)
+    .finally(() => {
+      if (tabQueues.get(tabId) !== next) return;
+      tabQueues.delete(tabId);
+      if (tabExists(tabId)) useDocuments.getState().updateTab(tabId, { working: false });
+    });
+  return next;
+}
+
+// Wartet, bis laufende Seitenoperationen eines Tabs fertig sind (z. B. vor dem Speichern).
+async function settled(tabId: string): Promise<void> {
+  for (let queue = tabQueues.get(tabId); queue; queue = tabQueues.get(tabId)) await queue.catch(() => undefined);
+}
+
+// Führt Seitenoperationen aus. Ungespeicherte Kommentare werden dabei ins Dokument übernommen.
+// Das Ergebnis ist ein neuer Stand im Arbeitsspeicher; die Datei ändert sich erst beim Speichern.
+export function applyPageOperations(tabId: string, operations: PageOperation[], after: AfterOperation = {}): Promise<boolean> {
+  commitPendingEdits();
+  // Während einer laufenden Operation ist die Oberfläche gesperrt; weitere Seitenoperationen entfallen.
+  if (findTab(tabId)?.working) return Promise.resolve(false);
+  return enqueue(tabId, () => runPageOperations(tabId, operations, after));
+}
+
+async function runPageOperations(tabId: string, operations: PageOperation[], after: AfterOperation): Promise<boolean> {
+  const tab = findTab(tabId);
+  const runtime = getRuntime(tabId);
+  if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf || operations.length === 0) return false;
+  if (!tab.canAssemble) {
+    useUi.getState().notify(t('errors.pages.notAllowed'));
+    return false;
+  }
+  const pdf = runtime.pdf;
+  try {
+    const annotations = tabAnnotations(tabId);
+    const changes = annotations ? computeChanges(annotations.items, annotations.originals) : { upserts: [], deletions: [] };
+    const bytes = await processDocument(await pdf.getData(), runtime.password, changes, operations);
+    if (getRuntime(tabId)?.pdf !== pdf) return false;
+    const page = Math.max(1, after.page ?? tab.currentPage);
+    const next = { bytes, annotations: null, page, selection: after.selection ?? [] };
+    const leaving = { annotations: leavingAnnotations(tabId, false), page: tab.currentPage, selection: tab.pageSelection };
+    useHistory.getState().push(tabId, leaving, next);
+    await showState(tabId, next);
+    return true;
+  } catch (error) {
+    useUi.getState().notify(pageErrorMessage(error), errorMessage(error));
+    return false;
+  }
+}
+
+// Wechselt zu einem anderen Stand im Verlauf (Rückgängig/Wiederholen von Seitenoperationen).
+async function goToState(tabId: string, index: number): Promise<void> {
+  const tab = findTab(tabId);
+  if (!tab || tab.status !== 'ready' || tab.saving) return;
+  const leaving = { annotations: leavingAnnotations(tabId, true), page: tab.currentPage, selection: tab.pageSelection };
+  const state = useHistory.getState().moveTo(tabId, index, leaving);
+  if (state) await showState(tabId, state);
+}
+
+// Rückgängig: zuerst Kommentarbefehle des aktuellen Stands, dann den vorherigen Dokumentstand.
+// Entschieden wird erst, wenn eine laufende Operation fertig ist.
+export function undoTab(tabId: string): void {
+  // Ohne laufende Operation wirkt Rückgängig für Kommentare sofort (ohne Sperre der Oberfläche).
+  if (!tabQueues.has(tabId) && tabAnnotations(tabId)?.undo.length) {
+    useAnnotations.getState().undo(tabId);
+    return;
+  }
+  void enqueue(tabId, async () => {
+    if (tabAnnotations(tabId)?.undo.length) {
+      useAnnotations.getState().undo(tabId);
+      return;
+    }
+    const history = tabHistory(tabId);
+    if (history && history.cursor > 0) await goToState(tabId, history.cursor - 1);
+  });
+}
+
+export function redoTab(tabId: string): void {
+  if (!tabQueues.has(tabId) && tabAnnotations(tabId)?.redo.length) {
+    useAnnotations.getState().redo(tabId);
+    return;
+  }
+  void enqueue(tabId, async () => {
+    if (tabAnnotations(tabId)?.redo.length) {
+      useAnnotations.getState().redo(tabId);
+      return;
+    }
+    const history = tabHistory(tabId);
+    if (history && history.cursor < history.states.length - 1) await goToState(tabId, history.cursor + 1);
+  });
+}
+
+// Offene Texteingaben (Kommentartext, Textfeld auf der Seite) übernehmen, bevor das Dokument weiterverarbeitet,
+// gespeichert, gedruckt oder geschlossen wird. Die Felder übernehmen ihren Text beim Verlassen.
+export function commitPendingEdits(): void {
+  const element = document.activeElement;
+  if (element instanceof HTMLTextAreaElement) element.blur();
 }
 
 function isEditableFocus(): boolean {
@@ -282,6 +456,7 @@ export function goToPage(tab: TabState, pageNumber: number): void {
 }
 
 export async function printTab(tab: TabState): Promise<void> {
+  commitPendingEdits();
   const runtime = getRuntime(tab.id);
   const ui = useUi.getState();
   if (!runtime?.pdf || ui.print) return;
@@ -353,6 +528,7 @@ export function executeCommand(command: CommandId): void {
   }
   if (command === 'window.nextTab') return switchTab(1);
   if (command === 'window.previousTab') return switchTab(-1);
+  if (runPageCommand(command, getActiveTab())) return;
 
   const tab = getActiveTab();
   if (!tab) return;
@@ -379,10 +555,17 @@ export function executeCommand(command: CommandId): void {
     case 'edit.redo':
       // In Eingabefeldern wirkt Rückgängig auf den Text, sonst auf die Kommentare.
       if (isEditableFocus()) document.execCommand(command === 'edit.undo' ? 'undo' : 'redo');
-      else if (command === 'edit.undo') useAnnotations.getState().undo(tab.id);
-      else useAnnotations.getState().redo(tab.id);
+      else if (command === 'edit.undo') undoTab(tab.id);
+      else redoTab(tab.id);
       return;
     case 'edit.delete': {
+      // Im Raster „Seiten organisieren“ löscht Entfernen die ausgewählten Seiten.
+      if (tab.mode === 'organize') {
+        if (tab.canAssemble && tab.pageSelection.length > 0 && !tab.working && !isEditableFocus()) {
+          void deletePages(tab, targetPages(tab));
+        }
+        return;
+      }
       const selected = tabAnnotations(tab.id)?.selectedId;
       if (selected && tab.canAnnotate && !isEditableFocus()) deleteAnnotation(tab.id, selected);
       return;

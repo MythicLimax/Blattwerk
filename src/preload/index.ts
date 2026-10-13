@@ -15,18 +15,19 @@ function subscribe<T>(channel: string, map: (payload: unknown) => T | null, list
   };
 }
 
+// Pfad einer abgelegten Datei; der Renderer sieht ihn nie.
+function pathOf(file: File): string {
+  try {
+    return webUtils.getPathForFile(file);
+  } catch {
+    return '';
+  }
+}
+
 const api: BlattwerkApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
   openFileDialog: () => ipcRenderer.invoke(IPC.openDialog),
-  openDroppedFile: (file: File) => {
-    let filePath: string;
-    try {
-      filePath = webUtils.getPathForFile(file);
-    } catch {
-      filePath = '';
-    }
-    return ipcRenderer.invoke(IPC.openDropped, filePath);
-  },
+  openDroppedFile: (file: File) => ipcRenderer.invoke(IPC.openDropped, pathOf(file)),
   readRange: (fileId, begin, end) => ipcRenderer.invoke(IPC.readRange, fileId, begin, end),
   closeFile: (fileId) => ipcRenderer.invoke(IPC.closeFile, fileId),
   recent: {
@@ -38,6 +39,11 @@ const api: BlattwerkApi = {
   print: (request) => ipcRenderer.invoke(IPC.print, request),
   saveFile: (fileId, bytes, force) => ipcRenderer.invoke(IPC.saveFile, fileId, bytes, force === true),
   saveFileAs: (fileId, bytes) => ipcRenderer.invoke(IPC.saveFileAs, fileId, bytes),
+  pickFiles: (kind) => ipcRenderer.invoke(IPC.pickFiles, kind),
+  registerDroppedFile: (file: File) => ipcRenderer.invoke(IPC.registerDropped, pathOf(file)),
+  saveNewFile: (bytes, name, referenceFileId, openAfter) =>
+    ipcRenderer.invoke(IPC.saveNewFile, bytes, name, referenceFileId, openAfter === true),
+  saveFilesToFolder: (files, referenceFileId) => ipcRenderer.invoke(IPC.saveToFolder, files, referenceFileId),
   getSettings: () => ipcRenderer.invoke(IPC.settingsGet),
   setAuthorName: (name) => ipcRenderer.invoke(IPC.settingsSetAuthor, name),
   confirmClose: () => ipcRenderer.send(IPC.closeConfirmed),

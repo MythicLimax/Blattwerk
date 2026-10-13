@@ -1,5 +1,5 @@
 // Prüfungen für Daten, die über IPC aus dem Renderer kommen. Der Renderer gilt als nicht vertrauenswürdig.
-import { MAX_READ_CHUNK, type MenuState, type ViewMode } from './ipc';
+import { MAX_FILE_NAME, MAX_NEW_FILES, MAX_READ_CHUNK, type MenuState, type NamedBytes, type PickKind, type ViewMode } from './ipc';
 
 const VIEW_MODES: readonly ViewMode[] = ['single', 'continuous', 'two-page', 'two-page-continuous'];
 
@@ -27,7 +27,7 @@ export function validateMenuState(value: unknown): MenuState | null {
   if (typeof value !== 'object' || value === null) return null;
   const v = value as Record<string, unknown>;
   const bool = (x: unknown) => typeof x === 'boolean';
-  const flags = ['hasDocument', 'canPrint', 'sidebarVisible', 'rightPanelVisible', 'canUndo', 'canRedo', 'activeDirty', 'commentToolsVisible'];
+  const flags = ['hasDocument', 'canPrint', 'sidebarVisible', 'rightPanelVisible', 'canUndo', 'canRedo', 'activeDirty', 'commentToolsVisible', 'organizeMode', 'canAssemble', 'canExtract'];
   if (!flags.every((key) => bool(v[key]))) return null;
   if (!isNonNegativeInt(v.tabCount) || !isNonNegativeInt(v.dirtyCount)) return null;
   if (v.viewMode !== null && !VIEW_MODES.includes(v.viewMode as ViewMode)) return null;
@@ -43,12 +43,50 @@ export function validateMenuState(value: unknown): MenuState | null {
     canRedo: v.canRedo as boolean,
     activeDirty: v.activeDirty as boolean,
     commentToolsVisible: v.commentToolsVisible as boolean,
+    organizeMode: v.organizeMode as boolean,
+    canAssemble: v.canAssemble as boolean,
+    canExtract: v.canExtract as boolean,
   };
 }
 
 // Neuer Dateiinhalt aus dem Renderer: Bytes, nicht leer, mit PDF-Kopf, höchstens 2 GB.
 export function isPdfBytes(value: unknown): value is Uint8Array {
   return value instanceof Uint8Array && value.length > 0 && value.length < 2 ** 31 && looksLikePdf(value.subarray(0, 1024));
+}
+
+// Macht aus einem vorgeschlagenen Namen einen sicheren Dateinamen ohne Pfadanteile, mit Endung .pdf.
+// Entfernt Trennzeichen und in Windows verbotene Zeichen, vermeidet reservierte Gerätenamen (CON, NUL, COM1 …).
+export function sanitizeFileName(value: unknown, fallback = 'Dokument'): string {
+  const raw = typeof value === 'string' ? value : '';
+  let base = raw
+    .replace(/\.pdf$/i, '')
+    // eslint-disable-next-line no-control-regex -- Steuerzeichen sind in Dateinamen nicht erlaubt
+    .replace(/[\u0000-\u001f\u007f/\\:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[.\s]+|[.\s]+$/g, '');
+  if (!base) base = fallback;
+  if (/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i.test(base)) base = `_${base}`;
+  const max = MAX_FILE_NAME - '.pdf'.length;
+  if (base.length > max) base = base.slice(0, max).trim();
+  return `${base}.pdf`;
+}
+
+export function isPickKind(value: unknown): value is PickKind {
+  return value === 'pdf' || value === 'images' || value === 'pdf-or-images';
+}
+
+// Liste neuer Dateien für „in Ordner speichern“: 1 bis MAX_NEW_FILES Einträge mit Namen und PDF-Bytes.
+export function validateNamedPdfs(value: unknown): NamedBytes[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_NEW_FILES) return null;
+  const result: NamedBytes[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) return null;
+    const { name, bytes } = entry as { name: unknown; bytes: unknown };
+    if (typeof name !== 'string' || name.length > 1000 || !isPdfBytes(bytes)) return null;
+    result.push({ name, bytes });
+  }
+  return result;
 }
 
 export function validateAuthorName(value: unknown): string | null {

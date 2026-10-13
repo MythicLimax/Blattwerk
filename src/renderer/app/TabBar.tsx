@@ -1,7 +1,9 @@
 import { FileText, Loader2, Lock, TriangleAlert, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { closeTab } from '../engine/session';
-import { isDirty, useAnnotations } from '../state/annotations-store';
+import { useAnnotations } from '../state/annotations-store';
+import { isDirtyState } from '../state/dirty';
+import { useHistory } from '../state/history-store';
 import { useDocuments, type TabState } from '../state/documents-store';
 import styles from './TabBar.module.css';
 
@@ -25,6 +27,7 @@ export function TabBar() {
   const activeId = useDocuments((s) => s.activeId);
   const setActive = useDocuments((s) => s.setActive);
   const annotationTabs = useAnnotations((s) => s.tabs);
+  const historyTabs = useHistory((s) => s.tabs);
 
   return (
     <div className={styles.bar} role="tablist" aria-label={t('tabs.label')} data-testid="tab-bar">
@@ -49,7 +52,7 @@ export function TabBar() {
           >
             <TabIcon tab={tab} />
             <span className={styles.name}>{tab.name}</span>
-            {isDirty(annotationTabs[tab.id]) && (
+            {isDirtyState(annotationTabs[tab.id], historyTabs[tab.id]) && (
               <span className={styles.dirty} title={t('tabs.unsaved')} aria-label={t('tabs.unsaved')} data-testid="tab-dirty" />
             )}
             <button
