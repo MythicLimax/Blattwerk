@@ -17,6 +17,8 @@ import { STAMP_STYLES, toPdfDate } from '../../shared/annotations';
 import type { FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, TextSearchOptions } from '../../shared/redaction';
+import type { ContentOperation, PageObjects } from '../../shared/content';
+import { applyContentOperation, listPageObjects } from './content';
 import { applyFormValues } from './forms';
 import { applyRedactions } from './redact';
 import { findText } from './text-search';
@@ -107,11 +109,12 @@ export class PdfiumEngine {
     operations: PageOperation[],
     options: SaveOptions,
     formValues: FormFieldValue[] = [],
+    contentOperations: ContentOperation[] = [],
   ): Uint8Array {
     const m = this.#m;
     const memory = new Allocations(m);
     try {
-      return this.#process(bytes, password, changes, operations, options, memory, formValues);
+      return this.#process(bytes, password, changes, operations, options, memory, formValues, [], contentOperations);
     } finally {
       memory.release();
     }
@@ -145,19 +148,31 @@ export class PdfiumEngine {
     }
   }
 
-  // Treffer einer Suche mit ihrer genauen Lage (Suchen und schwärzen)
-  findText(bytes: Uint8Array, password: string | null, options: TextSearchOptions) {
+  // Seitenobjekte (Text, Bilder, Formular-XObjects) zum Bearbeiten
+  listObjects(bytes: Uint8Array, password: string | null, pages: number[]): PageObjects[] {
+    return this.#withDocument(bytes, password, (doc) => {
+      const count = this.#m.FPDF_GetPageCount(doc);
+      return pages.filter((page) => page >= 0 && page < count).map((page) => listPageObjects(this.#m, doc, page));
+    });
+  }
+
+  #withDocument<T>(bytes: Uint8Array, password: string | null, fn: (doc: number) => T): T {
     const m = this.#m;
     return withBuffer(m, bytes.length, (dataPtr) => {
       m.pdfium.HEAPU8.set(bytes, dataPtr);
       const doc = m.FPDF_LoadMemDocument(dataPtr, bytes.length, password ?? '');
       if (!doc) throw new PdfiumError(`Dokument lässt sich nicht öffnen (Fehler ${m.FPDF_GetLastError()})`);
       try {
-        return findText(m, doc, options);
+        return fn(doc);
       } finally {
         m.FPDF_CloseDocument(doc);
       }
     });
+  }
+
+  // Treffer einer Suche mit ihrer genauen Lage (Suchen und schwärzen)
+  findText(bytes: Uint8Array, password: string | null, options: TextSearchOptions) {
+    return this.#withDocument(bytes, password, (doc) => findText(this.#m, doc, options));
   }
 
   inspect(bytes: Uint8Array, password: string | null) {
@@ -173,6 +188,7 @@ export class PdfiumEngine {
     memory: Allocations,
     formValues: FormFieldValue[],
     areas: RedactionArea[] = [],
+    contentOperations: ContentOperation[] = [],
   ): Uint8Array {
     const m = this.#m;
     return withBuffer(m, bytes.length, (dataPtr) => {
@@ -199,6 +215,7 @@ export class PdfiumEngine {
         }
         if (formValues.length > 0) applyFormValues(m, doc, formValues);
         if (areas.length > 0) applyRedactions(m, doc, areas);
+        for (const operation of contentOperations) applyContentOperation(m, doc, operation, memory);
         for (const operation of operations) applyPageOperation(m, doc, operation, memory);
         return this.#save(doc, options.incremental ? SAVE_INCREMENTAL : SAVE_FULL);
       } finally {

@@ -4,6 +4,7 @@ import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
 import type { StampOperation } from '../../shared/stamping';
+import type { ContentOperation, PageObjects } from '../../shared/content';
 
 // Kommentaränderungen, Formularwerte und (optional) Seiten- oder Feldoperationen anwenden, neue Bytes liefern
 export interface ProcessRequest {
@@ -18,6 +19,8 @@ export interface ProcessRequest {
   fieldOperations: FieldOperation[];
   // Wasserzeichen, Kopf- und Fußzeilen (zuletzt, immer inkrementell)
   stampOperations: StampOperation[];
+  // Seiteninhalt bearbeiten (PDFium, nach Kommentaren und Formularwerten)
+  contentOperations: ContentOperation[];
   incremental: boolean;
 }
 
@@ -57,7 +60,16 @@ export interface FindTextRequest {
   options: TextSearchOptions;
 }
 
-export type WorkerRequest = ProcessRequest | ComposeRequest | InspectRequest | RedactRequest | FindTextRequest;
+// Seitenobjekte zum Bearbeiten auflisten
+export interface ListObjectsRequest {
+  id: number;
+  type: 'listObjects';
+  bytes: ArrayBuffer;
+  password: string | null;
+  pages: number[];
+}
+
+export type WorkerRequest = ProcessRequest | ComposeRequest | InspectRequest | RedactRequest | FindTextRequest | ListObjectsRequest;
 
 export type InspectResult = { ok: true; pageCount: number } | { ok: false; reason: 'password' | 'invalid' };
 
@@ -78,6 +90,8 @@ export type WorkerErrorCode =
   | 'stamp-characters'
   | 'stamp-nothing'
   | 'stamp-image'
+  | 'content-missing'
+  | 'content-characters'
   | 'verify'
   | 'failed';
 
@@ -85,4 +99,5 @@ export type WorkerResponse =
   | { id: number; ok: true; kind: 'bytes'; bytes: ArrayBuffer }
   | { id: number; ok: true; kind: 'inspect'; result: InspectResult }
   | { id: number; ok: true; kind: 'matches'; matches: TextMatch[]; truncated: boolean }
+  | { id: number; ok: true; kind: 'objects'; pages: PageObjects[] }
   | { id: number; ok: false; code: WorkerErrorCode; error: string };

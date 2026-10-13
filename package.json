@@ -38,6 +38,7 @@
     "zustand": "5.0.15"
   },
   "devDependencies": {
+    "@cantoo/fontkit": "2.0.12",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.64.0",
     "@types/emscripten": "1.41.6",

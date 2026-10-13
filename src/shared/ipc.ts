@@ -143,6 +143,7 @@ export interface MenuState {
   // Phase 5: Leiste „Schwärzen“ offen, Markierungen zum Anwenden vorhanden
   redactToolsVisible: boolean;
   hasRedactionMarks: boolean;
+  contentEditing: boolean;
 }
 
 export type SaveErrorCode = 'changed-externally' | 'cancelled' | 'write-failed' | 'unknown-file' | 'invalid-data';

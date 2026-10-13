@@ -58,10 +58,11 @@ async function processPages(pdfium: PdfiumEngine, request: ProcessRequest): Prom
     request.changes.deletions.length > 0 ||
     request.operations.length > 0 ||
     request.formValues.length > 0 ||
+    request.contentOperations.length > 0 ||
     !request.incremental;
   if (!pdfiumWork) return input;
   if (!request.operations.some((op) => op.type === 'insertPdf')) {
-    return pdfium.process(input, request.password, request.changes, request.operations, options, request.formValues);
+    return pdfium.process(input, request.password, request.changes, request.operations, options, request.formValues, request.contentOperations);
   }
   let output: Uint8Array = input;
   let first = true;
@@ -88,7 +89,7 @@ function isFieldError(error: unknown): error is FieldOperationError {
 function errorCode(error: unknown): WorkerErrorCode {
   if (isFieldError(error)) return error.code;
   if (error instanceof Error && error.name === 'SanitizeError') return 'redact-encrypted';
-  if (error instanceof Error && error.name === 'StampError') return (error as Error & { code: WorkerErrorCode }).code;
+  if (error instanceof Error && (error.name === 'StampError' || error.name === 'ContentError')) return (error as Error & { code: WorkerErrorCode }).code;
   if (error instanceof PageOperationError) return error.code;
   if (error instanceof FormValueError) return 'form';
   if (error instanceof VerifyError) return 'verify';
@@ -139,6 +140,9 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
           reply({ id: request.id, ok: true, kind: 'matches', ...result });
           return;
         }
+        case 'listObjects':
+          reply({ id: request.id, ok: true, kind: 'objects', pages: pdfium.listObjects(new Uint8Array(request.bytes), request.password, request.pages) });
+          return;
         case 'inspect':
           reply({ id: request.id, ok: true, kind: 'inspect', result: pdfium.inspect(new Uint8Array(request.bytes), request.password) });
           return;

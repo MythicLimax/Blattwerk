@@ -29,6 +29,7 @@ export function toggleFormEditing(tab: TabState): void {
   const ui = useUi.getState();
   if (ui.commentToolsVisible) ui.setCommentToolsVisible(false);
   if (ui.redactToolsVisible) ui.setRedactToolsVisible(false);
+  if (tab.contentEditing) useDocuments.getState().updateTab(tab.id, { contentEditing: false });
   useAnnotations.getState().setTool('select');
   useAnnotations.getState().select(tab.id, null);
   store.setTool('select');

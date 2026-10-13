@@ -110,6 +110,7 @@ describe('validateMenuState', () => {
     canEditForms: true,
     redactToolsVisible: false,
     hasRedactionMarks: true,
+    contentEditing: false,
   };
   it('übernimmt einen gültigen Zustand', () => {
     expect(validateMenuState(valid)).toEqual(valid);

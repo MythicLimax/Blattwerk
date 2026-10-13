@@ -6,6 +6,7 @@ import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
 import type { StampOperation } from '../../shared/stamping';
+import type { ContentOperation, PageObjects } from '../../shared/content';
 import type { InspectResult, WorkerErrorCode, WorkerRequest, WorkerResponse } from '../../workers/pdfium/protocol';
 
 // Fehler aus dem Worker mit Art (für eine übersetzte Meldung) und technischem Text (für Details)
@@ -92,6 +93,7 @@ export interface ProcessInput {
   formValues?: FormFieldValue[];
   fieldOperations?: FieldOperation[];
   stampOperations?: StampOperation[];
+  contentOperations?: ContentOperation[];
   // Standard: inkrementell (das Original bleibt am Anfang der Datei unverändert)
   incremental?: boolean;
 }
@@ -117,6 +119,7 @@ export function processDocument(bytes: Uint8Array, password: string | null, inpu
         formValues: input.formValues ?? [],
         fieldOperations: input.fieldOperations ?? [],
         stampOperations: input.stampOperations ?? [],
+        contentOperations: input.contentOperations ?? [],
         incremental: input.incremental ?? true,
       },
       transfer,
@@ -144,6 +147,14 @@ export async function findTextMatches(
   const response = await send({ type: 'findText', bytes: buffer, password, options }, [buffer]);
   if (response.kind !== 'matches') throw new PdfiumClientError('failed', 'unerwartete Antwort');
   return { matches: response.matches, truncated: response.truncated };
+}
+
+// Seitenobjekte zum Bearbeiten (Text, Bilder). Die Bytes gehen an den Worker.
+export async function listPageObjects(bytes: Uint8Array, password: string | null, pages: number[]): Promise<PageObjects[]> {
+  const buffer = ownBuffer(bytes);
+  const response = await send({ type: 'listObjects', bytes: buffer, password, pages }, [buffer]);
+  if (response.kind !== 'objects') throw new PdfiumClientError('failed', 'unerwartete Antwort');
+  return response.pages;
 }
 
 // Neues Dokument aus Teilen. Die Daten der Teile gehen an den Worker.

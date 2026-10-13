@@ -47,6 +47,10 @@ export interface TabState {
   canEditForms: boolean;
   // Verschlüsselt (Kennwortschutz oder Berechtigungen): Schwärzen erst nach Entfernen des Schutzes
   encrypted: boolean;
+  // false, wenn das PDF das Ändern des Inhalts verbietet
+  canModify: boolean;
+  // Modus „Inhalt bearbeiten“ (Phase 5): Text und Bilder der Seite
+  contentEditing: boolean;
   // Modus „Formular bearbeiten“: Felder anlegen, verschieben, ändern, löschen (statt ausfüllen)
   formEditing: boolean;
   saving: boolean;
@@ -108,6 +112,8 @@ export const useDocuments = create<DocumentsState>((set) => ({
           canExtract: true,
           canEditForms: true,
           encrypted: false,
+          canModify: true,
+          contentEditing: false,
           formEditing: false,
           saving: false,
           working: false,

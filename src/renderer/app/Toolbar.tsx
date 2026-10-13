@@ -3,6 +3,7 @@ import {
   ChevronUp,
   ClipboardPen,
   EyeOff,
+  FilePenLine,
   FolderOpen,
   Info,
   LayoutGrid,
@@ -253,10 +254,18 @@ export function Toolbar() {
           <IconButton
             icon={EyeOff}
             label={t('toolbar.redact')}
-            pressed={redactToolsVisible && viewing && !tab.formEditing}
+            pressed={redactToolsVisible && viewing && !tab.formEditing && !tab.contentEditing}
             disabled={!viewing}
             onClick={() => executeCommand('redact.tools')}
             data-testid="redact-tools-button"
+          />
+          <IconButton
+            icon={FilePenLine}
+            label={t('toolbar.editContent')}
+            pressed={viewing && tab.contentEditing}
+            disabled={!viewing || !tab.canModify}
+            onClick={() => executeCommand('content.edit')}
+            data-testid="content-edit-button"
           />
           <IconButton
             icon={ClipboardPen}
@@ -276,7 +285,7 @@ export function Toolbar() {
           <IconButton
             icon={MessageSquare}
             label={t('toolbar.comment')}
-            pressed={commentToolsVisible && viewing && !tab.formEditing}
+            pressed={commentToolsVisible && viewing && !tab.formEditing && !tab.contentEditing}
             disabled={!viewing}
             onClick={() => executeCommand('view.toggleCommentTools')}
             data-testid="comment-tools-button"

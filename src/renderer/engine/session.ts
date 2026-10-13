@@ -3,6 +3,7 @@ import type { FileInfo, OpenResult, ViewMode } from '../../shared/ipc';
 import { api } from '../api';
 import { computeChanges, hasChanges } from '../features/annotations/changes';
 import { deleteAnnotation, loadAnnotations } from '../features/annotations/controller';
+import { deleteSelectedObject, toggleContentEditing } from '../features/content-edit/actions';
 import { deleteSelectedField, toggleFormEditing } from '../features/form-edit/actions';
 import { openRedactApply, openRedactFind, toggleRedactTools } from '../features/redaction/actions';
 import { openStampDialog, removeArtifacts } from '../features/stamping/actions';
@@ -14,12 +15,14 @@ import { t } from '../i18n';
 import { tabAnnotations, useAnnotations, type TabAnnotations } from '../state/annotations-store';
 import { isTabDirty } from '../state/dirty';
 import { currentFormChanges, syncFormChanges } from '../features/forms/form-sync';
+import { useContentEdit } from '../state/content-edit-store';
 import { useFormEdit } from '../state/form-edit-store';
 import { useForms } from '../state/forms-store';
 import { historyDirty, tabHistory, useHistory, type DocState } from '../state/history-store';
 import type { FieldOperation } from '../../shared/forms';
 import type { RedactionOptions } from '../../shared/redaction';
 import type { StampOperation } from '../../shared/stamping';
+import type { ContentOperation } from '../../shared/content';
 import { planRedaction } from '../features/redaction/plan';
 import type { PageOperation } from '../../shared/pages';
 import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
@@ -114,6 +117,8 @@ async function loadIntoTab(tabId: string, file: FileInfo, knownPassword: string 
       // pdf.js liefert Berechtigungen nur für verschlüsselte Dokumente; dort sind Feldänderungen nicht möglich.
       canEditForms: permissions === null,
       encrypted: permissions !== null,
+      // Inhalt ändern erlaubt (Berechtigung „Ändern“)
+      canModify: permissions === null || permissions.has(pdfjs.PermissionFlag.MODIFY_CONTENTS),
     });
     if (options.annotations) useAnnotations.getState().restore(tabId, options.annotations);
     else void loadAnnotations(tabId);
@@ -201,6 +206,7 @@ function closeTabNow(tabId: string): void {
   useHistory.getState().drop(tabId);
   useForms.getState().drop(tabId);
   useFormEdit.getState().drop(tabId);
+  useContentEdit.getState().drop(tabId);
   if (ui.propertiesTabId === tabId) ui.openProperties(null);
   // „Gehe zu Seite“ gilt immer dem aktiven Tab; nach dem Schließen ist das ein anderer.
   ui.setGoToPageOpen(false);
@@ -383,10 +389,16 @@ export function applyStampOperations(tabId: string, stampOperations: StampOperat
   return applyDocumentOperations(tabId, { stampOperations }, after);
 }
 
+// Seiteninhalt bearbeiten (Phase 5): Text und Bilder einfügen, verschieben, skalieren, löschen, Zeilen ändern.
+export function applyContentOperations(tabId: string, contentOperations: ContentOperation[], after: AfterOperation = {}): Promise<boolean> {
+  return applyDocumentOperations(tabId, { contentOperations }, after);
+}
+
 interface DocumentOperations {
   operations?: PageOperation[];
   fieldOperations?: FieldOperation[];
   stampOperations?: StampOperation[];
+  contentOperations?: ContentOperation[];
 }
 
 function applyDocumentOperations(tabId: string, input: DocumentOperations, after: AfterOperation): Promise<boolean> {
@@ -402,7 +414,11 @@ async function runDocumentOperations(tabId: string, input: DocumentOperations, a
   const operations = input.operations ?? [];
   const fieldOperations = input.fieldOperations ?? [];
   const stampOperations = input.stampOperations ?? [];
-  if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf || operations.length + fieldOperations.length + stampOperations.length === 0) {
+  const contentOperations = input.contentOperations ?? [];
+  const count = operations.length + fieldOperations.length + stampOperations.length + contentOperations.length;
+  if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf || count === 0) return false;
+  if (contentOperations.length > 0 && !tab.canModify) {
+    useUi.getState().notify(t('contentEdit.notAllowed'));
     return false;
   }
   if (stampOperations.length > 0 && tab.encrypted) {
@@ -422,7 +438,14 @@ async function runDocumentOperations(tabId: string, input: DocumentOperations, a
     const annotations = tabAnnotations(tabId);
     const changes = annotations ? computeChanges(annotations.items, annotations.originals) : { upserts: [], deletions: [] };
     const forms = await currentFormChanges(tabId);
-    const bytes = await processDocument(await pdf.getData(), runtime.password, { changes, operations, fieldOperations, stampOperations, formValues: forms });
+    const bytes = await processDocument(await pdf.getData(), runtime.password, {
+      changes,
+      operations,
+      fieldOperations,
+      stampOperations,
+      contentOperations,
+      formValues: forms,
+    });
     if (getRuntime(tabId)?.pdf !== pdf) return false;
     const page = Math.max(1, after.page ?? tab.currentPage);
     const next = { bytes, annotations: null, page, selection: after.selection ?? [] };
@@ -432,7 +455,8 @@ async function runDocumentOperations(tabId: string, input: DocumentOperations, a
     await showState(tabId, next);
     return true;
   } catch (error) {
-    const fallback = fieldOperations.length > 0 ? 'formEdit.failed' : stampOperations.length > 0 ? 'stamp.failed' : 'errors.pages.failed';
+    const fallback =
+      fieldOperations.length > 0 ? 'formEdit.failed' : stampOperations.length > 0 ? 'stamp.failed' : contentOperations.length > 0 ? 'contentEdit.failed' : 'errors.pages.failed';
     useUi.getState().notify(operationErrorMessage(error, fallback), errorMessage(error));
     return false;
   }
@@ -519,7 +543,7 @@ export function redoTab(tabId: string): void {
 // Unterschreiben: gespeicherte Unterschrift wählen oder, wenn es noch keine gibt, gleich eine anlegen.
 export function startSigning(): void {
   const tab = getActiveTab();
-  if (!tab || tab.status !== 'ready' || tab.mode !== 'view' || tab.formEditing) return;
+  if (!tab || tab.status !== 'ready' || tab.mode !== 'view' || tab.formEditing || tab.contentEditing) return;
   if (!tab.canAnnotate) {
     useUi.getState().notify(t('signatures.notAllowed'));
     return;
@@ -651,6 +675,11 @@ export function executeCommand(command: CommandId): void {
     if (active) toggleFormEditing(active);
     return;
   }
+  if (command === 'content.edit') {
+    const active = getActiveTab();
+    if (active) toggleContentEditing(active);
+    return;
+  }
   if (command.startsWith('stamp.')) {
     const active = getActiveTab();
     if (!active) return;
@@ -705,6 +734,11 @@ export function executeCommand(command: CommandId): void {
         }
         return;
       }
+      // Im Modus „Inhalt bearbeiten“ löscht Entfernen das ausgewählte Objekt.
+      if (tab.contentEditing) {
+        if (!tab.working && !isEditableFocus()) deleteSelectedObject(tab);
+        return;
+      }
       // Im Modus „Formular bearbeiten“ löscht Entfernen das ausgewählte Feld.
       if (tab.formEditing) {
         if (!tab.working && !isEditableFocus()) deleteSelectedField(tab);
@@ -715,7 +749,8 @@ export function executeCommand(command: CommandId): void {
       return;
     }
     case 'view.toggleCommentTools':
-      // Kommentieren beendet „Formular bearbeiten“.
+      // Kommentieren beendet „Formular bearbeiten“ und „Inhalt bearbeiten“.
+      if (tab.contentEditing) toggleContentEditing(tab);
       if (tab.formEditing) {
         toggleFormEditing(tab);
         ui.setCommentToolsVisible(true);

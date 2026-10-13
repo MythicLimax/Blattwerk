@@ -16,7 +16,7 @@ export function toggleOrganize(tab: TabState): void {
     update(tab.id, { mode: 'view', currentPage: first, pageSelection: [] });
     requestAnimationFrame(() => focusViewer(getRuntime(tab.id)));
   } else {
-    update(tab.id, { mode: 'organize', formEditing: false, pageSelection: [Math.max(0, tab.currentPage - 1)] });
+    update(tab.id, { mode: 'organize', formEditing: false, contentEditing: false, pageSelection: [Math.max(0, tab.currentPage - 1)] });
   }
 }
 

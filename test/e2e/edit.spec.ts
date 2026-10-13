@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { decodePDFRawStream, PDFDocument, PDFRawStream } from '@cantoo/pdf-lib';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { Rect } from '../../src/shared/annotations';
-import { fixture, TEXT_PDF } from '../fixtures/expectations';
+import { fixture, imageFixture, TEXT_PDF } from '../fixtures/expectations';
 import { AREAS, buildRedactionPdf, containsSecret, PUBLIC, SECRETS } from '../fixtures/redaction';
 import { launchApp, menuClick, menuItemState, waitForDocument } from './app';
 import { inspectWithPdfKit } from './pdfkit';
@@ -271,6 +271,93 @@ test.describe('Wasserzeichen, Kopf- und Fußzeilen, Seitenzahlen', () => {
     await menuClick(app, 'stamp.watermark');
     await expect(page.getByTestId('watermark-dialog')).toHaveCount(0);
     await expect(page.getByTestId('notices')).toContainText('Kennwortschutz');
+    await close();
+  });
+});
+
+test.describe('Inhalt bearbeiten', () => {
+  async function openText() {
+    const dir = tempDir();
+    const file = path.join(dir, 'bericht.pdf');
+    copyFileSync(fixture('text.pdf'), file);
+    const handle = await launchApp([file], { userData: dir });
+    await waitForDocument(handle.page, TEXT_PDF.pages);
+    await handle.page.getByTestId('content-edit-button').click();
+    await expect(handle.page.getByTestId('content-edit-toolbar')).toBeVisible();
+    await menuClick(handle.app, 'view.fitPage');
+    await expect(handle.page.getByTestId('zoom-select')).toHaveValue('page-fit');
+    return { ...handle, file, dir };
+  }
+
+  const line = (page: Page, text: string) => page.locator(`[data-testid="content-object"][data-text="${text}"]`).first();
+
+  test('Textzeile ändern, neuen Text einfügen, verschieben und löschen', async () => {
+    const { page, app, file, close } = await openText();
+    await expect(line(page, 'Testdokument mit Text')).toBeVisible();
+
+    // Zeile ändern (Doppelklick, Eingabe übernimmt)
+    await line(page, 'Testdokument mit Text').dblclick();
+    const editor = page.getByTestId('content-text-editor');
+    await expect(editor).toHaveValue('Testdokument mit Text');
+    await editor.fill('Geänderter Titel – Größe 1 €');
+    await page.keyboard.press('Enter');
+    await expect(line(page, 'Geänderter Titel – Größe 1 €')).toBeVisible();
+
+    // Nicht darstellbare Zeichen: Hinweis, nichts übernommen
+    await line(page, 'Inhaltsverzeichnis').dblclick();
+    await editor.fill('Łódź');
+    await expect(page.getByTestId('content-font-warning')).toContainText('Nicht darstellbar');
+    await page.keyboard.press('Escape');
+    await expect(editor).toHaveCount(0);
+
+    // Neuer Text an einer Stelle
+    await page.getByTestId('content-tool-text').click();
+    const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
+    if (!overlay) throw new Error('keine Ebene');
+    await page.mouse.click(overlay.x + overlay.width * 0.5, overlay.y + overlay.height * 0.85);
+    await expect(editor).toBeVisible();
+    await page.keyboard.type('Hallo aus Blattwerk');
+    await page.keyboard.press('Meta+Enter');
+    await expect(line(page, 'Hallo aus Blattwerk')).toBeVisible();
+
+    // Verschieben: Inhaltsverzeichnis 100 Pixel nach rechts
+    const before = await line(page, 'Inhaltsverzeichnis').boundingBox();
+    if (!before) throw new Error('Zeile fehlt');
+    await page.mouse.move(before.x + 5, before.y + before.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(before.x + 55, before.y + before.height / 2, { steps: 4 });
+    await page.mouse.move(before.x + 105, before.y + before.height / 2, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => (await line(page, 'Inhaltsverzeichnis').boundingBox())?.x ?? 0).toBeGreaterThan(before.x + 80);
+
+    // Löschen: Zeile auswählen, Entfernen
+    await line(page, 'Externer Link: https://example.com').click();
+    await expect(page.getByTestId('content-selection')).toHaveCount(1);
+    await page.keyboard.press('Backspace');
+    await expect(line(page, 'Externer Link: https://example.com')).toHaveCount(0);
+
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    const [first] = await pageTexts(file);
+    expect(first).toContain('Geänderter Titel – Größe 1 €');
+    expect(first).toContain('Hallo aus Blattwerk');
+    expect(first).toContain('Inhaltsverzeichnis');
+    expect(first).not.toContain('Testdokument mit Text');
+    expect(first).not.toContain('Externer Link');
+    if (process.platform === 'darwin') expect(inspectWithPdfKit(file).ok).toBe(true);
+    await close();
+  });
+
+  test('Bild einfügen und mit Rückgängig wieder entfernen', async () => {
+    const { page, app, close } = await openText();
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [file] })) as typeof dialog.showOpenDialog;
+    }, imageFixture('viertel.png'));
+    await page.getByTestId('content-add-image').click();
+    await expect(page.locator('[data-testid="content-object"][data-kind="image"]')).toHaveCount(1);
+    await menuClick(app, 'edit.undo');
+    await expect(page.locator('[data-testid="content-object"][data-kind="image"]')).toHaveCount(0);
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
     await close();
   });
 });

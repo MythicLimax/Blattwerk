@@ -5,7 +5,7 @@ import { focusViewer, getRuntime } from '../../engine/runtime';
 import { commitPendingEdits } from '../../engine/session';
 import { t } from '../../i18n';
 import { tabAnnotations, useAnnotations } from '../../state/annotations-store';
-import type { TabState } from '../../state/documents-store';
+import { useDocuments, type TabState } from '../../state/documents-store';
 import { useUi } from '../../state/ui-store';
 import { addAnnotations, baseFields } from '../annotations/controller';
 import { createRedaction } from '../annotations/create';
@@ -27,6 +27,7 @@ export function toggleRedactTools(tab: TabState): void {
   }
   commitPendingEdits();
   if (tab.formEditing) toggleFormEditing(tab);
+  if (tab.contentEditing) useDocuments.getState().updateTab(tab.id, { contentEditing: false });
   ui.setRedactToolsVisible(true);
   store.select(tab.id, null);
   // Wie in Acrobat: Markieren ist sofort aktiv

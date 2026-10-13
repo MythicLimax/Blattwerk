@@ -5,6 +5,8 @@ import { getRuntime } from '../../engine/runtime';
 import { MARKUP_TOOLS, useAnnotations, useTabAnnotations, type Tool } from '../../state/annotations-store';
 import { useDocuments } from '../../state/documents-store';
 import { geometryFromViewport, type PageGeometry } from '../../engine/coords';
+import { ContentEditOverlay } from '../content-edit/ContentEditOverlay';
+import { useContentEditInput } from '../content-edit/hooks';
 import { FormEditOverlay } from '../form-edit/FormEditOverlay';
 import { useFormEditInput } from '../form-edit/hooks';
 import { addAnnotation, baseFields, hideDomAnnotations, updateAnnotation } from './controller';
@@ -62,6 +64,7 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
   const canAnnotate = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.canAnnotate ?? false);
   // Modus „Formular bearbeiten“: Kommentare bleiben sichtbar, reagieren aber nicht auf die Maus.
   const formEditing = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.formEditing ?? false);
+  const contentEditing = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.contentEditing ?? false);
   const [visible, setVisible] = useState<number[]>([]);
   const [geometries, setGeometries] = useState<Map<number, PageGeometry>>(new Map());
   const [pagesReady, setPagesReady] = useState(0);
@@ -228,6 +231,7 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
   }, [tabId, pagesReady]);
 
   useFormEditInput(tabId, active, formEditing, pagesReady);
+  useContentEditInput(tabId, active, contentEditing, pagesReady);
 
   const byPage = useMemo(() => {
     const map = new Map<number, Annotation[]>();
@@ -257,10 +261,11 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
               selectedId={annotations.selectedId}
               editingId={annotations.editingId}
               scale={scale}
-              readOnly={!canAnnotate || formEditing}
-              inert={formEditing}
+              readOnly={!canAnnotate || formEditing || contentEditing}
+              inert={formEditing || contentEditing}
             />
             {formEditing && <FormEditOverlay tabId={tabId} pageIndex={pageIndex} geometry={geometry} scale={scale} />}
+            {contentEditing && <ContentEditOverlay tabId={tabId} pageIndex={pageIndex} geometry={geometry} scale={scale} />}
           </>,
           host,
           `page-${pageIndex}`,

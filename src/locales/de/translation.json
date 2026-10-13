@@ -101,7 +101,8 @@
       "headerFooter": "Kopf- und Fußzeile",
       "addHeaderFooter": "Hinzufügen …",
       "removeHeaderFooter": "Entfernen",
-      "pageNumbers": "Seitenzahlen hinzufügen …"
+      "pageNumbers": "Seitenzahlen hinzufügen …",
+      "editContent": "Inhalt bearbeiten"
     }
   },
   "dialog": {
@@ -179,7 +180,9 @@
       "stamp-encrypted": "In verschlüsselten Dokumenten lassen sich noch keine Wasserzeichen, Kopf- oder Fußzeilen ändern. Entfernen Sie zuerst den Kennwortschutz.",
       "stamp-characters": "Diese Zeichen kann die gewählte Schrift nicht darstellen: {{detail}}",
       "stamp-nothing": "Das Dokument enthält nichts davon, das {{appName}} hinzugefügt hat.",
-      "stamp-image": "Das Bild konnte nicht eingebettet werden."
+      "stamp-image": "Das Bild konnte nicht eingebettet werden.",
+      "content-missing": "Das Objekt wurde nicht gefunden. Bitte erneut versuchen.",
+      "content-characters": "Diese Zeichen kann keine verfügbare Schrift darstellen: {{detail}}"
     }
   },
   "start": {
@@ -219,7 +222,8 @@
     "organize": "Seiten organisieren",
     "sign": "Unterschreiben",
     "editForm": "Formular bearbeiten",
-    "redact": "Schwärzen"
+    "redact": "Schwärzen",
+    "editContent": "Text und Bilder bearbeiten"
   },
   "viewMode": {
     "single": "Einzelne Seite",
@@ -745,5 +749,30 @@
     "format": "Format",
     "pageWord": "Seite",
     "ofWord": "von"
+  },
+  "contentEdit": {
+    "toolbar": "Werkzeuge zum Bearbeiten von Text und Bildern",
+    "tools": {
+      "select": "Auswählen, verschieben, Größe ändern",
+      "text": "Text hinzufügen",
+      "image": "Bild hinzufügen …"
+    },
+    "kinds": {
+      "text": "Text",
+      "image": "Bild",
+      "form": "Grafikgruppe"
+    },
+    "font": "Schrift für neuen Text",
+    "size": "Schriftgröße für neuen Text",
+    "color": "Farbe für neuen Text",
+    "delete": "Auswahl löschen",
+    "done": "Fertig",
+    "selectHint": "Doppelklick auf eine Textzeile ändert sie; Objekte lassen sich ziehen und an den Ecken skalieren.",
+    "textHint": "Auf die Seite klicken, um Text zu schreiben. Cmd+Eingabe übernimmt.",
+    "textInput": "Text",
+    "substitute": "Die Schrift der Zeile kennt „{{chars}}“ nicht; die Zeile erhält eine ähnliche Standardschrift.",
+    "impossible": "Nicht darstellbar: {{chars}}",
+    "notAllowed": "Dieses Dokument erlaubt keine Änderungen am Inhalt.",
+    "failed": "Die Änderung konnte nicht ausgeführt werden. Das Dokument wurde nicht verändert."
   }
 }

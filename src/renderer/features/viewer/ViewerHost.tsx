@@ -121,7 +121,9 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
       tabIndex={0}
       data-testid="viewer-container"
       // Formular bearbeiten: Felder und Links von pdf.js reagieren nicht, die Bearbeitungsebene übernimmt.
-      data-form-editing={tab.formEditing ? '' : undefined}
+      data-form-editing={tab.formEditing || tab.contentEditing ? '' : undefined}
+      // Inhalt bearbeiten: kein Markieren von Text, Klicks gehen an die Objekte
+      data-content-editing={tab.contentEditing ? '' : undefined}
     >
       <div ref={viewerRef} className="pdfViewer" />
       <AnnotationLayer tabId={tab.id} active={active} />

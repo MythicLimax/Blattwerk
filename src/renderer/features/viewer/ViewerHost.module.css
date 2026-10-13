@@ -12,3 +12,9 @@
 .container[data-form-editing] :global(.annotationLayer *) {
   pointer-events: none !important;
 }
+
+/* Inhalt bearbeiten: Textebene von pdf.js nicht bedienbar (Klicks wählen Objekte statt Text) */
+.container[data-content-editing] :global(.textLayer),
+.container[data-content-editing] :global(.textLayer *) {
+  pointer-events: none !important;
+}

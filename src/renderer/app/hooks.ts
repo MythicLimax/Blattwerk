@@ -42,6 +42,7 @@ function computeMenuState(): MenuState {
     canEditForms: ready && active.canEditForms,
     redactToolsVisible: ui.redactToolsVisible,
     hasRedactionMarks: ready && (activeAnnotations?.items.some((a) => a.kind === 'redact') ?? false),
+    contentEditing: ready && active.mode === 'view' && active.contentEditing,
   };
 }
 

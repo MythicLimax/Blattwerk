@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { api } from '../api';
 import { handleCloseRequest, handleOpenResult, executeCommand } from '../engine/session';
 import { CommentToolbar } from '../features/annotations/CommentToolbar';
+import { ContentEditToolbar } from '../features/content-edit/ContentEditToolbar';
 import { FieldDialog } from '../features/form-edit/FieldDialog';
 import { FormEditToolbar } from '../features/form-edit/FormEditToolbar';
 import { RedactApplyDialog, RedactFindDialog } from '../features/redaction/RedactDialogs';
@@ -84,9 +85,10 @@ export function App() {
     <div className={styles.app}>
       <Toolbar />
       {tabs.length > 0 && <TabBar />}
-      {commentToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && <CommentToolbar tab={active} />}
+      {commentToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <CommentToolbar tab={active} />}
       {active?.status === 'ready' && active.mode === 'view' && active.formEditing && <FormEditToolbar tab={active} />}
-      {redactToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && <RedactToolbar tab={active} />}
+      {active?.status === 'ready' && active.mode === 'view' && active.contentEditing && <ContentEditToolbar tab={active} />}
+      {redactToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <RedactToolbar tab={active} />}
       <div className={styles.workspace}>
         {!showDocumentChrome ? (
           <StartScreen />
