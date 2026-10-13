@@ -3,6 +3,7 @@ import type { AnnotationChanges } from '../../shared/annotations';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
+import type { StampOperation } from '../../shared/stamping';
 
 // Kommentaränderungen, Formularwerte und (optional) Seiten- oder Feldoperationen anwenden, neue Bytes liefern
 export interface ProcessRequest {
@@ -15,6 +16,8 @@ export interface ProcessRequest {
   formValues: FormFieldValue[];
   // Formularfelder anlegen, ändern, löschen (nach allen übrigen Änderungen, immer inkrementell)
   fieldOperations: FieldOperation[];
+  // Wasserzeichen, Kopf- und Fußzeilen (zuletzt, immer inkrementell)
+  stampOperations: StampOperation[];
   incremental: boolean;
 }
 
@@ -71,6 +74,10 @@ export type WorkerErrorCode =
   | 'field-missing'
   | 'field-name'
   | 'redact-encrypted'
+  | 'stamp-encrypted'
+  | 'stamp-characters'
+  | 'stamp-nothing'
+  | 'stamp-image'
   | 'verify'
   | 'failed';
 

@@ -104,7 +104,7 @@ export async function pickSources(kind: 'pdf' | 'images' | 'pdf-or-images'): Pro
   return sources && sources.length > 0 ? sources : null;
 }
 
-const imageSource = (source: SourceFile): ImageSource => {
+export const imageSource = (source: SourceFile): ImageSource => {
   const image = source.image;
   if (!image) throw new Error('kein Bild');
   return { kind: image.kind, data: source.bytes.slice().buffer as ArrayBuffer, width: image.width, height: image.height, rotation: image.rotation };

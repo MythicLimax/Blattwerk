@@ -6,6 +6,7 @@ import { FieldDialog } from '../features/form-edit/FieldDialog';
 import { FormEditToolbar } from '../features/form-edit/FormEditToolbar';
 import { RedactApplyDialog, RedactFindDialog } from '../features/redaction/RedactDialogs';
 import { RedactToolbar } from '../features/redaction/RedactToolbar';
+import { HeaderFooterDialog, PageNumbersDialog, WatermarkDialog } from '../features/stamping/StampDialogs';
 import { BusyOverlay } from '../features/pages/BusyOverlay';
 import { ChooseSignatureDialog, CreateSignatureDialog } from '../features/signatures/SignatureDialogs';
 import { CombineDialog, PageDialogs, SourcePasswordDialog } from '../features/pages/PageDialogs';
@@ -44,6 +45,7 @@ export function App() {
   const commentToolsVisible = useUi((s) => s.commentToolsVisible);
   const redactToolsVisible = useUi((s) => s.redactToolsVisible);
   const redactDialog = useUi((s) => s.redactDialog);
+  const stampDialog = useUi((s) => s.stampDialog);
   const pageDialog = useUi((s) => s.pageDialog);
   const combine = useUi((s) => s.combine);
   const signatureDialog = useUi((s) => s.signatureDialog);
@@ -112,6 +114,9 @@ export function App() {
       {fieldDialog && <FieldDialog key={JSON.stringify(fieldDialog)} dialog={fieldDialog} />}
       {redactDialog === 'apply' && active?.status === 'ready' && <RedactApplyDialog tab={active} />}
       {redactDialog === 'find' && active?.status === 'ready' && <RedactFindDialog tab={active} />}
+      {stampDialog === 'watermark' && active?.status === 'ready' && <WatermarkDialog tab={active} />}
+      {stampDialog === 'headerFooter' && active?.status === 'ready' && <HeaderFooterDialog tab={active} />}
+      {stampDialog === 'pageNumbers' && active?.status === 'ready' && <PageNumbersDialog tab={active} />}
       <SourcePasswordDialog />
       <BusyOverlay />
       {prompt && <PromptDialog key={`${prompt.kind}-${prompt.tabId}`} prompt={prompt} />}

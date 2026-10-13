@@ -44,6 +44,7 @@ function replyBytes(id: number, output: Uint8Array, pdfium: PdfiumEngine, passwo
 const loadFields = () => import('./fields');
 const loadImported = () => import('./imported');
 const loadRedaction = () => import('./redaction');
+const loadStamping = () => import('./stamping');
 
 const NO_CHANGES = { upserts: [], deletions: [] };
 
@@ -87,6 +88,7 @@ function isFieldError(error: unknown): error is FieldOperationError {
 function errorCode(error: unknown): WorkerErrorCode {
   if (isFieldError(error)) return error.code;
   if (error instanceof Error && error.name === 'SanitizeError') return 'redact-encrypted';
+  if (error instanceof Error && error.name === 'StampError') return (error as Error & { code: WorkerErrorCode }).code;
   if (error instanceof PageOperationError) return error.code;
   if (error instanceof FormValueError) return 'form';
   if (error instanceof VerifyError) return 'verify';
@@ -104,6 +106,10 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
           if (request.fieldOperations.length > 0) {
             const { applyFieldOperations } = await loadFields();
             output = await applyFieldOperations(output, request.fieldOperations);
+          }
+          if (request.stampOperations.length > 0) {
+            const { applyStampOperations } = await loadStamping();
+            output = await applyStampOperations(output, request.stampOperations);
           }
           replyBytes(request.id, output, pdfium, request.password);
           return;

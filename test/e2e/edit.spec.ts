@@ -186,3 +186,91 @@ test.describe('Schwärzen', () => {
     await second.close();
   });
 });
+
+test.describe('Wasserzeichen, Kopf- und Fußzeilen, Seitenzahlen', () => {
+  async function openText() {
+    const dir = tempDir();
+    const file = path.join(dir, 'bericht.pdf');
+    copyFileSync(fixture('text.pdf'), file);
+    const handle = await launchApp([file], { userData: dir });
+    await waitForDocument(handle.page, TEXT_PDF.pages);
+    return { ...handle, file };
+  }
+
+  test('Wasserzeichen hinzufügen, speichern und wieder entfernen', async () => {
+    const { page, app, file, close } = await openText();
+    await menuClick(app, 'stamp.watermark');
+    await expect(page.getByTestId('watermark-dialog')).toBeVisible();
+    await page.getByTestId('watermark-text').fill('VERTRAULICH');
+    await page.getByTestId('stamp-ok').click();
+    await expect(page.getByTestId('watermark-dialog')).toHaveCount(0);
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    let texts = await pageTexts(file);
+    for (const text of texts) expect(text).toContain('VERTRAULICH');
+    if (process.platform === 'darwin') expect(inspectWithPdfKit(file).ok).toBe(true);
+
+    await menuClick(app, 'stamp.removeWatermark');
+    await expect(page.getByTestId('notices')).toContainText('Wasserzeichen entfernt');
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    texts = await pageTexts(file);
+    for (const text of texts) expect(text).not.toContain('VERTRAULICH');
+    // Nichts mehr da: verständliche Meldung statt eines neuen Stands
+    await waitForDocument(page, TEXT_PDF.pages);
+    await menuClick(app, 'stamp.removeWatermark');
+    await expect(page.getByTestId('notices')).toContainText('enthält nichts davon');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    await close();
+  });
+
+  test('Seitenzahlen „Seite x von n“ ab der zweiten Seite', async () => {
+    const { page, app, file, close } = await openText();
+    await menuClick(app, 'stamp.pageNumbers');
+    await expect(page.getByTestId('page-numbers-dialog')).toBeVisible();
+    await page.getByTestId('stamp-pages-range').check();
+    await page.getByTestId('stamp-pages').fill(`2-${TEXT_PDF.pages}`);
+    await page.getByTestId('stamp-ok').click();
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+    // Rückgängig und Wiederholen (vor dem Speichern; danach beginnt der Verlauf neu)
+    await menuClick(app, 'edit.undo');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    await menuClick(app, 'edit.redo');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    const texts = await pageTexts(file);
+    expect(texts[0]).not.toContain('Seite 1 von');
+    expect(texts[1]).toContain(`Seite 1 von ${TEXT_PDF.pages - 1}`);
+    expect(texts[TEXT_PDF.pages - 1]).toContain(`Seite ${TEXT_PDF.pages - 1} von ${TEXT_PDF.pages - 1}`);
+    await close();
+  });
+
+  test('Kopfzeile mit Dateiname per Platzhalter', async () => {
+    const { page, app, file, close } = await openText();
+    await menuClick(app, 'stamp.headerFooter');
+    await expect(page.getByTestId('header-footer-dialog')).toBeVisible();
+    await page.getByTestId('hf-headerLeft').click();
+    await page.getByTestId('hf-token-file').click();
+    await expect(page.getByTestId('hf-headerLeft')).toHaveValue('{Datei}');
+    await page.getByTestId('hf-footerRight').fill('Stand {Datum}');
+    await page.getByTestId('stamp-ok').click();
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    const texts = await pageTexts(file);
+    expect(texts[0]).toContain('bericht.pdf');
+    expect(texts[0]).toMatch(/Stand \d{2}\.\d{2}\.\d{4}/);
+    await close();
+  });
+
+  test('in verschlüsselten Dokumenten mit verständlicher Meldung abgelehnt', async () => {
+    const { page, app, close } = await launchApp([fixture('eingeschraenkt.pdf')]);
+    await waitForDocument(page, TEXT_PDF.pages);
+    await menuClick(app, 'stamp.watermark');
+    await expect(page.getByTestId('watermark-dialog')).toHaveCount(0);
+    await expect(page.getByTestId('notices')).toContainText('Kennwortschutz');
+    await close();
+  });
+});

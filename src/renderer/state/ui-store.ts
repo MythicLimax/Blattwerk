@@ -59,6 +59,8 @@ interface UiState {
   // Leiste „Schwärzen“ (Phase 5) und ihre Dialoge
   redactToolsVisible: boolean;
   redactDialog: 'apply' | 'find' | null;
+  // Wasserzeichen, Kopf- und Fußzeile, Seitenzahlen (Phase 5)
+  stampDialog: 'watermark' | 'headerFooter' | 'pageNumbers' | null;
   settingsOpen: boolean;
   // Offene Rückfrage (ungespeicherte Änderungen, von außen geänderte Datei)
   prompt: Prompt | null;
@@ -89,6 +91,7 @@ interface UiState {
   setCommentToolsVisible: (visible: boolean) => void;
   setRedactToolsVisible: (visible: boolean) => void;
   setRedactDialog: (dialog: 'apply' | 'find' | null) => void;
+  setStampDialog: (dialog: 'watermark' | 'headerFooter' | 'pageNumbers' | null) => void;
   setSettingsOpen: (open: boolean) => void;
   setPrompt: (prompt: Prompt | null) => void;
   setPageDialog: (dialog: PageDialog | null) => void;
@@ -125,6 +128,7 @@ export const useUi = create<UiState>((set) => ({
   commentToolsVisible: false,
   redactToolsVisible: false,
   redactDialog: null,
+  stampDialog: null,
   settingsOpen: false,
   prompt: null,
   pageDialog: null,
@@ -153,6 +157,7 @@ export const useUi = create<UiState>((set) => ({
   setCommentToolsVisible: (commentToolsVisible) => set((state) => ({ commentToolsVisible, redactToolsVisible: commentToolsVisible ? false : state.redactToolsVisible })),
   setRedactToolsVisible: (redactToolsVisible) => set((state) => ({ redactToolsVisible, commentToolsVisible: redactToolsVisible ? false : state.commentToolsVisible })),
   setRedactDialog: (redactDialog) => set({ redactDialog }),
+  setStampDialog: (stampDialog) => set({ stampDialog }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPrompt: (prompt) => set({ prompt }),
   setPageDialog: (pageDialog) => set({ pageDialog }),

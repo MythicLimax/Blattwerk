@@ -205,6 +205,24 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       cmd('redact.tools', t('menu.pages.redact'), { type: 'checkbox', checked: viewing && state.redactToolsVisible, enabled: viewing && !state.formEditing }),
       cmd('redact.find', t('menu.pages.redactFind'), { enabled: viewing && !state.formEditing }),
       cmd('redact.apply', t('menu.pages.redactApply'), { enabled: viewing && state.hasRedactionMarks }),
+      { type: 'separator' },
+      {
+        label: t('menu.pages.watermark'),
+        enabled: doc,
+        submenu: [
+          cmd('stamp.watermark', t('menu.pages.addWatermark'), { enabled: doc }),
+          cmd('stamp.removeWatermark', t('menu.pages.removeWatermark'), { enabled: doc }),
+        ],
+      },
+      {
+        label: t('menu.pages.headerFooter'),
+        enabled: doc,
+        submenu: [
+          cmd('stamp.headerFooter', t('menu.pages.addHeaderFooter'), { enabled: doc }),
+          cmd('stamp.removeHeaderFooter', t('menu.pages.removeHeaderFooter'), { enabled: doc }),
+        ],
+      },
+      cmd('stamp.pageNumbers', t('menu.pages.pageNumbers'), { enabled: doc }),
     ],
   };
 

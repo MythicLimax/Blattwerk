@@ -5,6 +5,7 @@ import type { AnnotationChanges } from '../../shared/annotations';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
+import type { StampOperation } from '../../shared/stamping';
 import type { InspectResult, WorkerErrorCode, WorkerRequest, WorkerResponse } from '../../workers/pdfium/protocol';
 
 // Fehler aus dem Worker mit Art (für eine übersetzte Meldung) und technischem Text (für Details)
@@ -90,6 +91,7 @@ export interface ProcessInput {
   operations?: PageOperation[];
   formValues?: FormFieldValue[];
   fieldOperations?: FieldOperation[];
+  stampOperations?: StampOperation[];
   // Standard: inkrementell (das Original bleibt am Anfang der Datei unverändert)
   incremental?: boolean;
 }
@@ -114,6 +116,7 @@ export function processDocument(bytes: Uint8Array, password: string | null, inpu
         operations,
         formValues: input.formValues ?? [],
         fieldOperations: input.fieldOperations ?? [],
+        stampOperations: input.stampOperations ?? [],
         incremental: input.incremental ?? true,
       },
       transfer,

@@ -94,7 +94,14 @@
       "editForm": "Formular bearbeiten",
       "redact": "Schwärzen",
       "redactFind": "Text suchen und schwärzen …",
-      "redactApply": "Schwärzungen anwenden …"
+      "redactApply": "Schwärzungen anwenden …",
+      "watermark": "Wasserzeichen",
+      "addWatermark": "Hinzufügen …",
+      "removeWatermark": "Entfernen",
+      "headerFooter": "Kopf- und Fußzeile",
+      "addHeaderFooter": "Hinzufügen …",
+      "removeHeaderFooter": "Entfernen",
+      "pageNumbers": "Seitenzahlen hinzufügen …"
     }
   },
   "dialog": {
@@ -168,7 +175,11 @@
       "field-encrypted": "Formularfelder lassen sich in verschlüsselten Dokumenten nicht bearbeiten.",
       "field-missing": "Das Formularfeld wurde nicht gefunden.",
       "field-name": "Der Feldname ist ungültig oder schon vergeben.",
-      "redact-encrypted": "Schwärzen ist in verschlüsselten Dokumenten noch nicht möglich. Entfernen Sie zuerst den Kennwortschutz."
+      "redact-encrypted": "Schwärzen ist in verschlüsselten Dokumenten noch nicht möglich. Entfernen Sie zuerst den Kennwortschutz.",
+      "stamp-encrypted": "In verschlüsselten Dokumenten lassen sich noch keine Wasserzeichen, Kopf- oder Fußzeilen ändern. Entfernen Sie zuerst den Kennwortschutz.",
+      "stamp-characters": "Diese Zeichen kann die gewählte Schrift nicht darstellen: {{detail}}",
+      "stamp-nothing": "Das Dokument enthält nichts davon, das {{appName}} hinzugefügt hat.",
+      "stamp-image": "Das Bild konnte nicht eingebettet werden."
     }
   },
   "start": {
@@ -649,5 +660,90 @@
     "matchesTruncated_one": "Mehr als {{count}} Treffer; nur die ersten werden markiert.",
     "matchesTruncated_other": "Mehr als {{count}} Treffer; nur die ersten werden markiert.",
     "apply": "Schwärzungen anwenden"
+  },
+  "stamp": {
+    "failed": "Die Änderung konnte nicht ausgeführt werden. Das Dokument wurde nicht verändert.",
+    "watermarkRemoved": "Wasserzeichen entfernt.",
+    "headerFooterRemoved": "Kopf- und Fußzeilen entfernt.",
+    "watermarkTitle": "Wasserzeichen hinzufügen",
+    "headerFooterTitle": "Kopf- und Fußzeile hinzufügen",
+    "pageNumbersTitle": "Seitenzahlen hinzufügen",
+    "add": "Hinzufügen",
+    "cancel": "Abbrechen",
+    "source": {
+      "text": "Text",
+      "image": "Bild"
+    },
+    "defaultWatermark": "ENTWURF",
+    "text": "Text",
+    "font": "Schrift",
+    "fonts": {
+      "Helvetica": "Helvetica",
+      "HelveticaBold": "Helvetica fett",
+      "TimesRoman": "Times",
+      "TimesRomanBold": "Times fett",
+      "Courier": "Courier"
+    },
+    "size": "Größe",
+    "sizeAuto": "Passend zur Seite",
+    "points": "{{value}} pt",
+    "color": "Farbe",
+    "colors": {
+      "gray": "Grau",
+      "red": "Rot",
+      "blue": "Blau",
+      "black": "Schwarz"
+    },
+    "image": "Bild",
+    "pickImage": "Bild wählen …",
+    "noImage": "Kein Bild gewählt",
+    "scale": "Breite ({{value}} % der Seite)",
+    "opacity": "Deckkraft ({{value}} %)",
+    "rotation": "Drehung",
+    "degrees": "{{value}}°",
+    "position": "Position",
+    "vertical": {
+      "top": "Oben",
+      "middle": "Mitte",
+      "bottom": "Unten"
+    },
+    "horizontal": {
+      "left": "Links",
+      "center": "Mitte",
+      "right": "Rechts"
+    },
+    "layer": "Darstellung",
+    "front": "Über dem Seiteninhalt",
+    "behind": "Hinter dem Seiteninhalt",
+    "allPages": "Alle Seiten",
+    "somePages": "Seiten:",
+    "replaceWatermarks": "Vorhandene Wasserzeichen ersetzen",
+    "replaceHeaderFooter": "Vorhandene Kopf- und Fußzeilen ersetzen",
+    "slots": {
+      "headerLeft": "Kopfzeile links",
+      "headerCenter": "Kopfzeile Mitte",
+      "headerRight": "Kopfzeile rechts",
+      "footerLeft": "Fußzeile links",
+      "footerCenter": "Fußzeile Mitte",
+      "footerRight": "Fußzeile rechts"
+    },
+    "insert": "Einfügen:",
+    "tokens": {
+      "page": "Seitenzahl",
+      "pages": "Seitenanzahl",
+      "date": "Datum",
+      "file": "Dateiname"
+    },
+    "margins": "Ränder (mm)",
+    "side": {
+      "top": "Oben",
+      "bottom": "Unten",
+      "left": "Links",
+      "right": "Rechts"
+    },
+    "startNumber": "Beginnen bei",
+    "format": "Format",
+    "pageWord": "Seite",
+    "ofWord": "von"
   }
 }

@@ -5,6 +5,7 @@ import { computeChanges, hasChanges } from '../features/annotations/changes';
 import { deleteAnnotation, loadAnnotations } from '../features/annotations/controller';
 import { deleteSelectedField, toggleFormEditing } from '../features/form-edit/actions';
 import { openRedactApply, openRedactFind, toggleRedactTools } from '../features/redaction/actions';
+import { openStampDialog, removeArtifacts } from '../features/stamping/actions';
 import { deletePages, targetPages } from '../features/pages/actions';
 import { runPageCommand } from '../features/pages/commands';
 import { printDocument } from '../features/print/print-service';
@@ -18,6 +19,7 @@ import { useForms } from '../state/forms-store';
 import { historyDirty, tabHistory, useHistory, type DocState } from '../state/history-store';
 import type { FieldOperation } from '../../shared/forms';
 import type { RedactionOptions } from '../../shared/redaction';
+import type { StampOperation } from '../../shared/stamping';
 import { planRedaction } from '../features/redaction/plan';
 import type { PageOperation } from '../../shared/pages';
 import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
@@ -327,7 +329,8 @@ function leavingAnnotations(tabId: string, keepRedo: boolean): TabAnnotations | 
 
 function operationErrorMessage(error: unknown, fallbackKey: string): string {
   const code = error instanceof PdfiumClientError ? error.code : 'failed';
-  return code === 'failed' ? t(fallbackKey) : t(`errors.pages.${code}`);
+  // Die Meldung des Workers (z. B. nicht darstellbare Zeichen) steht als {{detail}} zur Verfügung.
+  return code === 'failed' ? t(fallbackKey) : t(`errors.pages.${code}`, { detail: errorMessage(error) });
 }
 
 export interface AfterOperation {
@@ -375,9 +378,15 @@ export function applyFieldOperations(tabId: string, fieldOperations: FieldOperat
   return applyDocumentOperations(tabId, { fieldOperations }, after);
 }
 
+// Wasserzeichen, Kopf- und Fußzeilen hinzufügen oder entfernen (Phase 5); ebenfalls ein neuer Stand.
+export function applyStampOperations(tabId: string, stampOperations: StampOperation[], after: AfterOperation = {}): Promise<boolean> {
+  return applyDocumentOperations(tabId, { stampOperations }, after);
+}
+
 interface DocumentOperations {
   operations?: PageOperation[];
   fieldOperations?: FieldOperation[];
+  stampOperations?: StampOperation[];
 }
 
 function applyDocumentOperations(tabId: string, input: DocumentOperations, after: AfterOperation): Promise<boolean> {
@@ -392,7 +401,14 @@ async function runDocumentOperations(tabId: string, input: DocumentOperations, a
   const runtime = getRuntime(tabId);
   const operations = input.operations ?? [];
   const fieldOperations = input.fieldOperations ?? [];
-  if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf || operations.length + fieldOperations.length === 0) return false;
+  const stampOperations = input.stampOperations ?? [];
+  if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf || operations.length + fieldOperations.length + stampOperations.length === 0) {
+    return false;
+  }
+  if (stampOperations.length > 0 && tab.encrypted) {
+    useUi.getState().notify(t('errors.pages.stamp-encrypted'));
+    return false;
+  }
   if (operations.length > 0 && !tab.canAssemble) {
     useUi.getState().notify(t('errors.pages.notAllowed'));
     return false;
@@ -406,7 +422,7 @@ async function runDocumentOperations(tabId: string, input: DocumentOperations, a
     const annotations = tabAnnotations(tabId);
     const changes = annotations ? computeChanges(annotations.items, annotations.originals) : { upserts: [], deletions: [] };
     const forms = await currentFormChanges(tabId);
-    const bytes = await processDocument(await pdf.getData(), runtime.password, { changes, operations, fieldOperations, formValues: forms });
+    const bytes = await processDocument(await pdf.getData(), runtime.password, { changes, operations, fieldOperations, stampOperations, formValues: forms });
     if (getRuntime(tabId)?.pdf !== pdf) return false;
     const page = Math.max(1, after.page ?? tab.currentPage);
     const next = { bytes, annotations: null, page, selection: after.selection ?? [] };
@@ -416,7 +432,8 @@ async function runDocumentOperations(tabId: string, input: DocumentOperations, a
     await showState(tabId, next);
     return true;
   } catch (error) {
-    useUi.getState().notify(operationErrorMessage(error, fieldOperations.length > 0 ? 'formEdit.failed' : 'errors.pages.failed'), errorMessage(error));
+    const fallback = fieldOperations.length > 0 ? 'formEdit.failed' : stampOperations.length > 0 ? 'stamp.failed' : 'errors.pages.failed';
+    useUi.getState().notify(operationErrorMessage(error, fallback), errorMessage(error));
     return false;
   }
 }
@@ -632,6 +649,15 @@ export function executeCommand(command: CommandId): void {
   if (command === 'forms.edit') {
     const active = getActiveTab();
     if (active) toggleFormEditing(active);
+    return;
+  }
+  if (command.startsWith('stamp.')) {
+    const active = getActiveTab();
+    if (!active) return;
+    if (command === 'stamp.watermark') openStampDialog(active, 'watermark');
+    else if (command === 'stamp.headerFooter') openStampDialog(active, 'headerFooter');
+    else if (command === 'stamp.pageNumbers') openStampDialog(active, 'pageNumbers');
+    else removeArtifacts(active, command === 'stamp.removeWatermark' ? 'watermark' : 'headerFooter');
     return;
   }
   if (command === 'redact.tools' || command === 'redact.find' || command === 'redact.apply') {
