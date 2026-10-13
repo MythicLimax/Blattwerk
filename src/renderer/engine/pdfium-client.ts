@@ -2,6 +2,7 @@
 // nach dem letzten beendet. Der WASM-Speicher von PDFium wächst mit großen Dateien und schrumpft nie;
 // erst das Beenden gibt ihn frei.
 import type { AnnotationChanges } from '../../shared/annotations';
+import type { FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { InspectResult, WorkerErrorCode, WorkerRequest, WorkerResponse } from '../../workers/pdfium/protocol';
 
@@ -91,6 +92,7 @@ export function processDocument(
   changes: AnnotationChanges,
   operations: PageOperation[] = [],
   incremental = true,
+  formValues: FormFieldValue[] = [],
 ): Promise<Uint8Array> {
   const buffer = ownBuffer(bytes);
   const transfer: Transferable[] = [buffer];
@@ -98,7 +100,7 @@ export function processDocument(
     if (op.type === 'insertPdf') transfer.push(op.source.data);
     if (op.type === 'insertImages') transfer.push(...op.images.map((image) => image.data));
   }
-  return bytesOf(send({ type: 'process', bytes: buffer, password, changes, operations, incremental }, transfer));
+  return bytesOf(send({ type: 'process', bytes: buffer, password, changes, operations, formValues, incremental }, transfer));
 }
 
 export function saveAnnotationChanges(

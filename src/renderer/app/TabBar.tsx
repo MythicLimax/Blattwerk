@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { closeTab } from '../engine/session';
 import { useAnnotations } from '../state/annotations-store';
 import { isDirtyState } from '../state/dirty';
+import { useForms } from '../state/forms-store';
 import { useHistory } from '../state/history-store';
 import { useDocuments, type TabState } from '../state/documents-store';
 import styles from './TabBar.module.css';
@@ -28,6 +29,7 @@ export function TabBar() {
   const setActive = useDocuments((s) => s.setActive);
   const annotationTabs = useAnnotations((s) => s.tabs);
   const historyTabs = useHistory((s) => s.tabs);
+  const formTabs = useForms((s) => s.tabs);
 
   return (
     <div className={styles.bar} role="tablist" aria-label={t('tabs.label')} data-testid="tab-bar">
@@ -52,7 +54,7 @@ export function TabBar() {
           >
             <TabIcon tab={tab} />
             <span className={styles.name}>{tab.name}</span>
-            {isDirtyState(annotationTabs[tab.id], historyTabs[tab.id]) && (
+            {isDirtyState(annotationTabs[tab.id], historyTabs[tab.id], formTabs[tab.id]) && (
               <span className={styles.dirty} title={t('tabs.unsaved')} aria-label={t('tabs.unsaved')} data-testid="tab-dirty" />
             )}
             <button

@@ -13,7 +13,9 @@ import type {
   StatusEntry,
 } from '../../shared/annotations';
 import { STAMP_STYLES, toPdfDate } from '../../shared/annotations';
+import type { FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
+import { applyFormValues } from './forms';
 import { copyOut, withBuffer, withFloats, withWString, type Pdfium } from './memory';
 import { Allocations, applyPageOperation, composeDocument, inspectDocument } from './pages';
 
@@ -89,17 +91,19 @@ export class PdfiumEngine {
 
   // Wie applyAndSave, danach zusätzlich Seitenoperationen. Kommentaränderungen beziehen sich auf die Seiten
   // vor den Operationen und werden deshalb zuerst angewendet.
+  // Ausgefüllte Formularwerte werden nach den Kommentaren und vor den Seitenoperationen übernommen.
   process(
     bytes: Uint8Array,
     password: string | null,
     changes: AnnotationChanges,
     operations: PageOperation[],
     options: SaveOptions,
+    formValues: FormFieldValue[] = [],
   ): Uint8Array {
     const m = this.#m;
     const memory = new Allocations(m);
     try {
-      return this.#process(bytes, password, changes, operations, options, memory);
+      return this.#process(bytes, password, changes, operations, options, memory, formValues);
     } finally {
       memory.release();
     }
@@ -132,6 +136,7 @@ export class PdfiumEngine {
     operations: PageOperation[],
     options: SaveOptions,
     memory: Allocations,
+    formValues: FormFieldValue[],
   ): Uint8Array {
     const m = this.#m;
     return withBuffer(m, bytes.length, (dataPtr) => {
@@ -156,6 +161,7 @@ export class PdfiumEngine {
         } finally {
           for (const ptr of pages.values()) m.FPDF_ClosePage(ptr);
         }
+        if (formValues.length > 0) applyFormValues(m, doc, formValues);
         for (const operation of operations) applyPageOperation(m, doc, operation, memory);
         return this.#save(doc, options.incremental ? SAVE_INCREMENTAL : SAVE_FULL);
       } finally {

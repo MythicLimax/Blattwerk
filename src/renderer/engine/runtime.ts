@@ -96,7 +96,34 @@ export function destroyRuntime(tabId: string): void {
   runtime.terminate();
 }
 
+// pdf.js kennt zwei Arten, Anmerkungen anzuzeigen: mit bedienbaren Formularfeldern (ENABLE_FORMS) oder unter
+// Berücksichtigung des Anmerkungsspeichers beim Zeichnen (ENABLE_STORAGE; damit blenden wir geänderte Kommentare aus).
+// Blattwerk braucht beides. Der Zeichner im Worker wertet den mitgeschickten Speicher unabhängig vom Modus aus;
+// nur das Kennzeichen „Formulare“ entscheidet, ob Felder als HTML statt auf dem Seitenbild erscheinen. Deshalb
+// liefert die Anzeige für ENABLE_FORMS die Angaben von ENABLE_STORAGE plus das Formular-Kennzeichen.
+// Betrifft die internen Teile von pdfjs-dist 6.4.299 (_transport.getRenderingIntent, RenderingIntentFlag);
+// geprüft durch die Oberflächentests für Kommentare und Formulare.
+const RENDERING_INTENT_FORMS = 0x10;
+
+interface RenderingIntentArgs {
+  renderingIntent: number;
+  cacheKey: string;
+}
+
+export function combineFormsWithStorage(pdf: PDFDocumentProxy): void {
+  const transport = (pdf as unknown as { _transport?: { getRenderingIntent?: (...args: unknown[]) => RenderingIntentArgs } })._transport;
+  const original = transport?.getRenderingIntent?.bind(transport);
+  if (!transport || !original) return;
+  transport.getRenderingIntent = (intent: unknown, annotationMode: unknown, ...rest: unknown[]) => {
+    if (intent !== 'display' || annotationMode !== pdfjs.AnnotationMode.ENABLE_FORMS) return original(intent, annotationMode, ...rest);
+    const args = original(intent, pdfjs.AnnotationMode.ENABLE_STORAGE, ...rest);
+    const renderingIntent = args.renderingIntent | RENDERING_INTENT_FORMS;
+    return { ...args, renderingIntent, cacheKey: args.cacheKey.replace(/^\d+/, String(renderingIntent)) };
+  };
+}
+
 export function setRuntimeDocument(runtime: DocumentRuntime, pdf: PDFDocumentProxy): void {
+  combineFormsWithStorage(pdf);
   runtime.pdf = pdf;
   runtime.linkService.setDocument(pdf, null);
   runtime.findController.setDocument(pdf);
@@ -114,8 +141,8 @@ export function attachViewer(runtime: DocumentRuntime, container: HTMLDivElement
     findController: runtime.findController,
     l10n: l10n(),
     textLayerMode: 1,
-    // ENABLE_STORAGE: pdf.js berücksichtigt den Anmerkungsspeicher, so lassen sich geänderte Kommentare ausblenden.
-    annotationMode: pdfjs.AnnotationMode.ENABLE_STORAGE,
+    // Bedienbare Formularfelder; den Anmerkungsspeicher berücksichtigt das Zeichnen trotzdem (combineFormsWithStorage).
+    annotationMode: pdfjs.AnnotationMode.ENABLE_FORMS,
     annotationEditorMode: pdfjs.AnnotationEditorType.DISABLE,
     imageResourcesPath: PDFJS_ASSETS.imageResourcesPath,
     enablePermissions: true,

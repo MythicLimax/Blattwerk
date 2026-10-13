@@ -10,12 +10,14 @@ import { layoutForMode } from '../features/viewer/view-modes';
 import { t } from '../i18n';
 import { tabAnnotations, useAnnotations, type TabAnnotations } from '../state/annotations-store';
 import { isTabDirty } from '../state/dirty';
+import { currentFormChanges, syncFormChanges } from '../features/forms/form-sync';
+import { useForms } from '../state/forms-store';
 import { historyDirty, tabHistory, useHistory, type DocState } from '../state/history-store';
 import type { PageOperation } from '../../shared/pages';
 import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
 import { useUi, type PromptAnswer } from '../state/ui-store';
 import { openTemporary, startLoading } from './document-loader';
-import { PdfiumClientError, processDocument, saveAnnotationChanges } from './pdfium-client';
+import { PdfiumClientError, processDocument } from './pdfium-client';
 import { pdfjs } from './pdfjs';
 import { createRuntime, destroyRuntime, dispatchFind, getRuntime, setRuntimeDocument } from './runtime';
 
@@ -186,6 +188,7 @@ function closeTabNow(tabId: string): void {
   useDocuments.getState().removeTab(tabId);
   useAnnotations.getState().drop(tabId);
   useHistory.getState().drop(tabId);
+  useForms.getState().drop(tabId);
   if (ui.propertiesTabId === tabId) ui.openProperties(null);
   // „Gehe zu Seite“ gilt immer dem aktiven Tab; nach dem Schließen ist das ein anderer.
   ui.setGoToPageOpen(false);
@@ -194,6 +197,7 @@ function closeTabNow(tabId: string): void {
 // Schließt einen Tab. Bei ungespeicherten Änderungen wird vorher gefragt. Liefert false bei Abbruch.
 export async function closeTab(tabId: string): Promise<boolean> {
   commitPendingEdits();
+  await syncFormChanges(tabId);
   const tab = findTab(tabId);
   if (!tab) return true;
   if (isTabDirty(tabId)) {
@@ -209,6 +213,7 @@ export async function closeTab(tabId: string): Promise<boolean> {
 // Fenster schließen oder App beenden: alle Tabs mit Änderungen nacheinander abfragen.
 export async function handleCloseRequest(): Promise<void> {
   commitPendingEdits();
+  await Promise.all(useDocuments.getState().tabs.map((tab) => syncFormChanges(tab.id)));
   const dirtyTabs = useDocuments.getState().tabs.filter((tab) => isTabDirty(tab.id));
   for (const tab of dirtyTabs) {
     useDocuments.getState().setActive(tab.id);
@@ -228,6 +233,7 @@ async function reloadTab(tabId: string, file: FileInfo): Promise<void> {
   destroyRuntime(tabId);
   useAnnotations.getState().init(tabId);
   useHistory.getState().reset(tabId);
+  useForms.getState().drop(tabId);
   useDocuments.getState().updateTab(tabId, {
     fileId: file.fileId,
     name: file.name,
@@ -248,8 +254,9 @@ export async function saveTab(tabId: string, mode: 'save' | 'saveAs'): Promise<b
   const annotations = tabAnnotations(tabId);
   if (!tab || tab.status !== 'ready' || !runtime?.pdf || !annotations || tab.saving || tab.working) return false;
   const changes = computeChanges(annotations.items, annotations.originals);
-  // Nichts zu schreiben: keine Kommentaränderungen und der angezeigte Stand ist die Datei auf der Platte
-  if (mode === 'save' && !hasChanges(changes) && !historyDirty(tabHistory(tabId))) {
+  const forms = await currentFormChanges(tabId);
+  // Nichts zu schreiben: keine Kommentar- oder Formularänderungen und der angezeigte Stand ist die Datei
+  if (mode === 'save' && !hasChanges(changes) && forms.length === 0 && !historyDirty(tabHistory(tabId))) {
     useAnnotations.getState().markSaved(tabId);
     return true;
   }
@@ -257,7 +264,10 @@ export async function saveTab(tabId: string, mode: 'save' | 'saveAs'): Promise<b
   try {
     // Die Originalbytes hält pdf.js bereits im Speicher; große Dateien liest es bei Bedarf nach.
     const original = await runtime.pdf.getData();
-    const bytes = hasChanges(changes) ? await saveAnnotationChanges(original, runtime.password, changes) : original;
+    const bytes =
+      hasChanges(changes) || forms.length > 0
+        ? await processDocument(original, runtime.password, changes, [], true, forms)
+        : original;
     let result = mode === 'save' ? await api.saveFile(tab.fileId, bytes) : await api.saveFileAs(tab.fileId, bytes);
     if (!result.ok && result.error === 'changed-externally') {
       const answer = await ask('changed-externally', tab);
@@ -288,6 +298,7 @@ async function showState(tabId: string, state: DocState): Promise<void> {
   const password = getRuntime(tabId)?.password ?? null;
   destroyRuntime(tabId);
   useAnnotations.getState().init(tabId);
+  useForms.getState().drop(tabId);
   useDocuments.getState().updateTab(tabId, {
     status: 'loading',
     search: EMPTY_SEARCH,
@@ -362,7 +373,8 @@ async function runPageOperations(tabId: string, operations: PageOperation[], aft
   try {
     const annotations = tabAnnotations(tabId);
     const changes = annotations ? computeChanges(annotations.items, annotations.originals) : { upserts: [], deletions: [] };
-    const bytes = await processDocument(await pdf.getData(), runtime.password, changes, operations);
+    const forms = await currentFormChanges(tabId);
+    const bytes = await processDocument(await pdf.getData(), runtime.password, changes, operations, true, forms);
     if (getRuntime(tabId)?.pdf !== pdf) return false;
     const page = Math.max(1, after.page ?? tab.currentPage);
     const next = { bytes, annotations: null, page, selection: after.selection ?? [] };
@@ -422,7 +434,10 @@ export function redoTab(tabId: string): void {
 // gespeichert, gedruckt oder geschlossen wird. Die Felder übernehmen ihren Text beim Verlassen.
 export function commitPendingEdits(): void {
   const element = document.activeElement;
-  if (element instanceof HTMLTextAreaElement) element.blur();
+  // Textfelder der Kommentare und alle Eingaben in Formularfeldern (pdf.js übernimmt manche Werte erst beim Verlassen)
+  if (element instanceof HTMLTextAreaElement || (element instanceof HTMLElement && element.closest('.annotationLayer'))) {
+    element.blur();
+  }
 }
 
 function isEditableFocus(): boolean {
@@ -472,7 +487,8 @@ export async function printTab(tab: TabState): Promise<void> {
   const changes = annotations ? computeChanges(annotations.items, annotations.originals) : null;
   if (changes && hasChanges(changes)) {
     try {
-      const bytes = await saveAnnotationChanges(await runtime.pdf.getData(), runtime.password, changes);
+      const forms = await currentFormChanges(tab.id);
+      const bytes = await processDocument(await runtime.pdf.getData(), runtime.password, changes, [], true, forms);
       temporary = await openTemporary(bytes, runtime.password);
     } catch (error) {
       printAbort = null;

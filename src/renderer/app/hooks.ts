@@ -8,6 +8,7 @@ import { isPagedMode } from '../features/viewer/view-modes';
 import { syncHiddenAnnotations } from '../features/annotations/controller';
 import { useAnnotations } from '../state/annotations-store';
 import { canRedoState, canUndoState, isDirtyState } from '../state/dirty';
+import { useForms } from '../state/forms-store';
 import { useHistory } from '../state/history-store';
 import { getActiveTab, useDocuments } from '../state/documents-store';
 import { useUi } from '../state/ui-store';
@@ -19,6 +20,7 @@ function computeMenuState(): MenuState {
   const ready = active?.status === 'ready';
   const annotations = useAnnotations.getState().tabs;
   const histories = useHistory.getState().tabs;
+  const forms = useForms.getState().tabs;
   const activeAnnotations = active ? annotations[active.id] : undefined;
   const activeHistory = active ? histories[active.id] : undefined;
   return {
@@ -28,10 +30,10 @@ function computeMenuState(): MenuState {
     sidebarVisible: ui.sidebarVisible,
     rightPanelVisible: ui.rightPanelVisible,
     tabCount: tabs.length,
-    dirtyCount: tabs.filter((tab) => isDirtyState(annotations[tab.id], histories[tab.id])).length,
+    dirtyCount: tabs.filter((tab) => isDirtyState(annotations[tab.id], histories[tab.id], forms[tab.id])).length,
     canUndo: canUndoState(activeAnnotations, activeHistory),
     canRedo: canRedoState(activeAnnotations, activeHistory),
-    activeDirty: ready && isDirtyState(activeAnnotations, activeHistory),
+    activeDirty: ready && isDirtyState(activeAnnotations, activeHistory, active ? forms[active.id] : undefined),
     commentToolsVisible: ui.commentToolsVisible,
     organizeMode: ready && active.mode === 'organize',
     canAssemble: ready && active.canAssemble,
@@ -56,11 +58,13 @@ export function useMenuStateSync(): void {
     const offUi = useUi.subscribe(push);
     const offAnnotations = useAnnotations.subscribe(push);
     const offHistory = useHistory.subscribe(push);
+    const offForms = useForms.subscribe(push);
     return () => {
       offDocs();
       offUi();
       offAnnotations();
       offHistory();
+      offForms();
     };
   }, []);
 }

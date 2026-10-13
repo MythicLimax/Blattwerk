@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { attachViewer, getRuntime } from '../../engine/runtime';
 import { AnnotationLayer } from '../annotations/AnnotationLayer';
+import { syncFormChanges } from '../forms/form-sync';
 import type { TabState } from '../../state/documents-store';
 import styles from './ViewerHost.module.css';
 import { PageFlipAccumulator, SCROLL_MODE, wheelDeltaPixels } from './view-modes';
@@ -68,8 +69,21 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
     };
     container.addEventListener('wheel', onWheel, { passive: false });
 
+    // Eingaben in Formularfelder (pdf.js legt die Werte in seinem Anmerkungsspeicher ab) als Änderung erfassen.
+    // Erst nach dem Ereignis abgleichen: pdf.js speichert den Wert im selben Ereignis.
+    const onFormInput = (event: Event) => {
+      if (!(event.target as Element | null)?.closest?.('.annotationLayer')) return;
+      setTimeout(() => void syncFormChanges(tab.id), 0);
+    };
+    container.addEventListener('input', onFormInput);
+    container.addEventListener('change', onFormInput);
+    container.addEventListener('click', onFormInput);
+
     return () => {
       container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('input', onFormInput);
+      container.removeEventListener('change', onFormInput);
+      container.removeEventListener('click', onFormInput);
       detach();
     };
     // Der Viewer wird einmal pro Tab erstellt; Änderungen am Tab-Zustand steuern ihn über Befehle.

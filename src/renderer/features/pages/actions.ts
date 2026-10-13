@@ -11,6 +11,7 @@ import { getRuntime } from '../../engine/runtime';
 import { applyPageOperations, commitPendingEdits, handleOpenResult } from '../../engine/session';
 import { t } from '../../i18n';
 import { tabAnnotations } from '../../state/annotations-store';
+import { currentFormChanges } from '../forms/form-sync';
 import { useDocuments, type TabState } from '../../state/documents-store';
 import { useUi, type SourceFile } from '../../state/ui-store';
 import { computeChanges, hasChanges } from '../annotations/changes';
@@ -194,7 +195,11 @@ async function currentBytes(tab: TabState): Promise<{ bytes: Uint8Array; passwor
   const annotations = tabAnnotations(tab.id);
   const changes = annotations ? computeChanges(annotations.items, annotations.originals) : null;
   const data = await runtime.pdf.getData();
-  const bytes = changes && hasChanges(changes) ? await processDocument(data, runtime.password, changes) : data;
+  const forms = await currentFormChanges(tab.id);
+  const bytes =
+    (changes && hasChanges(changes)) || forms.length > 0
+      ? await processDocument(data, runtime.password, changes ?? { upserts: [], deletions: [] }, [], true, forms)
+      : data;
   return { bytes, password: runtime.password };
 }
 

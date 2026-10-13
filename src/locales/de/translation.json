@@ -158,7 +158,8 @@
       "image": "Das Bild konnte nicht eingefügt werden.",
       "import": "Die Seiten konnten nicht übernommen werden.",
       "verify": "Das Ergebnis ließ sich nicht prüfen. Das Dokument wurde nicht verändert.",
-      "failed": "Die Seiten konnten nicht bearbeitet werden."
+      "failed": "Die Seiten konnten nicht bearbeitet werden.",
+      "form": "Ein Formularfeld konnte nicht übernommen werden."
     }
   },
   "start": {

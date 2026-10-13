@@ -2,6 +2,7 @@
 import { init } from '@embedpdf/pdfium';
 import wasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import { PdfiumEngine } from './engine';
+import { FormValueError } from './forms';
 import { PageOperationError } from './pages';
 import type { WorkerErrorCode, WorkerRequest, WorkerResponse } from './protocol';
 
@@ -39,6 +40,7 @@ function replyBytes(id: number, output: Uint8Array, pdfium: PdfiumEngine, passwo
 
 function errorCode(error: unknown): WorkerErrorCode {
   if (error instanceof PageOperationError) return error.code;
+  if (error instanceof FormValueError) return 'form';
   if (error instanceof VerifyError) return 'verify';
   return 'failed';
 }
@@ -50,9 +52,14 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
       const pdfium = await engine();
       switch (request.type) {
         case 'process': {
-          const output = pdfium.process(new Uint8Array(request.bytes), request.password, request.changes, request.operations, {
-            incremental: request.incremental,
-          });
+          const output = pdfium.process(
+            new Uint8Array(request.bytes),
+            request.password,
+            request.changes,
+            request.operations,
+            { incremental: request.incremental },
+            request.formValues,
+          );
           replyBytes(request.id, output, pdfium, request.password);
           return;
         }
