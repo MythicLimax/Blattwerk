@@ -66,6 +66,8 @@ let menuState: MenuState = {
   organizeMode: false,
   canAssemble: false,
   canExtract: false,
+  formEditing: false,
+  canEditForms: false,
 };
 // Schließen mit ungespeicherten Änderungen: Der Renderer fragt nach und bestätigt dann.
 let allowClose = false;

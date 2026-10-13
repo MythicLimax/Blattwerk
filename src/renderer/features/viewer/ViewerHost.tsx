@@ -115,7 +115,14 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
   }, [tab.id]);
 
   return (
-    <div ref={containerRef} className={styles.container} tabIndex={0} data-testid="viewer-container">
+    <div
+      ref={containerRef}
+      className={styles.container}
+      tabIndex={0}
+      data-testid="viewer-container"
+      // Formular bearbeiten: Felder und Links von pdf.js reagieren nicht, die Bearbeitungsebene übernimmt.
+      data-form-editing={tab.formEditing ? '' : undefined}
+    >
       <div ref={viewerRef} className="pdfViewer" />
       <AnnotationLayer tabId={tab.id} active={active} />
     </div>

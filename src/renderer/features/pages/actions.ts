@@ -198,7 +198,7 @@ async function currentBytes(tab: TabState): Promise<{ bytes: Uint8Array; passwor
   const forms = await currentFormChanges(tab.id);
   const bytes =
     (changes && hasChanges(changes)) || forms.length > 0
-      ? await processDocument(data, runtime.password, changes ?? { upserts: [], deletions: [] }, [], true, forms)
+      ? await processDocument(data, runtime.password, { changes: changes ?? undefined, formValues: forms })
       : data;
   return { bytes, password: runtime.password };
 }

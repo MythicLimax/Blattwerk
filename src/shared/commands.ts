@@ -37,6 +37,7 @@ export const COMMANDS = [
   'pages.extract',
   'pages.split',
   'tools.sign',
+  'forms.edit',
   'file.combine',
   'file.fromImages',
   'nav.firstPage',

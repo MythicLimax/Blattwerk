@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { api } from '../api';
 import { handleCloseRequest, handleOpenResult, executeCommand } from '../engine/session';
 import { CommentToolbar } from '../features/annotations/CommentToolbar';
+import { FieldDialog } from '../features/form-edit/FieldDialog';
+import { FormEditToolbar } from '../features/form-edit/FormEditToolbar';
 import { BusyOverlay } from '../features/pages/BusyOverlay';
 import { ChooseSignatureDialog, CreateSignatureDialog } from '../features/signatures/SignatureDialogs';
 import { CombineDialog, PageDialogs, SourcePasswordDialog } from '../features/pages/PageDialogs';
@@ -13,6 +15,7 @@ import { PropertiesDialog } from '../features/properties/PropertiesDialog';
 import { SettingsDialog } from '../features/settings/SettingsDialog';
 import { DocumentPane } from '../features/viewer/DocumentPane';
 import { useActiveTab, useDocuments } from '../state/documents-store';
+import { useFormEdit } from '../state/form-edit-store';
 import { useUi } from '../state/ui-store';
 import { PRODUCT_NAME } from '../../shared/product';
 import styles from './App.module.css';
@@ -40,6 +43,7 @@ export function App() {
   const pageDialog = useUi((s) => s.pageDialog);
   const combine = useUi((s) => s.combine);
   const signatureDialog = useUi((s) => s.signatureDialog);
+  const fieldDialog = useFormEdit((s) => s.dialog);
 
   useEffect(() => {
     const offOpened = api.onFileOpened((result) => void handleOpenResult(result));
@@ -74,7 +78,8 @@ export function App() {
     <div className={styles.app}>
       <Toolbar />
       {tabs.length > 0 && <TabBar />}
-      {commentToolsVisible && active?.status === 'ready' && active.mode === 'view' && <CommentToolbar tab={active} />}
+      {commentToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && <CommentToolbar tab={active} />}
+      {active?.status === 'ready' && active.mode === 'view' && active.formEditing && <FormEditToolbar tab={active} />}
       <div className={styles.workspace}>
         {!showDocumentChrome ? (
           <StartScreen />
@@ -99,6 +104,7 @@ export function App() {
       {combine && <CombineDialog sources={combine} />}
       {signatureDialog === 'choose' && <ChooseSignatureDialog />}
       {signatureDialog === 'create' && <CreateSignatureDialog />}
+      {fieldDialog && <FieldDialog key={JSON.stringify(fieldDialog)} dialog={fieldDialog} />}
       <SourcePasswordDialog />
       <BusyOverlay />
       {prompt && <PromptDialog key={`${prompt.kind}-${prompt.tabId}`} prompt={prompt} />}

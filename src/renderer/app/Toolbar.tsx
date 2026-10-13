@@ -1,6 +1,7 @@
 import {
   ChevronDown,
   ChevronUp,
+  ClipboardPen,
   FolderOpen,
   Info,
   LayoutGrid,
@@ -243,9 +244,17 @@ export function Toolbar() {
           <IconButton
             icon={Signature}
             label={t('toolbar.sign')}
-            disabled={!viewing || !tab.canAnnotate}
+            disabled={!viewing || !tab.canAnnotate || tab.formEditing}
             onClick={() => executeCommand('tools.sign')}
             data-testid="sign-button"
+          />
+          <IconButton
+            icon={ClipboardPen}
+            label={t('toolbar.editForm')}
+            pressed={viewing && tab.formEditing}
+            disabled={!viewing || !tab.canEditForms}
+            onClick={() => executeCommand('forms.edit')}
+            data-testid="form-edit-button"
           />
           <IconButton
             icon={LayoutGrid}
@@ -257,7 +266,7 @@ export function Toolbar() {
           <IconButton
             icon={MessageSquare}
             label={t('toolbar.comment')}
-            pressed={commentToolsVisible && viewing}
+            pressed={commentToolsVisible && viewing && !tab.formEditing}
             disabled={!viewing}
             onClick={() => executeCommand('view.toggleCommentTools')}
             data-testid="comment-tools-button"

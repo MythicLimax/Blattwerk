@@ -6,3 +6,9 @@
   outline: none;
   background: var(--color-viewer-bg);
 }
+
+/* Formular bearbeiten: Eingabefelder und Links von pdf.js nicht bedienbar */
+.container[data-form-editing] :global(.annotationLayer),
+.container[data-form-editing] :global(.annotationLayer *) {
+  pointer-events: none !important;
+}

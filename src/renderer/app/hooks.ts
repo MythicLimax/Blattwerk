@@ -38,6 +38,8 @@ function computeMenuState(): MenuState {
     organizeMode: ready && active.mode === 'organize',
     canAssemble: ready && active.canAssemble,
     canExtract: ready && active.canExtract,
+    formEditing: ready && active.mode === 'view' && active.formEditing,
+    canEditForms: ready && active.canEditForms,
   };
 }
 

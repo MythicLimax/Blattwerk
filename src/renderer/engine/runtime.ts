@@ -40,6 +40,14 @@ export interface DocumentRuntime {
 }
 
 const runtimes = new Map<string, DocumentRuntime>();
+// Scrollposition, die nach dem nächsten Laden eines Tabs wiederhergestellt wird (Formularfelder bearbeiten)
+const pendingScroll = new Map<string, { top: number; left: number }>();
+
+// Merkt sich die Scrollposition eines Tabs für das nächste Neuladen (gleiche Seiten, gleicher Zoom).
+export function rememberScroll(tabId: string): void {
+  const container = runtimes.get(tabId)?.container;
+  if (container) pendingScroll.set(tabId, { top: container.scrollTop, left: container.scrollLeft });
+}
 let sharedL10n: GenericL10n | null = null;
 
 function l10n(): GenericL10n {
@@ -160,6 +168,12 @@ export function attachViewer(runtime: DocumentRuntime, container: HTMLDivElement
     viewer.currentScaleValue = current?.scaleValue ?? 'auto';
     // Nach dem Neuladen (Speichern) an derselben Stelle weitermachen
     if (current && current.currentPage > 1) viewer.currentPageNumber = Math.min(current.currentPage, viewer.pagesCount);
+    const scroll = pendingScroll.get(runtime.tabId);
+    if (scroll) {
+      pendingScroll.delete(runtime.tabId);
+      container.scrollTop = scroll.top;
+      container.scrollLeft = scroll.left;
+    }
   };
   runtime.eventBus.on('pagesinit', onPagesInit);
   viewer.setDocument(runtime.pdf);

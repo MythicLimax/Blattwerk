@@ -1,9 +1,9 @@
 // Nachrichten zwischen Renderer und PDFium-Worker.
 import type { AnnotationChanges } from '../../shared/annotations';
-import type { FormFieldValue } from '../../shared/forms';
+import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 
-// Kommentaränderungen und (optional) Seitenoperationen anwenden, neue Bytes liefern
+// Kommentaränderungen, Formularwerte und (optional) Seiten- oder Feldoperationen anwenden, neue Bytes liefern
 export interface ProcessRequest {
   id: number;
   type: 'process';
@@ -12,6 +12,8 @@ export interface ProcessRequest {
   changes: AnnotationChanges;
   operations: PageOperation[];
   formValues: FormFieldValue[];
+  // Formularfelder anlegen, ändern, löschen (nach allen übrigen Änderungen, immer inkrementell)
+  fieldOperations: FieldOperation[];
   incremental: boolean;
 }
 
@@ -35,7 +37,19 @@ export type WorkerRequest = ProcessRequest | ComposeRequest | InspectRequest;
 export type InspectResult = { ok: true; pageCount: number } | { ok: false; reason: 'password' | 'invalid' };
 
 // Fehlerarten, die die Oberfläche übersetzt anzeigt (errors.pages.*); 'failed' für alles Unerwartete
-export type WorkerErrorCode = 'password' | 'invalid' | 'range' | 'all-pages' | 'image' | 'import' | 'form' | 'verify' | 'failed';
+export type WorkerErrorCode =
+  | 'password'
+  | 'invalid'
+  | 'range'
+  | 'all-pages'
+  | 'image'
+  | 'import'
+  | 'form'
+  | 'field-encrypted'
+  | 'field-missing'
+  | 'field-name'
+  | 'verify'
+  | 'failed';
 
 export type WorkerResponse =
   | { id: number; ok: true; kind: 'bytes'; bytes: ArrayBuffer }

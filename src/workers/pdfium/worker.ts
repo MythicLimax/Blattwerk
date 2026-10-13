@@ -2,6 +2,7 @@
 import { init } from '@embedpdf/pdfium';
 import wasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import { PdfiumEngine } from './engine';
+import type { FieldOperationError } from './fields';
 import { FormValueError } from './forms';
 import { PageOperationError } from './pages';
 import type { WorkerErrorCode, WorkerRequest, WorkerResponse } from './protocol';
@@ -38,7 +39,15 @@ function replyBytes(id: number, output: Uint8Array, pdfium: PdfiumEngine, passwo
   reply({ id, ok: true, kind: 'bytes', bytes: buffer }, [buffer]);
 }
 
+// pdf-lib (nur für Feldoperationen) wird erst bei Bedarf geladen.
+const loadFields = () => import('./fields');
+
+function isFieldError(error: unknown): error is FieldOperationError {
+  return error instanceof Error && error.name === 'FieldOperationError';
+}
+
 function errorCode(error: unknown): WorkerErrorCode {
+  if (isFieldError(error)) return error.code;
   if (error instanceof PageOperationError) return error.code;
   if (error instanceof FormValueError) return 'form';
   if (error instanceof VerifyError) return 'verify';
@@ -52,14 +61,20 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
       const pdfium = await engine();
       switch (request.type) {
         case 'process': {
-          const output = pdfium.process(
-            new Uint8Array(request.bytes),
-            request.password,
-            request.changes,
-            request.operations,
-            { incremental: request.incremental },
-            request.formValues,
-          );
+          const input = new Uint8Array(request.bytes);
+          const pdfiumWork =
+            request.changes.upserts.length > 0 ||
+            request.changes.deletions.length > 0 ||
+            request.operations.length > 0 ||
+            request.formValues.length > 0 ||
+            !request.incremental;
+          let output = pdfiumWork
+            ? pdfium.process(input, request.password, request.changes, request.operations, { incremental: request.incremental }, request.formValues)
+            : input;
+          if (request.fieldOperations.length > 0) {
+            const { applyFieldOperations } = await loadFields();
+            output = await applyFieldOperations(output, request.fieldOperations);
+          }
           replyBytes(request.id, output, pdfium, request.password);
           return;
         }

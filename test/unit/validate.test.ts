@@ -106,6 +106,8 @@ describe('validateMenuState', () => {
     organizeMode: true,
     canAssemble: true,
     canExtract: false,
+    formEditing: false,
+    canEditForms: true,
   };
   it('übernimmt einen gültigen Zustand', () => {
     expect(validateMenuState(valid)).toEqual(valid);

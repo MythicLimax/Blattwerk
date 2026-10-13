@@ -85,6 +85,8 @@ interface PageOverlayProps {
   editingId: string | null;
   scale: number;
   readOnly: boolean;
+  // Keine Mausaktionen (Modus „Formular bearbeiten“); Kommentare bleiben sichtbar.
+  inert?: boolean;
 }
 
 export function PageOverlay({
@@ -97,6 +99,7 @@ export function PageOverlay({
   editingId,
   scale,
   readOnly,
+  inert = false,
 }: PageOverlayProps) {
   const { t } = useTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -307,6 +310,7 @@ export function PageOverlay({
         drawing ? styles.drawing : '',
         drawing && (tool === 'note' || tool === 'stamp' || tool === 'signature') ? styles.place : '',
         gesture ? styles.capturing : '',
+        inert ? styles.inert : '',
       ].join(' ')}
       viewBox={`0 0 ${geometry.width} ${geometry.height}`}
       preserveAspectRatio="none"

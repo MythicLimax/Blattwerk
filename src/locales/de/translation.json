@@ -90,7 +90,8 @@
       "insertBlank": "Leere Seite …",
       "extract": "Seiten extrahieren …",
       "split": "Dokument teilen …",
-      "sign": "Unterschreiben …"
+      "sign": "Unterschreiben …",
+      "editForm": "Formular bearbeiten"
     }
   },
   "dialog": {
@@ -160,7 +161,10 @@
       "import": "Die Seiten konnten nicht übernommen werden.",
       "verify": "Das Ergebnis ließ sich nicht prüfen. Das Dokument wurde nicht verändert.",
       "failed": "Die Seiten konnten nicht bearbeitet werden.",
-      "form": "Ein Formularfeld konnte nicht übernommen werden."
+      "form": "Ein Formularfeld konnte nicht übernommen werden.",
+      "field-encrypted": "Formularfelder lassen sich in verschlüsselten Dokumenten nicht bearbeiten.",
+      "field-missing": "Das Formularfeld wurde nicht gefunden.",
+      "field-name": "Der Feldname ist ungültig oder schon vergeben."
     }
   },
   "start": {
@@ -198,7 +202,8 @@
     "save": "Speichern",
     "comment": "Kommentieren",
     "organize": "Seiten organisieren",
-    "sign": "Unterschreiben"
+    "sign": "Unterschreiben",
+    "editForm": "Formular bearbeiten"
   },
   "viewMode": {
     "single": "Einzelne Seite",
@@ -534,5 +539,68 @@
     "keep": "Für später speichern",
     "placeHint": "Klicke auf die Stelle, an der die Unterschrift stehen soll. Esc bricht ab.",
     "notAllowed": "Dieses Dokument erlaubt keine Kommentare und damit auch keine Unterschrift."
+  },
+  "formEdit": {
+    "toolbar": "Werkzeuge zum Bearbeiten von Formularen",
+    "tools": {
+      "select": "Auswählen",
+      "text": "Textfeld",
+      "checkbox": "Kontrollkästchen",
+      "radio": "Optionsfeld",
+      "dropdown": "Dropdown-Liste",
+      "list": "Listenfeld"
+    },
+    "kinds": {
+      "text": "Textfeld",
+      "checkbox": "Kontrollkästchen",
+      "radio": "Optionsfeld",
+      "dropdown": "Dropdown-Liste",
+      "list": "Listenfeld",
+      "other": "Schaltfläche oder Signaturfeld"
+    },
+    "defaultName": {
+      "text": "Textfeld",
+      "checkbox": "Kontrollkästchen",
+      "radio": "Optionsgruppe",
+      "dropdown": "Dropdown",
+      "list": "Liste"
+    },
+    "defaultValue": "Auswahl {{n}}",
+    "properties": "Eigenschaften",
+    "delete": "Feld löschen",
+    "done": "Fertig",
+    "hint": "Rechteck auf der Seite aufziehen oder klicken, um das Feld anzulegen.",
+    "selectHint": "Feld anklicken zum Auswählen, ziehen zum Verschieben, Doppelklick für Eigenschaften.",
+    "notAllowed": "Formularfelder lassen sich in verschlüsselten Dokumenten nicht bearbeiten.",
+    "notEditable": "Dieses Feld lässt sich nur verschieben, in der Größe ändern oder löschen.",
+    "dialog": {
+      "createTitle": "Neues Feld: {{kind}}",
+      "editTitle": "Feld bearbeiten: {{kind}}",
+      "name": "Name",
+      "group": "Gruppe",
+      "groupHint": "Knöpfe derselben Gruppe schließen sich gegenseitig aus. Ein vorhandener Gruppenname fügt den Knopf dieser Gruppe hinzu.",
+      "value": "Wert dieses Knopfes",
+      "tooltip": "QuickInfo",
+      "required": "Pflichtfeld",
+      "readOnly": "Schreibgeschützt",
+      "fontSize": "Schriftgröße",
+      "fontAuto": "Automatisch",
+      "fontValue": "{{value}} pt",
+      "multiline": "Mehrzeilig",
+      "options": "Einträge (einer pro Zeile)",
+      "editable": "Eigenen Text erlauben",
+      "create": "Anlegen",
+      "ok": "Übernehmen",
+      "cancel": "Abbrechen",
+      "problems": {
+        "empty": "Bitte einen Namen eingeben.",
+        "dot": "Der Name darf keinen Punkt enthalten.",
+        "taken": "Diesen Namen gibt es schon.",
+        "valueEmpty": "Bitte einen Wert eingeben.",
+        "valueTaken": "Diesen Wert gibt es in der Gruppe schon.",
+        "noOptions": "Bitte mindestens einen Eintrag angeben."
+      }
+    },
+    "failed": "Das Formularfeld konnte nicht geändert werden."
   }
 }

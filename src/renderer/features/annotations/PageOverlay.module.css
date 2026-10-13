@@ -89,3 +89,9 @@
   overflow: hidden;
   pointer-events: all;
 }
+
+/* Modus „Formular bearbeiten“: Kommentare sichtbar, aber ohne Mausaktionen */
+.svg.inert,
+.svg.inert * {
+  pointer-events: none !important;
+}

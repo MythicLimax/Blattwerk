@@ -43,6 +43,10 @@ export interface TabState {
   canAssemble: boolean;
   // false, wenn das PDF das Kopieren von Inhalten verbietet (dann auch kein Extrahieren und Teilen)
   canExtract: boolean;
+  // false bei verschlüsselten Dokumenten: Formularfelder lassen sich dort nicht anlegen oder bearbeiten
+  canEditForms: boolean;
+  // Modus „Formular bearbeiten“: Felder anlegen, verschieben, ändern, löschen (statt ausfüllen)
+  formEditing: boolean;
   saving: boolean;
   // Eine Seitenoperation läuft (Engine arbeitet, danach lädt der Tab neu)
   working: boolean;
@@ -100,6 +104,8 @@ export const useDocuments = create<DocumentsState>((set) => ({
           canAnnotate: true,
           canAssemble: true,
           canExtract: true,
+          canEditForms: true,
+          formEditing: false,
           saving: false,
           working: false,
           mode: 'view',

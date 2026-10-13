@@ -5,6 +5,8 @@ import { getRuntime } from '../../engine/runtime';
 import { MARKUP_TOOLS, useAnnotations, useTabAnnotations } from '../../state/annotations-store';
 import { useDocuments } from '../../state/documents-store';
 import { geometryFromViewport, type PageGeometry } from '../../engine/coords';
+import { FormEditOverlay } from '../form-edit/FormEditOverlay';
+import { useFormEditInput } from '../form-edit/hooks';
 import { addAnnotation, baseFields, hideDomAnnotations, updateAnnotation } from './controller';
 import { createMarkup } from './create';
 import { isMovable, quadsFromRects, translate } from './geometry';
@@ -56,6 +58,8 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
   const rotation = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.rotation ?? 0);
   const scale = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.scale ?? 1);
   const canAnnotate = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.canAnnotate ?? false);
+  // Modus „Formular bearbeiten“: Kommentare bleiben sichtbar, reagieren aber nicht auf die Maus.
+  const formEditing = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.formEditing ?? false);
   const [visible, setVisible] = useState<number[]>([]);
   const [geometries, setGeometries] = useState<Map<number, PageGeometry>>(new Map());
   const [pagesReady, setPagesReady] = useState(0);
@@ -221,6 +225,8 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
     return () => container.removeEventListener('pointerdown', onPointerDown);
   }, [tabId, pagesReady]);
 
+  useFormEditInput(tabId, active, formEditing, pagesReady);
+
   const byPage = useMemo(() => {
     const map = new Map<number, Annotation[]>();
     for (const a of annotations?.items ?? []) {
@@ -239,17 +245,21 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
         const geometry = geometries.get(pageIndex);
         if (!host || !geometry) return null;
         return createPortal(
-          <PageOverlay
-            tabId={tabId}
-            pageIndex={pageIndex}
-            geometry={geometry}
-            items={byPage.get(pageIndex) ?? []}
-            originals={annotations.originals}
-            selectedId={annotations.selectedId}
-            editingId={annotations.editingId}
-            scale={scale}
-            readOnly={!canAnnotate}
-          />,
+          <>
+            <PageOverlay
+              tabId={tabId}
+              pageIndex={pageIndex}
+              geometry={geometry}
+              items={byPage.get(pageIndex) ?? []}
+              originals={annotations.originals}
+              selectedId={annotations.selectedId}
+              editingId={annotations.editingId}
+              scale={scale}
+              readOnly={!canAnnotate || formEditing}
+              inert={formEditing}
+            />
+            {formEditing && <FormEditOverlay tabId={tabId} pageIndex={pageIndex} geometry={geometry} scale={scale} />}
+          </>,
           host,
           `page-${pageIndex}`,
         );

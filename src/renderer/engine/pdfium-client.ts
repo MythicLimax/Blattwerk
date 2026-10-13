@@ -2,7 +2,7 @@
 // nach dem letzten beendet. Der WASM-Speicher von PDFium wächst mit großen Dateien und schrumpft nie;
 // erst das Beenden gibt ihn frei.
 import type { AnnotationChanges } from '../../shared/annotations';
-import type { FormFieldValue } from '../../shared/forms';
+import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { InspectResult, WorkerErrorCode, WorkerRequest, WorkerResponse } from '../../workers/pdfium/protocol';
 
@@ -84,32 +84,40 @@ async function bytesOf(promise: Promise<Success>): Promise<Uint8Array> {
   return new Uint8Array(response.bytes);
 }
 
-// Wendet Kommentaränderungen und Seitenoperationen an und liefert die neuen Dateibytes (Standard: inkrementell).
+export interface ProcessInput {
+  changes?: AnnotationChanges;
+  operations?: PageOperation[];
+  formValues?: FormFieldValue[];
+  fieldOperations?: FieldOperation[];
+  // Standard: inkrementell (das Original bleibt am Anfang der Datei unverändert)
+  incremental?: boolean;
+}
+
+// Wendet Kommentaränderungen, Formularwerte und Seiten- oder Feldoperationen an und liefert die neuen Dateibytes.
 // Alle übergebenen Puffer (Dokument, eingefügte PDFs und Bilder) gehen an den Worker und sind danach nicht mehr nutzbar.
-export function processDocument(
-  bytes: Uint8Array,
-  password: string | null,
-  changes: AnnotationChanges,
-  operations: PageOperation[] = [],
-  incremental = true,
-  formValues: FormFieldValue[] = [],
-): Promise<Uint8Array> {
+export function processDocument(bytes: Uint8Array, password: string | null, input: ProcessInput): Promise<Uint8Array> {
+  const operations = input.operations ?? [];
   const buffer = ownBuffer(bytes);
   const transfer: Transferable[] = [buffer];
   for (const op of operations) {
     if (op.type === 'insertPdf') transfer.push(op.source.data);
     if (op.type === 'insertImages') transfer.push(...op.images.map((image) => image.data));
   }
-  return bytesOf(send({ type: 'process', bytes: buffer, password, changes, operations, formValues, incremental }, transfer));
-}
-
-export function saveAnnotationChanges(
-  bytes: Uint8Array,
-  password: string | null,
-  changes: AnnotationChanges,
-  incremental = true,
-): Promise<Uint8Array> {
-  return processDocument(bytes, password, changes, [], incremental);
+  return bytesOf(
+    send(
+      {
+        type: 'process',
+        bytes: buffer,
+        password,
+        changes: input.changes ?? { upserts: [], deletions: [] },
+        operations,
+        formValues: input.formValues ?? [],
+        fieldOperations: input.fieldOperations ?? [],
+        incremental: input.incremental ?? true,
+      },
+      transfer,
+    ),
+  );
 }
 
 // Neues Dokument aus Teilen. Die Daten der Teile gehen an den Worker.

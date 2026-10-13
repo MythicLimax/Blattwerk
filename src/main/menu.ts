@@ -199,7 +199,8 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       cmd('pages.extract', t('menu.pages.extract'), { enabled: doc && state.canExtract }),
       cmd('pages.split', t('menu.pages.split'), { enabled: doc && state.canExtract }),
       { type: 'separator' },
-      cmd('tools.sign', t('menu.pages.sign'), { enabled: viewing }),
+      cmd('tools.sign', t('menu.pages.sign'), { enabled: viewing && !state.formEditing }),
+      cmd('forms.edit', t('menu.pages.editForm'), { type: 'checkbox', checked: viewing && state.formEditing, enabled: viewing && state.canEditForms }),
     ],
   };
 

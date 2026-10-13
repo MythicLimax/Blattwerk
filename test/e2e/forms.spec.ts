@@ -7,7 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { fixture } from '../fixtures/expectations';
-import { launchApp, menuClick, waitForDocument, type AppHandle } from './app';
+import { launchApp, menuClick, menuItemState, waitForDocument, type AppHandle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 
 const require = createRequire(import.meta.url);
@@ -157,6 +157,160 @@ test.describe('Unterschrift', () => {
     // Nicht gespeichert: beim nächsten Klick öffnet sich wieder der Dialog zum Anlegen
     await page.getByTestId('sign-button').click();
     await expect(page.getByTestId('signature-create-dialog')).toBeVisible();
+    await handle.close();
+  });
+});
+
+interface SavedWidget {
+  id: string;
+  fieldName: string;
+  rect: number[];
+  required: boolean;
+  buttonValue?: string;
+  options?: Array<{ exportValue: string }>;
+}
+
+async function savedWidgets(file: string): Promise<SavedWidget[]> {
+  const task = pdfjs.getDocument({ data: new Uint8Array(readFileSync(file)), verbosity: 0 });
+  const pdf = await task.promise;
+  const annotations = await (await pdf.getPage(1)).getAnnotations();
+  await task.destroy();
+  return (annotations as unknown as Array<SavedWidget & { subtype: string }>).filter((a) => a.subtype === 'Widget');
+}
+
+const formField = (page: Page, name: string) => page.locator(`[data-testid="form-field"][data-field-name="${name}"]`);
+
+// Position der Bearbeitungsebene von Seite 1, sobald sie sich nicht mehr bewegt
+async function stableFormOverlay(page: Page) {
+  const overlay = page.getByTestId('form-edit-overlay-0');
+  let last = '';
+  for (let i = 0; i < 50; i++) {
+    const box = await overlay.boundingBox();
+    const key = JSON.stringify(box);
+    if (box && key === last) return box;
+    last = key;
+    await page.waitForTimeout(100);
+  }
+  throw new Error('Seite kommt nicht zur Ruhe');
+}
+
+async function drag(page: Page, from: [number, number], to: [number, number]): Promise<void> {
+  await page.mouse.move(from[0], from[1]);
+  await page.mouse.down();
+  await page.mouse.move((from[0] + to[0]) / 2, (from[1] + to[1]) / 2, { steps: 4 });
+  await page.mouse.move(to[0], to[1], { steps: 4 });
+  await page.mouse.up();
+}
+
+test.describe('Formular bearbeiten', () => {
+  test('Felder anlegen, verschieben, löschen, rückgängig machen und danach ausfüllen', async () => {
+    const handle = await openCopy('text.pdf', 12);
+    const { page, app, file } = handle;
+    await page.getByTestId('form-edit-button').click();
+    await expect(page.getByTestId('form-edit-toolbar')).toBeVisible();
+    expect(await menuItemState(app, 'forms.edit')).toMatchObject({ checked: true });
+    await menuClick(app, 'view.fitPage');
+    await expect(page.getByTestId('zoom-select')).toHaveValue('page-fit');
+    let box = await stableFormOverlay(page);
+    const at = (x: number, y: number): [number, number] => [box.x + box.width * x, box.y + box.height * y];
+
+    // Textfeld aufziehen, Name und Pflichtfeld im Dialog
+    await page.getByTestId('field-tool-text').click();
+    await drag(page, at(0.2, 0.3), at(0.6, 0.34));
+    await expect(page.getByTestId('field-dialog')).toBeVisible();
+    await expect(page.getByTestId('field-name')).toHaveValue('Textfeld 1');
+    await page.getByTestId('field-name').fill('Vorname');
+    await page.getByTestId('field-required').check();
+    await page.getByTestId('field-dialog-ok').click();
+    await expect(formField(page, 'Vorname')).toHaveCount(1);
+    await expect(page.getByTestId('form-field-selection')).toHaveCount(1);
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+
+    // Dropdown per Klick (Standardgröße); ohne Einträge meldet der Dialog einen Fehler
+    box = await stableFormOverlay(page);
+    await page.getByTestId('field-tool-dropdown').click();
+    await page.mouse.click(...at(0.2, 0.45));
+    await expect(page.getByTestId('field-dialog')).toBeVisible();
+    await page.getByTestId('field-dialog-ok').click();
+    await expect(page.getByTestId('field-problem')).toBeVisible();
+    await page.getByTestId('field-options').fill('Rot\nGrün\nBlau');
+    await page.getByTestId('field-dialog-ok').click();
+    await expect(formField(page, 'Dropdown 1')).toHaveCount(1);
+
+    // Zwei Optionsfelder: Der zweite Knopf schlägt dieselbe Gruppe und den nächsten Wert vor.
+    for (const [x, value] of [
+      [0.2, 'Auswahl 1'],
+      [0.3, 'Auswahl 2'],
+    ] as const) {
+      box = await stableFormOverlay(page);
+      await page.getByTestId('field-tool-radio').click();
+      await page.mouse.click(...at(x, 0.55));
+      await expect(page.getByTestId('field-name')).toHaveValue('Optionsgruppe 1');
+      await expect(page.getByTestId('field-value')).toHaveValue(value);
+      await page.getByTestId('field-dialog-ok').click();
+    }
+    await expect(formField(page, 'Optionsgruppe 1')).toHaveCount(2);
+
+    // Textfeld nach rechts verschieben
+    box = await stableFormOverlay(page);
+    const before = await formField(page, 'Vorname').boundingBox();
+    if (!before) throw new Error('Feld fehlt');
+    await drag(page, [before.x + 20, before.y + before.height / 2], [before.x + 120, before.y + before.height / 2]);
+    await expect.poll(async () => (await formField(page, 'Vorname').boundingBox())?.x ?? 0).toBeGreaterThan(before.x + 80);
+
+    // Dropdown löschen, dann rückgängig machen
+    await formField(page, 'Dropdown 1').click();
+    await page.keyboard.press('Backspace');
+    await expect(formField(page, 'Dropdown 1')).toHaveCount(0);
+    await menuClick(app, 'edit.undo');
+    await expect(formField(page, 'Dropdown 1')).toHaveCount(1);
+
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    const saved = await savedWidgets(file);
+    const vorname = saved.find((w) => w.fieldName === 'Vorname');
+    expect(vorname?.required).toBe(true);
+    expect(saved.filter((w) => w.fieldName === 'Optionsgruppe 1').map((w) => w.buttonValue)).toEqual(['Auswahl 1', 'Auswahl 2']);
+    expect(saved.find((w) => w.fieldName === 'Dropdown 1')?.options?.map((o) => o.exportValue)).toEqual(['Rot', 'Grün', 'Blau']);
+    if (process.platform === 'darwin') expect(inspectWithPdfKit(file).pages[0]).toContain('Widget');
+
+    // Modus beenden und das neue Feld ausfüllen
+    await page.getByTestId('form-edit-done').click();
+    await expect(page.getByTestId('form-edit-toolbar')).toHaveCount(0);
+    await field(page, vorname?.id ?? '').fill('Max');
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    expect(await fieldValues(file)).toMatchObject({ Vorname: 'Max' });
+    await handle.close();
+  });
+
+  test('Eigenschaften eines vorhandenen Feldes per Doppelklick ändern', async () => {
+    const handle = await openCopy('formular.pdf', 1);
+    const { page, app, file } = handle;
+    await menuClick(app, 'forms.edit');
+    await formField(page, 'name').dblclick();
+    await expect(page.getByTestId('field-dialog')).toBeVisible();
+    await page.getByTestId('field-name').fill('vorname');
+    await page.getByTestId('field-tooltip').fill('Ihr Vorname');
+    await page.getByTestId('field-dialog-ok').click();
+    await expect(formField(page, 'vorname')).toHaveCount(1);
+    // Doppelter Name wird abgelehnt
+    await formField(page, 'land').dblclick();
+    await page.getByTestId('field-name').fill('vorname');
+    await page.getByTestId('field-dialog-ok').click();
+    await expect(page.getByTestId('field-problem')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('field-dialog')).toHaveCount(0);
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    expect(Object.keys(await fieldValues(file))).toEqual(expect.arrayContaining(['vorname', 'land']));
+    await handle.close();
+  });
+
+  test('in Dokumenten mit Kennwortschutz nicht verfügbar', async () => {
+    const handle = await openCopy('eingeschraenkt.pdf', 12);
+    await expect(handle.page.getByTestId('form-edit-button')).toBeDisabled();
+    expect(await menuItemState(handle.app, 'forms.edit')).toMatchObject({ enabled: false });
     await handle.close();
   });
 });

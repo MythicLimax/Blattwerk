@@ -137,6 +137,9 @@ export interface MenuState {
   organizeMode: boolean;
   canAssemble: boolean;
   canExtract: boolean;
+  // Phase 4: Modus „Formular bearbeiten“ aktiv bzw. möglich (nicht in verschlüsselten Dokumenten)
+  formEditing: boolean;
+  canEditForms: boolean;
 }
 
 export type SaveErrorCode = 'changed-externally' | 'cancelled' | 'write-failed' | 'unknown-file' | 'invalid-data';

@@ -3,6 +3,7 @@ import type { FileInfo, OpenResult, ViewMode } from '../../shared/ipc';
 import { api } from '../api';
 import { computeChanges, hasChanges } from '../features/annotations/changes';
 import { deleteAnnotation, loadAnnotations } from '../features/annotations/controller';
+import { deleteSelectedField, toggleFormEditing } from '../features/form-edit/actions';
 import { deletePages, targetPages } from '../features/pages/actions';
 import { runPageCommand } from '../features/pages/commands';
 import { printDocument } from '../features/print/print-service';
@@ -11,15 +12,17 @@ import { t } from '../i18n';
 import { tabAnnotations, useAnnotations, type TabAnnotations } from '../state/annotations-store';
 import { isTabDirty } from '../state/dirty';
 import { currentFormChanges, syncFormChanges } from '../features/forms/form-sync';
+import { useFormEdit } from '../state/form-edit-store';
 import { useForms } from '../state/forms-store';
 import { historyDirty, tabHistory, useHistory, type DocState } from '../state/history-store';
+import type { FieldOperation } from '../../shared/forms';
 import type { PageOperation } from '../../shared/pages';
 import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
 import { useUi, type PromptAnswer } from '../state/ui-store';
 import { openTemporary, startLoading } from './document-loader';
 import { PdfiumClientError, processDocument } from './pdfium-client';
 import { pdfjs } from './pdfjs';
-import { createRuntime, destroyRuntime, dispatchFind, getRuntime, setRuntimeDocument } from './runtime';
+import { createRuntime, destroyRuntime, dispatchFind, getRuntime, rememberScroll, setRuntimeDocument } from './runtime';
 
 // Warteschlange für Kennwortabfragen je Tab (pdf.js ruft den Rückruf, bevor das Dokument geöffnet ist).
 const passwordCallbacks = new Map<string, (password: string) => void>();
@@ -103,6 +106,8 @@ async function loadIntoTab(tabId: string, file: FileInfo, knownPassword: string 
         permissions.has(pdfjs.PermissionFlag.MODIFY_CONTENTS) ||
         permissions.has(pdfjs.PermissionFlag.ASSEMBLE),
       canExtract: permissions === null || permissions.has(pdfjs.PermissionFlag.COPY),
+      // pdf.js liefert Berechtigungen nur für verschlüsselte Dokumente; dort sind Feldänderungen nicht möglich.
+      canEditForms: permissions === null,
     });
     if (options.annotations) useAnnotations.getState().restore(tabId, options.annotations);
     else void loadAnnotations(tabId);
@@ -189,6 +194,7 @@ function closeTabNow(tabId: string): void {
   useAnnotations.getState().drop(tabId);
   useHistory.getState().drop(tabId);
   useForms.getState().drop(tabId);
+  useFormEdit.getState().drop(tabId);
   if (ui.propertiesTabId === tabId) ui.openProperties(null);
   // „Gehe zu Seite“ gilt immer dem aktiven Tab; nach dem Schließen ist das ein anderer.
   ui.setGoToPageOpen(false);
@@ -266,7 +272,7 @@ export async function saveTab(tabId: string, mode: 'save' | 'saveAs'): Promise<b
     const original = await runtime.pdf.getData();
     const bytes =
       hasChanges(changes) || forms.length > 0
-        ? await processDocument(original, runtime.password, changes, [], true, forms)
+        ? await processDocument(original, runtime.password, { changes, formValues: forms })
         : original;
     let result = mode === 'save' ? await api.saveFile(tab.fileId, bytes) : await api.saveFileAs(tab.fileId, bytes);
     if (!result.ok && result.error === 'changed-externally') {
@@ -315,9 +321,9 @@ function leavingAnnotations(tabId: string, keepRedo: boolean): TabAnnotations | 
   return { ...annotations, redo: keepRedo ? annotations.redo : [], editingId: null, selectedId: null };
 }
 
-function pageErrorMessage(error: unknown): string {
+function operationErrorMessage(error: unknown, fallbackKey: string): string {
   const code = error instanceof PdfiumClientError ? error.code : 'failed';
-  return t(`errors.pages.${code}`);
+  return code === 'failed' ? t(fallbackKey) : t(`errors.pages.${code}`);
 }
 
 export interface AfterOperation {
@@ -325,6 +331,8 @@ export interface AfterOperation {
   page?: number;
   // Auswahl im Raster danach (0-basiert)
   selection?: number[];
+  // Scrollposition beibehalten (Seiten und Zoom bleiben gleich, z. B. beim Bearbeiten von Formularfeldern)
+  keepScroll?: boolean;
 }
 
 // Je Tab laufen Seitenoperationen, Rückgängig und Wiederholen nacheinander. Rückgängig/Wiederholen
@@ -355,18 +363,38 @@ async function settled(tabId: string): Promise<void> {
 // Führt Seitenoperationen aus. Ungespeicherte Kommentare werden dabei ins Dokument übernommen.
 // Das Ergebnis ist ein neuer Stand im Arbeitsspeicher; die Datei ändert sich erst beim Speichern.
 export function applyPageOperations(tabId: string, operations: PageOperation[], after: AfterOperation = {}): Promise<boolean> {
-  commitPendingEdits();
-  // Während einer laufenden Operation ist die Oberfläche gesperrt; weitere Seitenoperationen entfallen.
-  if (findTab(tabId)?.working) return Promise.resolve(false);
-  return enqueue(tabId, () => runPageOperations(tabId, operations, after));
+  return applyDocumentOperations(tabId, { operations }, after);
 }
 
-async function runPageOperations(tabId: string, operations: PageOperation[], after: AfterOperation): Promise<boolean> {
+// Formularfelder anlegen, ändern oder löschen. Wie bei Seitenoperationen entsteht ein neuer Stand im Arbeitsspeicher.
+export function applyFieldOperations(tabId: string, fieldOperations: FieldOperation[], after: AfterOperation = {}): Promise<boolean> {
+  return applyDocumentOperations(tabId, { fieldOperations }, after);
+}
+
+interface DocumentOperations {
+  operations?: PageOperation[];
+  fieldOperations?: FieldOperation[];
+}
+
+function applyDocumentOperations(tabId: string, input: DocumentOperations, after: AfterOperation): Promise<boolean> {
+  commitPendingEdits();
+  // Während einer laufenden Operation ist die Oberfläche gesperrt; weitere Operationen entfallen.
+  if (findTab(tabId)?.working) return Promise.resolve(false);
+  return enqueue(tabId, () => runDocumentOperations(tabId, input, after));
+}
+
+async function runDocumentOperations(tabId: string, input: DocumentOperations, after: AfterOperation): Promise<boolean> {
   const tab = findTab(tabId);
   const runtime = getRuntime(tabId);
-  if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf || operations.length === 0) return false;
-  if (!tab.canAssemble) {
+  const operations = input.operations ?? [];
+  const fieldOperations = input.fieldOperations ?? [];
+  if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf || operations.length + fieldOperations.length === 0) return false;
+  if (operations.length > 0 && !tab.canAssemble) {
     useUi.getState().notify(t('errors.pages.notAllowed'));
+    return false;
+  }
+  if (fieldOperations.length > 0 && !tab.canEditForms) {
+    useUi.getState().notify(t('formEdit.notAllowed'));
     return false;
   }
   const pdf = runtime.pdf;
@@ -374,16 +402,17 @@ async function runPageOperations(tabId: string, operations: PageOperation[], aft
     const annotations = tabAnnotations(tabId);
     const changes = annotations ? computeChanges(annotations.items, annotations.originals) : { upserts: [], deletions: [] };
     const forms = await currentFormChanges(tabId);
-    const bytes = await processDocument(await pdf.getData(), runtime.password, changes, operations, true, forms);
+    const bytes = await processDocument(await pdf.getData(), runtime.password, { changes, operations, fieldOperations, formValues: forms });
     if (getRuntime(tabId)?.pdf !== pdf) return false;
     const page = Math.max(1, after.page ?? tab.currentPage);
     const next = { bytes, annotations: null, page, selection: after.selection ?? [] };
     const leaving = { annotations: leavingAnnotations(tabId, false), page: tab.currentPage, selection: tab.pageSelection };
     useHistory.getState().push(tabId, leaving, next);
+    if (after.keepScroll) rememberScroll(tabId);
     await showState(tabId, next);
     return true;
   } catch (error) {
-    useUi.getState().notify(pageErrorMessage(error), errorMessage(error));
+    useUi.getState().notify(operationErrorMessage(error, fieldOperations.length > 0 ? 'formEdit.failed' : 'errors.pages.failed'), errorMessage(error));
     return false;
   }
 }
@@ -394,7 +423,10 @@ async function goToState(tabId: string, index: number): Promise<void> {
   if (!tab || tab.status !== 'ready' || tab.saving) return;
   const leaving = { annotations: leavingAnnotations(tabId, true), page: tab.currentPage, selection: tab.pageSelection };
   const state = useHistory.getState().moveTo(tabId, index, leaving);
-  if (state) await showState(tabId, state);
+  if (!state) return;
+  // Im Modus „Formular bearbeiten“ bleibt die Ansicht beim Rückgängigmachen an ihrer Stelle.
+  if (tab.formEditing && tab.mode === 'view') rememberScroll(tabId);
+  await showState(tabId, state);
 }
 
 // Rückgängig: zuerst Kommentarbefehle des aktuellen Stands, dann den vorherigen Dokumentstand.
@@ -433,7 +465,7 @@ export function redoTab(tabId: string): void {
 // Unterschreiben: gespeicherte Unterschrift wählen oder, wenn es noch keine gibt, gleich eine anlegen.
 export function startSigning(): void {
   const tab = getActiveTab();
-  if (!tab || tab.status !== 'ready' || tab.mode !== 'view') return;
+  if (!tab || tab.status !== 'ready' || tab.mode !== 'view' || tab.formEditing) return;
   if (!tab.canAnnotate) {
     useUi.getState().notify(t('signatures.notAllowed'));
     return;
@@ -499,7 +531,7 @@ export async function printTab(tab: TabState): Promise<void> {
   if (changes && hasChanges(changes)) {
     try {
       const forms = await currentFormChanges(tab.id);
-      const bytes = await processDocument(await runtime.pdf.getData(), runtime.password, changes, [], true, forms);
+      const bytes = await processDocument(await runtime.pdf.getData(), runtime.password, { changes, formValues: forms });
       temporary = await openTemporary(bytes, runtime.password);
     } catch (error) {
       printAbort = null;
@@ -560,6 +592,11 @@ export function executeCommand(command: CommandId): void {
     startSigning();
     return;
   }
+  if (command === 'forms.edit') {
+    const active = getActiveTab();
+    if (active) toggleFormEditing(active);
+    return;
+  }
 
   const tab = getActiveTab();
   if (!tab) return;
@@ -597,11 +634,23 @@ export function executeCommand(command: CommandId): void {
         }
         return;
       }
+      // Im Modus „Formular bearbeiten“ löscht Entfernen das ausgewählte Feld.
+      if (tab.formEditing) {
+        if (!tab.working && !isEditableFocus()) deleteSelectedField(tab);
+        return;
+      }
       const selected = tabAnnotations(tab.id)?.selectedId;
       if (selected && tab.canAnnotate && !isEditableFocus()) deleteAnnotation(tab.id, selected);
       return;
     }
     case 'view.toggleCommentTools':
+      // Kommentieren beendet „Formular bearbeiten“.
+      if (tab.formEditing) {
+        toggleFormEditing(tab);
+        ui.setCommentToolsVisible(true);
+        useAnnotations.getState().setTool('select');
+        return;
+      }
       ui.setCommentToolsVisible(!ui.commentToolsVisible);
       if (ui.commentToolsVisible) useAnnotations.getState().setTool('select');
       return;
