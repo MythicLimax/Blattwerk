@@ -38,7 +38,7 @@ export function validateMenuState(value: unknown): MenuState | null {
   if (typeof value !== 'object' || value === null) return null;
   const v = value as Record<string, unknown>;
   const bool = (x: unknown) => typeof x === 'boolean';
-  const flags = ['hasDocument', 'canPrint', 'sidebarVisible', 'rightPanelVisible', 'canUndo', 'canRedo', 'activeDirty', 'commentToolsVisible', 'organizeMode', 'canAssemble', 'canExtract', 'formEditing', 'canEditForms'];
+  const flags = ['hasDocument', 'canPrint', 'sidebarVisible', 'rightPanelVisible', 'canUndo', 'canRedo', 'activeDirty', 'commentToolsVisible', 'organizeMode', 'canAssemble', 'canExtract', 'formEditing', 'canEditForms', 'redactToolsVisible', 'hasRedactionMarks'];
   if (!flags.every((key) => bool(v[key]))) return null;
   if (!isNonNegativeInt(v.tabCount) || !isNonNegativeInt(v.dirtyCount)) return null;
   if (v.viewMode !== null && !VIEW_MODES.includes(v.viewMode as ViewMode)) return null;
@@ -59,6 +59,8 @@ export function validateMenuState(value: unknown): MenuState | null {
     canExtract: v.canExtract as boolean,
     formEditing: v.formEditing as boolean,
     canEditForms: v.canEditForms as boolean,
+    redactToolsVisible: v.redactToolsVisible as boolean,
+    hasRedactionMarks: v.hasRedactionMarks as boolean,
   };
 }
 

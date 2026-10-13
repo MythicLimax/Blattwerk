@@ -84,7 +84,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const chooseTool = (next: Tool) => {
     const store = useAnnotations.getState();
     // Text schon ausgewählt? Dann gleich markieren (wie in Acrobat).
-    if (MARKUP_TOOLS.includes(next) && markupSelection(tab.id, next as Annotation['kind'], (page) => cachedGeometry(tab.id, page))) {
+    if (MARKUP_TOOLS.includes(next) && markupSelection(tab.id, next, (page) => cachedGeometry(tab.id, page))) {
       return;
     }
     store.setTool(next === tool && next !== 'select' ? 'select' : next);

@@ -4,6 +4,7 @@
 import type { AnnotationChanges } from '../../shared/annotations';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
+import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
 import type { InspectResult, WorkerErrorCode, WorkerRequest, WorkerResponse } from '../../workers/pdfium/protocol';
 
 // Fehler aus dem Worker mit Art (für eine übersetzte Meldung) und technischem Text (für Details)
@@ -118,6 +119,28 @@ export function processDocument(bytes: Uint8Array, password: string | null, inpu
       transfer,
     ),
   );
+}
+
+// Schwärzen: liefert das vollständig neu geschriebene Dokument. Die Bytes gehen an den Worker.
+export function redactDocument(
+  bytes: Uint8Array,
+  password: string | null,
+  input: { changes: AnnotationChanges; formValues: FormFieldValue[]; areas: RedactionArea[]; options: RedactionOptions },
+): Promise<Uint8Array> {
+  const buffer = ownBuffer(bytes);
+  return bytesOf(send({ type: 'redact', bytes: buffer, password, ...input }, [buffer]));
+}
+
+// Text suchen (Lage der Treffer). Die Bytes bleiben beim Aufrufer nutzbar.
+export async function findTextMatches(
+  bytes: Uint8Array,
+  password: string | null,
+  options: TextSearchOptions,
+): Promise<{ matches: TextMatch[]; truncated: boolean }> {
+  const buffer = bytes.slice().buffer as ArrayBuffer;
+  const response = await send({ type: 'findText', bytes: buffer, password, options }, [buffer]);
+  if (response.kind !== 'matches') throw new PdfiumClientError('failed', 'unerwartete Antwort');
+  return { matches: response.matches, truncated: response.truncated };
 }
 
 // Neues Dokument aus Teilen. Die Daten der Teile gehen an den Worker.

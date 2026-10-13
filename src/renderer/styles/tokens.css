@@ -42,6 +42,7 @@
   --color-active: rgba(0, 0, 0, 0.1);
   --color-danger: #c62828;
   --color-danger-soft: #fdecea;
+  --color-success: #2e7d32;
   --color-focus: #2f6fde;
   --color-match: rgba(255, 196, 0, 0.45);
   --color-match-selected: rgba(255, 120, 0, 0.6);
@@ -68,6 +69,7 @@
     --color-active: rgba(255, 255, 255, 0.12);
     --color-danger: #ef5350;
     --color-danger-soft: #3b2324;
+    --color-success: #66bb6a;
     --color-focus: #7aa5f3;
     --shadow-popover: 0 8px 28px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-page: 0 1px 6px rgba(0, 0, 0, 0.6);

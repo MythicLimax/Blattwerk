@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Circle,
+  EyeOff,
   Highlighter,
   Minus,
   MoveUpRight,
@@ -42,6 +43,7 @@ const KIND_ICONS: Record<AnnotationKind, LucideIcon> = {
   arrow: MoveUpRight,
   stamp: Stamp,
   signature: Signature,
+  redact: EyeOff,
 };
 
 const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short' });
@@ -214,6 +216,7 @@ const CommentCard = memo(function CommentCard({
       {/* Die Beschriftung vorhandener Stempel liefert pdf.js nicht; dann steht dort nur „Stempel“. */}
       {a.kind === 'stamp' && <p className={styles.preview}>{a.label || t('tools.stamp')}</p>}
       {a.kind === 'signature' && <p className={styles.preview}>{t('tools.signature')}</p>}
+      {a.kind === 'redact' && <p className={styles.preview}>{t('tools.redact')}</p>}
 
       {a.kind !== 'freetext' &&
         (selected && !readOnly ? (

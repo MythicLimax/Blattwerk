@@ -4,6 +4,7 @@ import { api } from '../api';
 import { computeChanges, hasChanges } from '../features/annotations/changes';
 import { deleteAnnotation, loadAnnotations } from '../features/annotations/controller';
 import { deleteSelectedField, toggleFormEditing } from '../features/form-edit/actions';
+import { openRedactApply, openRedactFind, toggleRedactTools } from '../features/redaction/actions';
 import { deletePages, targetPages } from '../features/pages/actions';
 import { runPageCommand } from '../features/pages/commands';
 import { printDocument } from '../features/print/print-service';
@@ -16,11 +17,13 @@ import { useFormEdit } from '../state/form-edit-store';
 import { useForms } from '../state/forms-store';
 import { historyDirty, tabHistory, useHistory, type DocState } from '../state/history-store';
 import type { FieldOperation } from '../../shared/forms';
+import type { RedactionOptions } from '../../shared/redaction';
+import { planRedaction } from '../features/redaction/plan';
 import type { PageOperation } from '../../shared/pages';
 import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
 import { useUi, type PromptAnswer } from '../state/ui-store';
 import { openTemporary, startLoading } from './document-loader';
-import { PdfiumClientError, processDocument } from './pdfium-client';
+import { PdfiumClientError, processDocument, redactDocument } from './pdfium-client';
 import { pdfjs } from './pdfjs';
 import { createRuntime, destroyRuntime, dispatchFind, getRuntime, rememberScroll, setRuntimeDocument } from './runtime';
 
@@ -108,6 +111,7 @@ async function loadIntoTab(tabId: string, file: FileInfo, knownPassword: string 
       canExtract: permissions === null || permissions.has(pdfjs.PermissionFlag.COPY),
       // pdf.js liefert Berechtigungen nur für verschlüsselte Dokumente; dort sind Feldänderungen nicht möglich.
       canEditForms: permissions === null,
+      encrypted: permissions !== null,
     });
     if (options.annotations) useAnnotations.getState().restore(tabId, options.annotations);
     else void loadAnnotations(tabId);
@@ -417,6 +421,39 @@ async function runDocumentOperations(tabId: string, input: DocumentOperations, a
   }
 }
 
+// Schwärzen (Phase 5, ADR 0008): markierte Bereiche endgültig entfernen. Das Ergebnis ist ein vollständig neu
+// geschriebenes Dokument als neuer Stand im Arbeitsspeicher; die Datei ändert sich erst beim Speichern.
+export function applyRedactionMarks(tabId: string, options: RedactionOptions): Promise<boolean> {
+  commitPendingEdits();
+  if (findTab(tabId)?.working) return Promise.resolve(false);
+  return enqueue(tabId, () => runRedaction(tabId, options));
+}
+
+async function runRedaction(tabId: string, options: RedactionOptions): Promise<boolean> {
+  const tab = findTab(tabId);
+  const runtime = getRuntime(tabId);
+  const annotations = tabAnnotations(tabId);
+  if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf || !annotations) return false;
+  const plan = planRedaction(annotations.items, annotations.originals);
+  if (plan.areas.length === 0) return false;
+  const pdf = runtime.pdf;
+  try {
+    const forms = await currentFormChanges(tabId);
+    const bytes = await redactDocument(await pdf.getData(), runtime.password, { changes: plan.changes, formValues: forms, areas: plan.areas, options });
+    if (getRuntime(tabId)?.pdf !== pdf) return false;
+    const next = { bytes, annotations: null, page: tab.currentPage, selection: [] };
+    const leaving = { annotations: leavingAnnotations(tabId, false), page: tab.currentPage, selection: tab.pageSelection };
+    useHistory.getState().push(tabId, leaving, next);
+    rememberScroll(tabId);
+    await showState(tabId, next);
+    useUi.getState().confirm(t('redaction.applied', { count: plan.markCount }));
+    return true;
+  } catch (error) {
+    useUi.getState().notify(operationErrorMessage(error, 'redaction.failed'), errorMessage(error));
+    return false;
+  }
+}
+
 // Wechselt zu einem anderen Stand im Verlauf (Rückgängig/Wiederholen von Seitenoperationen).
 async function goToState(tabId: string, index: number): Promise<void> {
   const tab = findTab(tabId);
@@ -597,6 +634,14 @@ export function executeCommand(command: CommandId): void {
     if (active) toggleFormEditing(active);
     return;
   }
+  if (command === 'redact.tools' || command === 'redact.find' || command === 'redact.apply') {
+    const active = getActiveTab();
+    if (!active) return;
+    if (command === 'redact.tools') toggleRedactTools(active);
+    else if (command === 'redact.find') openRedactFind(active);
+    else openRedactApply(active);
+    return;
+  }
 
   const tab = getActiveTab();
   if (!tab) return;
@@ -652,7 +697,8 @@ export function executeCommand(command: CommandId): void {
         return;
       }
       ui.setCommentToolsVisible(!ui.commentToolsVisible);
-      if (ui.commentToolsVisible) useAnnotations.getState().setTool('select');
+      // Werkzeuge der Leiste „Schwärzen“ gehören nicht zu den Kommentarwerkzeugen.
+      useAnnotations.getState().setTool('select');
       return;
     case 'file.print':
       void printTab(tab);

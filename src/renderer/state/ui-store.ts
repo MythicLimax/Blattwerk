@@ -30,6 +30,8 @@ export interface Notice {
   id: number;
   message: string;
   detail?: string;
+  // Fehler (Standard) oder Bestätigung, dass etwas geklappt hat
+  tone: 'error' | 'success';
 }
 
 export interface PrintProgress {
@@ -54,6 +56,9 @@ interface UiState {
   // Name für neue Kommentare (aus den Einstellungen)
   authorName: string;
   commentToolsVisible: boolean;
+  // Leiste „Schwärzen“ (Phase 5) und ihre Dialoge
+  redactToolsVisible: boolean;
+  redactDialog: 'apply' | 'find' | null;
   settingsOpen: boolean;
   // Offene Rückfrage (ungespeicherte Änderungen, von außen geänderte Datei)
   prompt: Prompt | null;
@@ -73,6 +78,8 @@ interface UiState {
   setGoToPageOpen: (open: boolean) => void;
   setPrint: (progress: PrintProgress | null) => void;
   notify: (message: string, detail?: string) => void;
+  // Bestätigung (z. B. „2 Stellen geschwärzt“), nicht als Fehler dargestellt
+  confirm: (message: string) => void;
   dismissNotice: (id: number) => void;
   setRecent: (recent: RecentFile[]) => void;
   setDraggingFiles: (dragging: boolean) => void;
@@ -80,6 +87,8 @@ interface UiState {
   markSearchFocusHandled: (request: number) => void;
   setAuthorName: (name: string) => void;
   setCommentToolsVisible: (visible: boolean) => void;
+  setRedactToolsVisible: (visible: boolean) => void;
+  setRedactDialog: (dialog: 'apply' | 'find' | null) => void;
   setSettingsOpen: (open: boolean) => void;
   setPrompt: (prompt: Prompt | null) => void;
   setPageDialog: (dialog: PageDialog | null) => void;
@@ -114,6 +123,8 @@ export const useUi = create<UiState>((set) => ({
   searchFocusHandled: 0,
   authorName: '',
   commentToolsVisible: false,
+  redactToolsVisible: false,
+  redactDialog: null,
   settingsOpen: false,
   prompt: null,
   pageDialog: null,
@@ -128,7 +139,9 @@ export const useUi = create<UiState>((set) => ({
   setGoToPageOpen: (goToPageOpen) => set({ goToPageOpen }),
   setPrint: (print) => set({ print }),
   notify: (message, detail) =>
-    set((state) => ({ notices: [...state.notices, { id: nextNoticeId++, message, detail }].slice(-5) })),
+    set((state) => ({ notices: [...state.notices, { id: nextNoticeId++, message, detail, tone: 'error' as const }].slice(-5) })),
+  confirm: (message) =>
+    set((state) => ({ notices: [...state.notices, { id: nextNoticeId++, message, tone: 'success' as const }].slice(-5) })),
   dismissNotice: (id) => set((state) => ({ notices: state.notices.filter((n) => n.id !== id) })),
   setRecent: (recent) => set({ recent }),
   setDraggingFiles: (draggingFiles) => set({ draggingFiles }),
@@ -136,7 +149,10 @@ export const useUi = create<UiState>((set) => ({
     set((state) => ({ rightPanelVisible: true, searchFocusRequest: state.searchFocusRequest + 1 })),
   markSearchFocusHandled: (request) => set({ searchFocusHandled: request }),
   setAuthorName: (authorName) => set({ authorName }),
-  setCommentToolsVisible: (commentToolsVisible) => set({ commentToolsVisible }),
+  // Kommentieren und Schwärzen nutzen dieselbe Ebene; es ist immer nur eine der beiden Leisten offen.
+  setCommentToolsVisible: (commentToolsVisible) => set((state) => ({ commentToolsVisible, redactToolsVisible: commentToolsVisible ? false : state.redactToolsVisible })),
+  setRedactToolsVisible: (redactToolsVisible) => set((state) => ({ redactToolsVisible, commentToolsVisible: redactToolsVisible ? false : state.commentToolsVisible })),
+  setRedactDialog: (redactDialog) => set({ redactDialog }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPrompt: (prompt) => set({ prompt }),
   setPageDialog: (pageDialog) => set({ pageDialog }),

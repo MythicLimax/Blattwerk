@@ -22,6 +22,7 @@ import {
   createLine,
   createNote,
   createShape,
+  createRedaction,
   createSignature,
   createStamp,
   FREETEXT_SIZE,
@@ -33,7 +34,7 @@ import styles from './PageOverlay.module.css';
 
 // Laufende Mausaktion auf der Seite
 type Gesture =
-  | { kind: 'rect'; tool: 'square' | 'circle' | 'freetext'; from: Point; to: Point }
+  | { kind: 'rect'; tool: 'square' | 'circle' | 'freetext' | 'redact'; from: Point; to: Point }
   | { kind: 'line'; tool: 'line' | 'arrow'; from: Point; to: Point }
   | { kind: 'ink'; points: Point[] }
   | { kind: 'move'; id: string; origin: Point; dx: number; dy: number }
@@ -107,7 +108,7 @@ export function PageOverlay({
   const gestureRef = useRef<Gesture | null>(null);
   const tool = useAnnotations((s) => s.tool);
   const drawing = !readOnly && DRAWING_TOOLS.has(tool);
-  const markupTool = ['highlight', 'underline', 'strikeout', 'squiggly'].includes(tool);
+  const markupTool = ['highlight', 'underline', 'strikeout', 'squiggly', 'redactText'].includes(tool);
 
   const setGesture = (next: Gesture | null) => {
     gestureRef.current = next;
@@ -170,6 +171,7 @@ export function PageOverlay({
       case 'square':
       case 'circle':
       case 'freetext':
+      case 'redact':
         capture(event);
         setGesture({ kind: 'rect', tool, from: at, to: at });
         return;
@@ -265,6 +267,13 @@ export function PageOverlay({
         store().setTool('select');
         return;
       case 'rect': {
+        if (current.tool === 'redact') {
+          // Schwärzen: nur aufgezogene Bereiche (ein Klick allein markiert nichts); das Werkzeug bleibt aktiv.
+          const rect = normalizeRect([current.from.x, current.from.y, current.to.x, current.to.y]);
+          if (rect[2] - rect[0] < 2 || rect[3] - rect[1] < 2) return;
+          addAnnotation(tabId, createRedaction(baseFields(pageIndex), rect, [], colors.redact));
+          return;
+        }
         if (current.tool === 'freetext') {
           const rect = dragRect(current.from, current.to, FREETEXT_SIZE);
           const box = createFreeText(baseFields(pageIndex), rect, colors.freetext, fontSize);
@@ -329,7 +338,8 @@ export function PageOverlay({
         const a = preview(original, gesture);
         const fromFile = original.ref ? originals[original.id] : undefined;
         // Unveränderte vorhandene Kommentare zeichnet pdf.js selbst; hier nur die Klickfläche.
-        const drawn = !fromFile || needsAppearance(fromFile, original) || a !== original;
+        // Schwärzungsmarkierungen haben keine Darstellung in der Datei; pdf.js zeichnet sie nicht.
+        const drawn = !fromFile || needsAppearance(fromFile, original) || a !== original || a.kind === 'redact';
         const editing = editingId === a.id && a.kind === 'freetext';
         return (
           <g key={a.id}>
@@ -440,6 +450,18 @@ function HitArea({ annotation: a, geometry, hitWidth, movable, passive, onPointe
   };
   const points = (list: Point[]) => list.map((p) => geometry.toView(p).join(',')).join(' ');
   switch (a.kind) {
+    case 'redact':
+      if (a.quads.length === 0) {
+        const r = geometry.rectToView(a.rect);
+        return <rect {...common} x={r.x} y={r.y} width={r.w} height={r.h} />;
+      }
+      return (
+        <g {...common}>
+          {a.quads.map((q, i) => (
+            <polygon key={i} points={points([q[0], q[1], q[3], q[2]])} />
+          ))}
+        </g>
+      );
     case 'highlight':
     case 'underline':
     case 'strikeout':

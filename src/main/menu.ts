@@ -201,6 +201,10 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       { type: 'separator' },
       cmd('tools.sign', t('menu.pages.sign'), { enabled: viewing && !state.formEditing }),
       cmd('forms.edit', t('menu.pages.editForm'), { type: 'checkbox', checked: viewing && state.formEditing, enabled: viewing && state.canEditForms }),
+      { type: 'separator' },
+      cmd('redact.tools', t('menu.pages.redact'), { type: 'checkbox', checked: viewing && state.redactToolsVisible, enabled: viewing && !state.formEditing }),
+      cmd('redact.find', t('menu.pages.redactFind'), { enabled: viewing && !state.formEditing }),
+      cmd('redact.apply', t('menu.pages.redactApply'), { enabled: viewing && state.hasRedactionMarks }),
     ],
   };
 

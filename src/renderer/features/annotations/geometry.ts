@@ -8,6 +8,8 @@ export function isMovable(a: Annotation): boolean {
 }
 
 export function isResizable(a: Annotation): boolean {
+  // Schwärzungen über markiertem Text folgen den Zeilen; nur aufgezogene Bereiche lassen sich ziehen.
+  if (a.kind === 'redact') return a.quads.length === 0;
   return ['square', 'circle', 'freetext', 'stamp', 'signature'].includes(a.kind);
 }
 
@@ -26,6 +28,7 @@ export function translate(a: Annotation, dx: number, dy: number): Annotation {
     case 'underline':
     case 'strikeout':
     case 'squiggly':
+    case 'redact':
       return { ...a, rect, quads: a.quads.map((q) => q.map((p) => movePoint(p, dx, dy)) as Quad) };
     default:
       return { ...a, rect };

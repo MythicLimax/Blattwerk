@@ -140,6 +140,9 @@ export interface MenuState {
   // Phase 4: Modus „Formular bearbeiten“ aktiv bzw. möglich (nicht in verschlüsselten Dokumenten)
   formEditing: boolean;
   canEditForms: boolean;
+  // Phase 5: Leiste „Schwärzen“ offen, Markierungen zum Anwenden vorhanden
+  redactToolsVisible: boolean;
+  hasRedactionMarks: boolean;
 }
 
 export type SaveErrorCode = 'changed-externally' | 'cancelled' | 'write-failed' | 'unknown-file' | 'invalid-data';

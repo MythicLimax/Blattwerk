@@ -43,6 +43,7 @@ function replyBytes(id: number, output: Uint8Array, pdfium: PdfiumEngine, passwo
 // pdf-lib (Feldoperationen, Reparatur übernommener Seiten) wird erst bei Bedarf geladen.
 const loadFields = () => import('./fields');
 const loadImported = () => import('./imported');
+const loadRedaction = () => import('./redaction');
 
 const NO_CHANGES = { upserts: [], deletions: [] };
 
@@ -85,6 +86,7 @@ function isFieldError(error: unknown): error is FieldOperationError {
 
 function errorCode(error: unknown): WorkerErrorCode {
   if (isFieldError(error)) return error.code;
+  if (error instanceof Error && error.name === 'SanitizeError') return 'redact-encrypted';
   if (error instanceof PageOperationError) return error.code;
   if (error instanceof FormValueError) return 'form';
   if (error instanceof VerifyError) return 'verify';
@@ -110,6 +112,25 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
           let output = pdfium.compose(request.parts);
           if (request.parts.some((part) => part.type === 'pdf')) output = await (await loadImported()).repairComposed(output, request.parts);
           replyBytes(request.id, output, pdfium, null);
+          return;
+        }
+        case 'redact': {
+          const { redactDocument } = await loadRedaction();
+          const output = await redactDocument(
+            pdfium,
+            new Uint8Array(request.bytes),
+            request.password,
+            request.changes,
+            request.formValues,
+            request.areas,
+            request.options,
+          );
+          replyBytes(request.id, output, pdfium, request.password);
+          return;
+        }
+        case 'findText': {
+          const result = pdfium.findText(new Uint8Array(request.bytes), request.password, request.options);
+          reply({ id: request.id, ok: true, kind: 'matches', ...result });
           return;
         }
         case 'inspect':

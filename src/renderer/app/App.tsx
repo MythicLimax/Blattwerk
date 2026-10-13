@@ -4,6 +4,8 @@ import { handleCloseRequest, handleOpenResult, executeCommand } from '../engine/
 import { CommentToolbar } from '../features/annotations/CommentToolbar';
 import { FieldDialog } from '../features/form-edit/FieldDialog';
 import { FormEditToolbar } from '../features/form-edit/FormEditToolbar';
+import { RedactApplyDialog, RedactFindDialog } from '../features/redaction/RedactDialogs';
+import { RedactToolbar } from '../features/redaction/RedactToolbar';
 import { BusyOverlay } from '../features/pages/BusyOverlay';
 import { ChooseSignatureDialog, CreateSignatureDialog } from '../features/signatures/SignatureDialogs';
 import { CombineDialog, PageDialogs, SourcePasswordDialog } from '../features/pages/PageDialogs';
@@ -40,6 +42,8 @@ export function App() {
   const prompt = useUi((s) => s.prompt);
   const settingsOpen = useUi((s) => s.settingsOpen);
   const commentToolsVisible = useUi((s) => s.commentToolsVisible);
+  const redactToolsVisible = useUi((s) => s.redactToolsVisible);
+  const redactDialog = useUi((s) => s.redactDialog);
   const pageDialog = useUi((s) => s.pageDialog);
   const combine = useUi((s) => s.combine);
   const signatureDialog = useUi((s) => s.signatureDialog);
@@ -80,6 +84,7 @@ export function App() {
       {tabs.length > 0 && <TabBar />}
       {commentToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && <CommentToolbar tab={active} />}
       {active?.status === 'ready' && active.mode === 'view' && active.formEditing && <FormEditToolbar tab={active} />}
+      {redactToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && <RedactToolbar tab={active} />}
       <div className={styles.workspace}>
         {!showDocumentChrome ? (
           <StartScreen />
@@ -105,6 +110,8 @@ export function App() {
       {signatureDialog === 'choose' && <ChooseSignatureDialog />}
       {signatureDialog === 'create' && <CreateSignatureDialog />}
       {fieldDialog && <FieldDialog key={JSON.stringify(fieldDialog)} dialog={fieldDialog} />}
+      {redactDialog === 'apply' && active?.status === 'ready' && <RedactApplyDialog tab={active} />}
+      {redactDialog === 'find' && active?.status === 'ready' && <RedactFindDialog tab={active} />}
       <SourcePasswordDialog />
       <BusyOverlay />
       {prompt && <PromptDialog key={`${prompt.kind}-${prompt.tabId}`} prompt={prompt} />}

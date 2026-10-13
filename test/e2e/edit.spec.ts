@@ -1,0 +1,188 @@
+// Phase 5: Bearbeiten (Schwärzen). Arbeitet auf Kopien bzw. im Test erzeugten PDFs.
+import { expect, test, type Page } from '@playwright/test';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { decodePDFRawStream, PDFDocument, PDFRawStream } from '@cantoo/pdf-lib';
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
+import type { Rect } from '../../src/shared/annotations';
+import { fixture, TEXT_PDF } from '../fixtures/expectations';
+import { AREAS, buildRedactionPdf, containsSecret, PUBLIC, SECRETS } from '../fixtures/redaction';
+import { launchApp, menuClick, menuItemState, waitForDocument } from './app';
+import { inspectWithPdfKit } from './pdfkit';
+
+const require = createRequire(import.meta.url);
+pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
+  path.join(path.dirname(require.resolve('pdfjs-dist/package.json')), 'legacy/build/pdf.worker.mjs'),
+).href;
+
+const tempDirs: string[] = [];
+test.afterAll(() => {
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+function tempDir(): string {
+  const dir = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+  tempDirs.push(dir);
+  return dir;
+}
+
+async function pageTexts(file: string): Promise<string[]> {
+  const task = pdfjs.getDocument({ data: new Uint8Array(readFileSync(file)), verbosity: 0 });
+  const pdf = await task.promise;
+  const texts: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    texts.push((await (await pdf.getPage(i)).getTextContent()).items.map((item) => ('str' in item ? item.str : '')).join(' '));
+  }
+  await task.destroy();
+  return texts;
+}
+
+async function decodedFile(file: string): Promise<string> {
+  const doc = await PDFDocument.load(new Uint8Array(readFileSync(file)), { updateMetadata: false });
+  const parts: string[] = [readFileSync(file).toString('latin1')];
+  for (const [, object] of doc.context.enumerateIndirectObjects()) {
+    if (object instanceof PDFRawStream) parts.push(Buffer.from(decodePDFRawStream(object).decode()).toString('latin1'));
+  }
+  return parts.join('\n');
+}
+
+// Position der Kommentarebene von Seite 1, sobald sie sich nicht mehr bewegt
+async function stableOverlayBox(page: Page) {
+  const overlay = page.getByTestId('annotation-overlay-0');
+  let last = '';
+  for (let i = 0; i < 50; i++) {
+    const box = await overlay.boundingBox();
+    const key = JSON.stringify(box);
+    if (box && key === last) return box;
+    last = key;
+    await page.waitForTimeout(100);
+  }
+  throw new Error('Seite kommt nicht zur Ruhe');
+}
+
+// Rechteck in PDF-Punkten auf Seite 1 (A4, ungedreht) aufziehen
+async function dragPdfRect(page: Page, rect: Rect): Promise<void> {
+  const box = await stableOverlayBox(page);
+  const toScreen = (x: number, y: number) => [box.x + (x / 595.28) * box.width, box.y + (1 - y / 841.89) * box.height] as const;
+  const [l, b, r, t] = rect;
+  const [x1, y1] = toScreen(l, t);
+  const [x2, y2] = toScreen(r, b);
+  await page.mouse.move(x1, y1);
+  await page.mouse.down();
+  await page.mouse.move((x1 + x2) / 2, (y1 + y2) / 2, { steps: 4 });
+  await page.mouse.move(x2, y2, { steps: 4 });
+  await page.mouse.up();
+}
+
+test.describe('Schwärzen', () => {
+  test('Bereiche markieren, anwenden und speichern: Inhalte sind aus der Datei verschwunden', async () => {
+    const dir = tempDir();
+    const file = path.join(dir, 'bericht.pdf');
+    writeFileSync(file, await buildRedactionPdf());
+    const { page, app, close } = await launchApp([file], { userData: dir });
+    await waitForDocument(page, 2);
+    expect(await menuItemState(app, 'redact.apply')).toMatchObject({ enabled: false });
+
+    await page.getByTestId('redact-tools-button').click();
+    await expect(page.getByTestId('redact-toolbar')).toBeVisible();
+    await expect(page.getByTestId('redact-tool-redact')).toHaveAttribute('aria-pressed', 'true');
+    await menuClick(app, 'view.fitPage');
+    await expect(page.getByTestId('zoom-select')).toHaveValue('page-fit');
+    for (const area of AREAS) await dragPdfRect(page, area);
+    await expect(page.getByTestId('redaction-mark')).toHaveCount(2);
+    await expect(page.getByTestId('redact-apply')).toHaveText(/2 Schwärzungen anwenden/);
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+
+    await page.getByTestId('redact-apply').click();
+    await expect(page.getByTestId('redact-apply-dialog')).toBeVisible();
+    await expect(page.getByTestId('redact-metadata')).toBeChecked();
+    await page.getByTestId('redact-apply-confirm').click();
+    await expect(page.getByTestId('redaction-mark')).toHaveCount(0);
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+
+    // Rückgängig bringt den Inhalt zurück (nur im Arbeitsspeicher), Wiederholen schwärzt wieder
+    await menuClick(app, 'edit.undo');
+    await expect(page.getByTestId('redaction-mark')).toHaveCount(2);
+    await menuClick(app, 'edit.redo');
+    await expect(page.getByTestId('redaction-mark')).toHaveCount(0);
+
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    const contents = await decodedFile(file);
+    for (const secret of Object.values(SECRETS)) expect(containsSecret(contents, secret), secret).toBe(false);
+    const texts = await pageTexts(file);
+    expect(texts[0]).toContain(PUBLIC.line);
+    expect(texts[1]).toContain(PUBLIC.page2);
+    if (process.platform === 'darwin') {
+      const kit = inspectWithPdfKit(file);
+      expect(kit.ok).toBe(true);
+      expect(kit.pages).toHaveLength(2);
+    }
+    await close();
+  });
+
+  test('Text suchen und alle Treffer schwärzen', async () => {
+    const dir = tempDir();
+    const file = path.join(dir, 'text.pdf');
+    copyFileSync(fixture('text.pdf'), file);
+    const { page, app, close } = await launchApp([file], { userData: dir });
+    await waitForDocument(page, TEXT_PDF.pages);
+    await menuClick(app, 'redact.find');
+    await expect(page.getByTestId('redact-find-dialog')).toBeVisible();
+    await page.getByTestId('redact-find-query').fill(TEXT_PDF.searchTerm);
+    await page.getByTestId('redact-find-search').click();
+    await expect(page.getByTestId('redact-find-result')).toContainText(`${TEXT_PDF.searchHits} Treffer auf 3 Seite`);
+    await page.getByTestId('redact-find-mark').click();
+    await expect(page.getByTestId('redact-apply')).toHaveText(new RegExp(`${TEXT_PDF.searchHits} Schwärzungen anwenden`));
+    // Ein Schritt für Rückgängig
+    await menuClick(app, 'edit.undo');
+    await expect(page.getByTestId('redact-apply')).toBeDisabled();
+    await menuClick(app, 'edit.redo');
+    await expect(page.getByTestId('redact-apply')).toBeEnabled();
+    await menuClick(app, 'redact.apply');
+    await page.getByTestId('redact-apply-confirm').click();
+    await expect(page.getByTestId('redact-apply')).toBeDisabled();
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    const texts = await pageTexts(file);
+    expect(texts.join(' ')).not.toContain(TEXT_PDF.searchTerm);
+    expect(texts).toHaveLength(TEXT_PDF.pages);
+    expect(containsSecret(await decodedFile(file), TEXT_PDF.searchTerm)).toBe(false);
+    await close();
+  });
+
+  test('Markierungen ohne Anwenden speichern und beim nächsten Öffnen anwenden', async () => {
+    const dir = tempDir();
+    const file = path.join(dir, 'bericht.pdf');
+    writeFileSync(file, await buildRedactionPdf());
+    const first = await launchApp([file], { userData: dir });
+    await waitForDocument(first.page, 2);
+    await first.page.getByTestId('redact-tools-button').click();
+    await menuClick(first.app, 'view.fitPage');
+    await expect(first.page.getByTestId('zoom-select')).toHaveValue('page-fit');
+    await dragPdfRect(first.page, AREAS[0] as Rect);
+    await menuClick(first.app, 'file.save');
+    await expect(first.page.getByTestId('tab-dirty')).toHaveCount(0);
+    // Gespeichert ist nur die Markierung; der Inhalt steht noch in der Datei.
+    expect((await pageTexts(file))[0]).toContain(SECRETS.text);
+    await first.close();
+
+    const second = await launchApp([file], { userData: dir });
+    await waitForDocument(second.page, 2);
+    await second.page.getByTestId('redact-tools-button').click();
+    await expect(second.page.getByTestId('redaction-mark')).toHaveCount(1);
+    await second.page.getByTestId('redact-apply').click();
+    await second.page.getByTestId('redact-metadata').uncheck();
+    await second.page.getByTestId('redact-apply-confirm').click();
+    await expect(second.page.getByTestId('redaction-mark')).toHaveCount(0);
+    await menuClick(second.app, 'file.save');
+    await expect(second.page.getByTestId('tab-dirty')).toHaveCount(0);
+    const texts = await pageTexts(file);
+    expect(texts[0]).not.toContain(SECRETS.text);
+    expect(texts[0]).toContain(PUBLIC.line);
+    await second.close();
+  });
+});

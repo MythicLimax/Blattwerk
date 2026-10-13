@@ -2,6 +2,7 @@
 import type { AnnotationChanges } from '../../shared/annotations';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
+import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
 
 // Kommentaränderungen, Formularwerte und (optional) Seiten- oder Feldoperationen anwenden, neue Bytes liefern
 export interface ProcessRequest {
@@ -32,7 +33,28 @@ export interface InspectRequest {
   password: string | null;
 }
 
-export type WorkerRequest = ProcessRequest | ComposeRequest | InspectRequest;
+// Schwärzen: Kommentare und Formularwerte übernehmen, Bereiche endgültig entfernen, vollständig neu schreiben
+export interface RedactRequest {
+  id: number;
+  type: 'redact';
+  bytes: ArrayBuffer;
+  password: string | null;
+  changes: AnnotationChanges;
+  formValues: FormFieldValue[];
+  areas: RedactionArea[];
+  options: RedactionOptions;
+}
+
+// Text suchen und die Lage der Treffer liefern
+export interface FindTextRequest {
+  id: number;
+  type: 'findText';
+  bytes: ArrayBuffer;
+  password: string | null;
+  options: TextSearchOptions;
+}
+
+export type WorkerRequest = ProcessRequest | ComposeRequest | InspectRequest | RedactRequest | FindTextRequest;
 
 export type InspectResult = { ok: true; pageCount: number } | { ok: false; reason: 'password' | 'invalid' };
 
@@ -48,10 +70,12 @@ export type WorkerErrorCode =
   | 'field-encrypted'
   | 'field-missing'
   | 'field-name'
+  | 'redact-encrypted'
   | 'verify'
   | 'failed';
 
 export type WorkerResponse =
   | { id: number; ok: true; kind: 'bytes'; bytes: ArrayBuffer }
   | { id: number; ok: true; kind: 'inspect'; result: InspectResult }
+  | { id: number; ok: true; kind: 'matches'; matches: TextMatch[]; truncated: boolean }
   | { id: number; ok: false; code: WorkerErrorCode; error: string };

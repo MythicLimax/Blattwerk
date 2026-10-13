@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Annotation } from '../../../shared/annotations';
 import { getRuntime } from '../../engine/runtime';
-import { MARKUP_TOOLS, useAnnotations, useTabAnnotations } from '../../state/annotations-store';
+import { MARKUP_TOOLS, useAnnotations, useTabAnnotations, type Tool } from '../../state/annotations-store';
 import { useDocuments } from '../../state/documents-store';
 import { geometryFromViewport, type PageGeometry } from '../../engine/coords';
 import { FormEditOverlay } from '../form-edit/FormEditOverlay';
 import { useFormEditInput } from '../form-edit/hooks';
 import { addAnnotation, baseFields, hideDomAnnotations, updateAnnotation } from './controller';
-import { createMarkup } from './create';
+import { createMarkup, createRedaction } from './create';
 import { isMovable, quadsFromRects, translate } from './geometry';
 import styles from './PageOverlay.module.css';
 import { PageOverlay } from './PageOverlay';
@@ -25,11 +25,12 @@ const ARROW_STEPS: Record<string, [number, number]> = {
 // Wie weit außerhalb des sichtbaren Bereichs Seiten schon ihre Kommentarebene bekommen
 const PRELOAD_MARGIN = '100% 0px';
 
-// Markiert die aktuelle Textauswahl mit dem gewählten Markierungswerkzeug. Liefert true, wenn etwas markiert wurde.
-export function markupSelection(tabId: string, tool: Annotation['kind'], geometryOf: (page: number) => PageGeometry | undefined): boolean {
+// Markiert die aktuelle Textauswahl mit dem gewählten Markierungswerkzeug (auch „Text schwärzen“).
+// Liefert true, wenn etwas markiert wurde.
+export function markupSelection(tabId: string, tool: Tool, geometryOf: (page: number) => PageGeometry | undefined): boolean {
   const runtime = getRuntime(tabId);
   const container = runtime?.container;
-  if (!container || !['highlight', 'underline', 'strikeout', 'squiggly'].includes(tool)) return false;
+  if (!container || !MARKUP_TOOLS.includes(tool)) return false;
   const selection = window.getSelection();
   const pages = selectedTextRects(selection, container, geometryOf);
   const color = useAnnotations.getState().colors[tool];
@@ -37,7 +38,8 @@ export function markupSelection(tabId: string, tool: Annotation['kind'], geometr
   for (const { pageIndex, rects } of pages) {
     const quads = quadsFromRects(rects);
     if (quads.length === 0) continue;
-    addAnnotation(tabId, createMarkup(baseFields(pageIndex), tool as 'highlight', quads, color));
+    const base = baseFields(pageIndex);
+    addAnnotation(tabId, tool === 'redactText' ? createRedaction(base, [0, 0, 0, 0], quads, color) : createMarkup(base, tool as 'highlight', quads, color));
     created = true;
   }
   if (created) selection?.removeAllRanges();
@@ -173,7 +175,7 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
     if (!container) return;
     const onPointerUp = () => {
       // Die Auswahl steht erst nach dem Ereignis fest.
-      setTimeout(() => markupSelection(tabId, tool as Annotation['kind'], (page) => cachedGeometry(tabId, page)), 0);
+      setTimeout(() => markupSelection(tabId, tool, (page) => cachedGeometry(tabId, page)), 0);
     };
     container.addEventListener('pointerup', onPointerUp);
     return () => container.removeEventListener('pointerup', onPointerUp);

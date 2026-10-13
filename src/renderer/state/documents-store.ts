@@ -45,6 +45,8 @@ export interface TabState {
   canExtract: boolean;
   // false bei verschlüsselten Dokumenten: Formularfelder lassen sich dort nicht anlegen oder bearbeiten
   canEditForms: boolean;
+  // Verschlüsselt (Kennwortschutz oder Berechtigungen): Schwärzen erst nach Entfernen des Schutzes
+  encrypted: boolean;
   // Modus „Formular bearbeiten“: Felder anlegen, verschieben, ändern, löschen (statt ausfüllen)
   formEditing: boolean;
   saving: boolean;
@@ -105,6 +107,7 @@ export const useDocuments = create<DocumentsState>((set) => ({
           canAssemble: true,
           canExtract: true,
           canEditForms: true,
+          encrypted: false,
           formEditing: false,
           saving: false,
           working: false,

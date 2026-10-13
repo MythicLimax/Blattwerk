@@ -14,7 +14,8 @@ export type AnnotationKind =
   | 'line'
   | 'arrow'
   | 'stamp'
-  | 'signature';
+  | 'signature'
+  | 'redact';
 
 export const MARKUP_KINDS: readonly AnnotationKind[] = ['highlight', 'underline', 'strikeout', 'squiggly'];
 
@@ -130,6 +131,13 @@ export interface SignatureAnnotation extends AnnotationBase {
   imageHeight: number;
 }
 
+// Schwärzungsmarkierung (Phase 5): Bereich, dessen Inhalt beim Anwenden endgültig entfernt wird.
+// Aufgezogen (nur rect) oder über markiertem Text (quads je Zeile). Gespeichert als /Redact-Anmerkung.
+export interface RedactAnnotation extends AnnotationBase {
+  kind: 'redact';
+  quads: Quad[];
+}
+
 export type Annotation =
   | MarkupAnnotation
   | NoteAnnotation
@@ -138,7 +146,8 @@ export type Annotation =
   | ShapeAnnotation
   | LineAnnotation
   | StampAnnotation
-  | SignatureAnnotation;
+  | SignatureAnnotation
+  | RedactAnnotation;
 
 // Änderungen, die beim Speichern auf die Datei angewendet werden.
 export interface AnnotationUpsert {

@@ -214,7 +214,7 @@ function reportSaveNew(result: SaveNewResult): boolean {
 
 function reportFolder(result: SaveToFolderResult): boolean {
   if (result.ok) {
-    notify(t('pages.savedToFolder', { count: result.names.length, folder: result.folder }));
+    useUi.getState().confirm(t('pages.savedToFolder', { count: result.names.length, folder: result.folder }));
     return true;
   }
   if (result.error !== 'cancelled') notify(t(`pages.errors.save.${result.error}`), result.detail);

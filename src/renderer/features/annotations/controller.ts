@@ -119,6 +119,13 @@ export function addAnnotation(tabId: string, annotation: Annotation): void {
   useAnnotations.getState().select(tabId, annotation.id);
 }
 
+// Mehrere auf einmal (ein Schritt für Rückgängig), z. B. alle Treffer von „Suchen und schwärzen“
+export function addAnnotations(tabId: string, annotations: Annotation[]): void {
+  if (annotations.length === 0) return;
+  newAction(tabId);
+  useAnnotations.getState().apply(tabId, { type: 'addMany', annotations });
+}
+
 export function updateAnnotation(tabId: string, before: Annotation, after: Annotation): void {
   if (JSON.stringify(before) === JSON.stringify(after)) return;
   newAction(tabId);

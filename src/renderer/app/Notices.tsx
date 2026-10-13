@@ -1,4 +1,4 @@
-import { CircleAlert, X } from 'lucide-react';
+import { CircleAlert, CircleCheck, X } from 'lucide-react';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUi } from '../state/ui-store';
@@ -6,7 +6,7 @@ import styles from './Notices.module.css';
 
 const AUTO_DISMISS_MS = 8000;
 
-// Meldungen unten rechts, z. B. wenn eine Datei nicht geöffnet werden konnte.
+// Meldungen unten rechts, z. B. wenn eine Datei nicht geöffnet werden konnte oder ein Schritt geklappt hat.
 export function Notices() {
   const { t } = useTranslation();
   const notices = useUi((s) => s.notices);
@@ -22,8 +22,12 @@ export function Notices() {
   return (
     <div className={styles.stack} role="alert" aria-live="assertive" data-testid="notices">
       {notices.map((notice) => (
-        <div key={notice.id} className={styles.notice}>
-          <CircleAlert size={18} className={styles.icon} aria-hidden="true" />
+        <div key={notice.id} className={notice.tone === 'success' ? styles.success : styles.notice} data-tone={notice.tone}>
+          {notice.tone === 'success' ? (
+            <CircleCheck size={18} className={styles.icon} aria-hidden="true" />
+          ) : (
+            <CircleAlert size={18} className={styles.icon} aria-hidden="true" />
+          )}
           <div className={styles.text}>
             <div>{notice.message}</div>
             {notice.detail && <div className={styles.detail}>{notice.detail}</div>}

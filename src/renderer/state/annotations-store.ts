@@ -15,7 +15,10 @@ export type Tool =
   | 'line'
   | 'arrow'
   | 'stamp'
-  | 'signature';
+  | 'signature'
+  // Schwärzen (Phase 5): Bereich aufziehen bzw. markierten Text schwärzen
+  | 'redact'
+  | 'redactText';
 
 // Unterschrift, die beim nächsten Klick auf die Seite gesetzt wird (PNG als Base64)
 export interface PendingSignature {
@@ -24,12 +27,16 @@ export interface PendingSignature {
   height: number;
 }
 
-export const MARKUP_TOOLS: readonly Tool[] = ['highlight', 'underline', 'strikeout', 'squiggly'];
-export const DRAWING_TOOLS: readonly Tool[] = ['note', 'freetext', 'ink', 'square', 'circle', 'line', 'arrow', 'stamp', 'signature'];
+export const MARKUP_TOOLS: readonly Tool[] = ['highlight', 'underline', 'strikeout', 'squiggly', 'redactText'];
+export const DRAWING_TOOLS: readonly Tool[] = ['note', 'freetext', 'ink', 'square', 'circle', 'line', 'arrow', 'stamp', 'signature', 'redact'];
+// Werkzeuge der Leiste „Schwärzen“
+export const REDACT_TOOLS: readonly Tool[] = ['redact', 'redactText'];
 
 // Änderungen am Kommentarbestand. Jede ist umkehrbar (Rückgängig/Wiederholen).
 export type Command =
   | { type: 'add'; annotation: Annotation }
+  // Mehrere auf einmal (Suchen und schwärzen): ein Schritt für Rückgängig
+  | { type: 'addMany'; annotations: Annotation[] }
   | { type: 'remove'; annotation: Annotation; index: number }
   | { type: 'update'; before: Annotation; after: Annotation };
 
@@ -73,6 +80,8 @@ export const DEFAULT_COLORS: Record<Tool, Rgb> = {
   arrow: { r: 0.85, g: 0.11, b: 0.11 },
   stamp: { r: 0.13, g: 0.55, b: 0.13 },
   signature: { r: 0, g: 0, b: 0 },
+  redact: { r: 0.85, g: 0.11, b: 0.11 },
+  redactText: { r: 0.85, g: 0.11, b: 0.11 },
 };
 
 interface AnnotationsState {
@@ -109,6 +118,8 @@ function run(items: Annotation[], command: Command): Annotation[] {
   switch (command.type) {
     case 'add':
       return [...items, command.annotation];
+    case 'addMany':
+      return [...items, ...command.annotations];
     case 'remove':
       return items.filter((a) => a.id !== command.annotation.id);
     case 'update':
@@ -120,6 +131,10 @@ function invert(items: Annotation[], command: Command): Annotation[] {
   switch (command.type) {
     case 'add':
       return items.filter((a) => a.id !== command.annotation.id);
+    case 'addMany': {
+      const ids = new Set(command.annotations.map((a) => a.id));
+      return items.filter((a) => !ids.has(a.id));
+    }
     case 'remove': {
       const next = [...items];
       next.splice(Math.min(command.index, next.length), 0, command.annotation);

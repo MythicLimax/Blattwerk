@@ -10,6 +10,7 @@ import type {
   Point,
   Quad,
   Rect,
+  RedactAnnotation,
   Rgb,
   ShapeAnnotation,
   SignatureAnnotation,
@@ -32,6 +33,11 @@ const SIGNATURE_MAX_HEIGHT = 80;
 
 export function createMarkup(base: Base, kind: MarkupAnnotation['kind'], quads: Quad[], color: Rgb): MarkupAnnotation {
   return { ...base, kind, quads, rect: rectOfQuads(quads), color };
+}
+
+// Schwärzungsmarkierung: aufgezogener Bereich (ohne quads) oder markierter Text (quads je Zeile)
+export function createRedaction(base: Base, rect: Rect, quads: Quad[], color: Rgb): RedactAnnotation {
+  return { ...base, kind: 'redact', quads, rect: quads.length > 0 ? rectOfQuads(quads) : rect, color };
 }
 
 // Notiz: Symbol mit der linken oberen Ecke am Klickpunkt

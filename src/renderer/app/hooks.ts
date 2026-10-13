@@ -40,6 +40,8 @@ function computeMenuState(): MenuState {
     canExtract: ready && active.canExtract,
     formEditing: ready && active.mode === 'view' && active.formEditing,
     canEditForms: ready && active.canEditForms,
+    redactToolsVisible: ui.redactToolsVisible,
+    hasRedactionMarks: ready && (activeAnnotations?.items.some((a) => a.kind === 'redact') ?? false),
   };
 }
 

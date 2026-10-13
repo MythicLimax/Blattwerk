@@ -108,6 +108,8 @@ describe('validateMenuState', () => {
     canExtract: false,
     formEditing: false,
     canEditForms: true,
+    redactToolsVisible: false,
+    hasRedactionMarks: true,
   };
   it('übernimmt einen gültigen Zustand', () => {
     expect(validateMenuState(valid)).toEqual(valid);

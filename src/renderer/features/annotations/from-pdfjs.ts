@@ -136,6 +136,10 @@ function convertOne(data: PdfjsAnnotationData, pageIndex: number): Annotation | 
         width: data.borderStyle?.width ?? 1,
       };
     }
+    case 'Redact':
+      // pdf.js liefert für Schwärzungsmarkierungen keine QuadPoints; beim Anwenden liest PDFium die genaue Lage
+      // aus der Datei (redact.ts). Angezeigt wird bis dahin das umgebende Rechteck.
+      return { ...baseOf(data, pageIndex, { r: 0.85, g: 0.11, b: 0.11 }), kind: 'redact', quads: toQuads(data.quadPoints) };
     case 'Stamp':
       // Fremde Stempel behalten ihre Darstellung; Beschriftung ist unbekannt.
       return { ...baseOf(data, pageIndex, black), kind: 'stamp', stamp: 'approved', label: '' };

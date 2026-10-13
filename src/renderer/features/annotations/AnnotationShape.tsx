@@ -128,6 +128,21 @@ export function AnnotationShape({ annotation: a, geometry }: { annotation: Annot
           {a.kind === 'arrow' && <polyline points={arrowHead(geometry, a.start, a.end, a.width)} strokeLinejoin="round" />}
         </g>
       );
+    case 'redact': {
+      // Roter Umriss mit halbdurchsichtiger Füllung: Hier wird beim Anwenden geschwärzt.
+      const style = { fill: 'rgba(0, 0, 0, 0.28)', stroke: color, strokeWidth: 1.5, vectorEffect: 'non-scaling-stroke' as const };
+      if (a.quads.length > 0) {
+        return (
+          <g data-testid="redaction-mark">
+            {a.quads.map((q, i) => (
+              <polygon key={i} points={points(geometry, [q[0], q[1], q[3], q[2]])} style={style} />
+            ))}
+          </g>
+        );
+      }
+      const r = geometry.rectToView(a.rect);
+      return <rect x={r.x} y={r.y} width={r.w} height={r.h} style={style} data-testid="redaction-mark" />;
+    }
     case 'signature': {
       const r = geometry.rectToView(a.rect);
       return (

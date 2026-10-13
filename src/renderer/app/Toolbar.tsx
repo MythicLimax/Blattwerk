@@ -2,6 +2,7 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardPen,
+  EyeOff,
   FolderOpen,
   Info,
   LayoutGrid,
@@ -152,6 +153,7 @@ export function Toolbar() {
   const sidebarVisible = useUi((s) => s.sidebarVisible);
   const rightPanelVisible = useUi((s) => s.rightPanelVisible);
   const commentToolsVisible = useUi((s) => s.commentToolsVisible);
+  const redactToolsVisible = useUi((s) => s.redactToolsVisible);
   const tabDirty = useTabDirty(tab?.id);
   const ready = tab?.status === 'ready';
   const dirty = ready && tabDirty;
@@ -247,6 +249,14 @@ export function Toolbar() {
             disabled={!viewing || !tab.canAnnotate || tab.formEditing}
             onClick={() => executeCommand('tools.sign')}
             data-testid="sign-button"
+          />
+          <IconButton
+            icon={EyeOff}
+            label={t('toolbar.redact')}
+            pressed={redactToolsVisible && viewing && !tab.formEditing}
+            disabled={!viewing}
+            onClick={() => executeCommand('redact.tools')}
+            data-testid="redact-tools-button"
           />
           <IconButton
             icon={ClipboardPen}

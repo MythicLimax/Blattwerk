@@ -52,3 +52,13 @@
 .close:hover {
   background: var(--color-hover);
 }
+
+/* Bestätigung: gleicher Aufbau, grüner Rand und grünes Symbol */
+.success {
+  composes: notice;
+  border-left-color: var(--color-success);
+}
+
+.success .icon {
+  color: var(--color-success);
+}

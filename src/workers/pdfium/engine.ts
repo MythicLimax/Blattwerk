@@ -16,7 +16,10 @@ import type {
 import { STAMP_STYLES, toPdfDate } from '../../shared/annotations';
 import type { FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
+import type { RedactionArea, TextSearchOptions } from '../../shared/redaction';
 import { applyFormValues } from './forms';
+import { applyRedactions } from './redact';
+import { findText } from './text-search';
 import { copyOut, withBuffer, withFloats, withWString, type Pdfium } from './memory';
 import { Allocations, applyPageOperation, composeDocument, inspectDocument } from './pages';
 
@@ -35,6 +38,8 @@ const SUBTYPE = {
   ink: 15,
   // Unterschriften sind Stempel mit Bild
   signature: 13,
+  // Schwärzungsmarkierung (noch nicht angewendet)
+  redact: 28,
 } as const;
 
 const COLOR_TYPE = { color: 0, interior: 1 } as const;
@@ -112,6 +117,18 @@ export class PdfiumEngine {
     }
   }
 
+  // Schwärzen: wie process (Kommentare und Formularwerte zuerst), dann die Bereiche endgültig entfernen und
+  // vollständig neu speichern. Reste entfernt danach sanitize.ts (ADR 0008).
+  redact(bytes: Uint8Array, password: string | null, changes: AnnotationChanges, formValues: FormFieldValue[], areas: RedactionArea[]): Uint8Array {
+    const m = this.#m;
+    const memory = new Allocations(m);
+    try {
+      return this.#process(bytes, password, changes, [], { incremental: false }, memory, formValues, areas);
+    } finally {
+      memory.release();
+    }
+  }
+
   // Neues Dokument aus Teilen (Zusammenführen, Extrahieren, Teilen, Bilder → PDF), vollständig gespeichert.
   compose(parts: ComposePart[]): Uint8Array {
     const m = this.#m;
@@ -128,6 +145,21 @@ export class PdfiumEngine {
     }
   }
 
+  // Treffer einer Suche mit ihrer genauen Lage (Suchen und schwärzen)
+  findText(bytes: Uint8Array, password: string | null, options: TextSearchOptions) {
+    const m = this.#m;
+    return withBuffer(m, bytes.length, (dataPtr) => {
+      m.pdfium.HEAPU8.set(bytes, dataPtr);
+      const doc = m.FPDF_LoadMemDocument(dataPtr, bytes.length, password ?? '');
+      if (!doc) throw new PdfiumError(`Dokument lässt sich nicht öffnen (Fehler ${m.FPDF_GetLastError()})`);
+      try {
+        return findText(m, doc, options);
+      } finally {
+        m.FPDF_CloseDocument(doc);
+      }
+    });
+  }
+
   inspect(bytes: Uint8Array, password: string | null) {
     return inspectDocument(this.#m, bytes, password);
   }
@@ -140,6 +172,7 @@ export class PdfiumEngine {
     options: SaveOptions,
     memory: Allocations,
     formValues: FormFieldValue[],
+    areas: RedactionArea[] = [],
   ): Uint8Array {
     const m = this.#m;
     return withBuffer(m, bytes.length, (dataPtr) => {
@@ -165,6 +198,7 @@ export class PdfiumEngine {
           for (const ptr of pages.values()) m.FPDF_ClosePage(ptr);
         }
         if (formValues.length > 0) applyFormValues(m, doc, formValues);
+        if (areas.length > 0) applyRedactions(m, doc, areas);
         for (const operation of operations) applyPageOperation(m, doc, operation, memory);
         return this.#save(doc, options.incremental ? SAVE_INCREMENTAL : SAVE_FULL);
       } finally {
@@ -234,7 +268,8 @@ export class PdfiumEngine {
       this.#setCommon(annot, a, isNew, now);
       if (isNew || upsert.appearance) {
         this.#setKindSpecific(doc, annot, a, isNew);
-        if (a.kind !== 'stamp' && a.kind !== 'signature') m.EPDFAnnot_GenerateAppearance(annot);
+        // Stempel und Unterschriften haben ihre eigene Darstellung; Schwärzungsmarkierungen keine (wie in Acrobat)
+        if (a.kind !== 'stamp' && a.kind !== 'signature' && a.kind !== 'redact') m.EPDFAnnot_GenerateAppearance(annot);
       }
       for (const reply of a.replies) this.#upsertReply(pagePtr, annot, a, reply, now);
       for (const status of a.statuses) if (status.ref === null) this.#addStatus(pagePtr, annot, a, status, now);
@@ -321,7 +356,21 @@ export class PdfiumEngine {
       case 'signature':
         if (isNew) this.#buildImageAppearance(doc, annot, a);
         break;
+      case 'redact':
+        // Umriss rot (/C), Füllung nach dem Anwenden schwarz (/IC)
+        this.#setColor(annot, COLOR_TYPE.interior, { r: 0, g: 0, b: 0 });
+        if (isNew) {
+          for (const quad of a.quads) this.#appendQuad(annot, quad);
+        } else if (m.FPDFAnnot_CountAttachmentPoints(annot) === a.quads.length) {
+          a.quads.forEach((quad, index) => this.#setQuad(annot, index, quad));
+        }
+        break;
     }
+  }
+
+  #setQuad(annot: number, index: number, quad: Quad): void {
+    const m = this.#m;
+    withFloats(m, quad.flatMap((p: Point) => [p.x, p.y]), (ptr) => m.FPDFAnnot_SetAttachmentPoints(annot, index, ptr));
   }
 
   #appendQuad(annot: number, quad: Quad): void {
