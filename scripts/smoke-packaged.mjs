@@ -1,6 +1,6 @@
 // Startet die fertig gebaute App (nicht den Entwicklungsstand) mit einer Kopie eines Test-PDFs und prüft über die
-// Chromium-Debug-Schnittstelle, ob das Dokument angezeigt wird und ob Kommentieren und Speichern
-// (PDFium-Worker aus dem App-Paket) funktionieren.
+// Chromium-Debug-Schnittstelle, ob das Dokument angezeigt wird und ob Kommentieren, Formularfelder anlegen
+// (pdf-lib, nachgeladener Teil des Workers) und Speichern (PDFium-Worker aus dem App-Paket) funktionieren.
 // Aufruf: node scripts/smoke-packaged.mjs <Pfad zu Blattwerk.app>
 import { chromium } from '@playwright/test';
 import { spawn } from 'node:child_process';
@@ -54,6 +54,23 @@ try {
   const ok = saved.length > originalSize && /\/Subtype\s*\/Square/.test(saved.toString('latin1'));
   console.log(`Speichern in der fertigen App: ${ok ? 'ok' : 'FEHLER'} (${originalSize} → ${saved.length} Byte)`);
   if (!ok) process.exitCode = 1;
+
+  // Textfeld anlegen (Modus „Formular bearbeiten“) und speichern
+  await page.getByTestId('form-edit-button').click();
+  await page.getByTestId('field-tool-text').click();
+  const formBox = await page.getByTestId('form-edit-overlay-0').boundingBox();
+  if (!formBox) throw new Error('Keine Bearbeitungsebene für Formulare');
+  await page.mouse.click(formBox.x + 80, formBox.y + 220);
+  await page.getByTestId('field-name').fill('Rauchtest');
+  await page.getByTestId('field-dialog-ok').click();
+  await page.locator('[data-testid="form-field"][data-field-name="Rauchtest"]').waitFor({ timeout: 30000 });
+  await page.getByTestId('save-button').click();
+  await page.getByTestId('tab-dirty').waitFor({ state: 'detached', timeout: 30000 });
+  const withField = readFileSync(file).toString('latin1');
+  // Neue Feldnamen schreibt pdf-lib als UTF-16 (hexadezimal); geprüft wird deshalb der Feldtyp.
+  const fieldOk = /\/FT\s*\/Tx/.test(withField);
+  console.log(`Formularfeld in der fertigen App: ${fieldOk ? 'ok' : 'FEHLER'}`);
+  if (!fieldOk) process.exitCode = 1;
   await browser.close();
 } finally {
   child.kill();

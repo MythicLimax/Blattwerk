@@ -14,8 +14,8 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | 1 | Viewer | erledigt ([Bericht](docs/phasen/phase-1.md)) |
 | 2 | Kommentieren | erledigt ([Bericht](docs/phasen/phase-2.md)) |
 | 3 | Seiten organisieren | erledigt ([Bericht](docs/phasen/phase-3.md)) |
-| 4 | Formulare und Unterschrift | als Nächstes |
-| 5 | Bearbeiten (inkl. Schwärzen) | offen |
+| 4 | Formulare und Unterschrift | erledigt ([Bericht](docs/phasen/phase-4.md)) |
+| 5 | Bearbeiten (inkl. Schwärzen) | als Nächstes |
 | 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | offen |
 | 7 | Profi (PAdES, PDF/A, Tags) | offen |
 
@@ -49,6 +49,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Renderer hat keinen Node-Zugriff.** Alles Dateisystem läuft über `window.blattwerk` (Typ in `src/preload/api-types.ts`) → IPC → Hauptprozess. Der Renderer kennt nur Datei-IDs.
 - **Anzeigen mit den Viewer-Bausteinen von pdf.js** (`PDFViewer`, `PDFFindController`, `PDFLinkService`), siehe [ADR 0002](docs/entscheidungen/0002-anzeige-mit-pdfjs-viewer.md). Parsen, Schriften und Bilddekodierung laufen im Worker, gezeichnet wird zeitgeteilt im Hauptthread. Vollständiges Rendern im Worker wurde geprüft und ist nicht nötig (gemessen in den Oberflächentests).
 - **Ändern und Speichern mit PDFium-WASM** (`@embedpdf/pdfium`), siehe [0001](docs/entscheidungen/0001-pdf-bibliotheken.md). Zugriff nur über die eigene Schicht `src/workers/pdfium/` (`engine.ts`, Speicherhilfen in `memory.ts`), nie direkt auf das Modul. Ein Worker für die ganze App (`src/renderer/engine/pdfium-client.ts`): startet beim ersten Auftrag, beendet sich 2 s nach dem letzten (WASM-Speicher schrumpft sonst nie).
+- **Strukturänderungen mit @cantoo/pdf-lib** im selben Worker, nur wo PDFium es nicht kann ([ADR 0007](docs/entscheidungen/0007-formulare.md)): Formularfelder anlegen, ändern, löschen (`fields.ts`) und Verweise nach dem Übernehmen von Seiten reparieren (`imported.ts`). Immer inkrementell (`commit()`), nie in verschlüsselten Dokumenten, erst bei Bedarf geladen (eigener Bundle-Teil).
 - **Große Dateien** (über 8 MB): eigener `PDFDataRangeTransport` (`src/renderer/engine/range-transport.ts`) liest 1-MB-Blöcke per IPC, höchstens 6 gleichzeitig. Kleinere Dateien werden in einem Stück gelesen.
 - **Laden ist abbrechbar:** `LoadedDocumentHandle.promise` lehnt beim Schließen ab; der pdf.js-Worker wird erst nach `task.destroy()` beendet.
 
@@ -62,7 +63,10 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Seiten organisieren** ([ADR 0006](docs/entscheidungen/0006-seiten-organisieren.md)): Jede Seitenoperation erzeugt PDFium sofort als neuen Stand im Arbeitsspeicher (`applyPageOperations` in `session.ts`), der Tab lädt ihn neu (`showState`); die Datei ändert sich erst beim Speichern. Ungespeicherte Kommentare werden dabei eingearbeitet.
 - **Verlauf:** `src/renderer/state/history-store.ts` hält je Tab die Dokumentstände (Bytes oder `null` = Datei, Kommentarzustand, Seite, Auswahl), höchstens 768 MB. Rückgängig nimmt erst Kommentarbefehle zurück, dann Stände (`undoTab`/`redoTab`). Seitenoperationen, Rückgängig und Wiederholen laufen je Tab in einer Warteschlange (`enqueue`); solange sie läuft, ist `TabState.working` gesetzt. „Ungespeichert“ nur über `src/renderer/state/dirty.ts`.
 - Vor Seitenoperationen, Speichern, Drucken und Schließen übernimmt `commitPendingEdits` offene Texteingaben.
-- Dieses Verfahren (Snapshot der Dokumentbytes) gilt auch für die Inhaltsänderungen ab Phase 5.
+- **Formulare ausfüllen** ([ADR 0007](docs/entscheidungen/0007-formulare.md)): pdf.js zeigt Felder als Eingabefelder (`AnnotationMode.ENABLE_FORMS`). `computeFormChanges` (`src/shared/forms.ts`) vergleicht seinen Anmerkungsspeicher mit der Datei (`forms-store`, `features/forms/form-sync.ts`). Beim Speichern übernimmt PDFium die Werte (`workers/pdfium/forms.ts`).
+- **Formular bearbeiten:** `TabState.formEditing`, Ebene `features/form-edit/FormEditOverlay.tsx` über der Seite (pdf.js-Felder und Kommentare sind dann nicht bedienbar), Zustand in `form-edit-store`. Jede Änderung ist eine `FieldOperation` und damit ein neuer Dokumentstand (`applyFieldOperations` in `session.ts`, Scrollposition bleibt über `rememberScroll`).
+- **Unterschrift:** Stempel mit PNG (`SignatureAnnotation`); gespeicherte Unterschriften im Profil (`src/main/files/signatures.ts`, IPC `signatures*`).
+- Dieses Verfahren (Snapshot der Dokumentbytes) gilt auch für Feldänderungen (Phase 4) und Inhaltsänderungen ab Phase 5.
 
 ### Speichern (Grundregeln aus der Spezifikation, ab Phase 2)
 
@@ -79,7 +83,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - Alle App-Dateien kommen über `app://bundle/` (`src/main/protocol.ts`). Die CSP (`script-src 'self' 'wasm-unsafe-eval'`, `default-src 'none'`) steht in **jeder** Antwort, damit sie auch für Worker gilt. **Netzwerk ist komplett gesperrt** (`session.webRequest`), nur `app:`, `blob:`, `data:` sind erlaubt.
 - **JavaScript in PDFs wird nie ausgeführt:** pdf.js bekommt keinen Scripting-Manager (ohne ihn läuft kein PDF-JavaScript), `enableXfa: false`. Die frühere Option `isEvalSupported` gibt es in pdf.js 6 nicht mehr; pdf.js nutzt kein `eval`.
 - Externe Links: nur `http`, `https`, `mailto`, keine Zugangsdaten im Host-Teil, nur nach Rückfrage mit angezeigtem Zielserver (Punycode).
-- IPC: feste Kanalliste (`src/shared/ipc.ts`), Absender wird geprüft, Argumente validiert (`src/shared/validate.ts`). Drop-Pfade nur absolut und lokal (keine UNC-Pfade). Quelldateien (PDF, JPEG, PNG) werden am Inhalt erkannt (`file-registry.ts`), Bilder über 100 Megapixel abgelehnt.
+- IPC: feste Kanalliste (`src/shared/ipc.ts`), Absender wird geprüft, Argumente validiert (`src/shared/validate.ts`). Drop-Pfade nur absolut und lokal (keine UNC-Pfade). Quelldateien (PDF, JPEG, PNG) werden am Inhalt erkannt (`file-registry.ts`), Bilder über 100 Megapixel abgelehnt. Gespeicherte Unterschriften prüft der Hauptprozess (PNG, höchstens 2 MB und 4000 px, höchstens 20).
 - Testschalter (`BLATTWERK_E2E`, `BLATTWERK_E2E_PRINT_DIR`) wirken nur in der unpaketierten App. `BLATTWERK_USER_DATA` (Profilordner) wirkt immer, wird vom Rauchtest der fertigen App genutzt.
 - Electron-Fuses in `electron-builder.yml`: `RunAsNode` aus, `NODE_OPTIONS` aus, Inspect-Argumente aus, ASAR-Integrität an, `OnlyLoadAppFromAsar` an.
 
@@ -96,11 +100,11 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0006)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0007)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
-                            default-app, i18n, files/ (file-registry, recent-files, json-store, atomic-write)
+                            default-app, i18n, files/ (file-registry, recent-files, json-store, atomic-write, signatures)
   preload/                  contextBridge-API (index.ts) und ihr Typ (api-types.ts)
   shared/                   Typen, IPC-Vertrag, Befehle, Tastenkürzel, Validierung, product.ts. Keine Node- oder DOM-Imports
   locales/de/               translation.json (alle UI-Texte, Renderer und Menü), pdfjs-viewer.ftl (Texte der pdf.js-Bausteine)
@@ -108,14 +112,16 @@ src/
     app/                    Shell: Layout, Werkzeugleiste, Tabs, Seitenleisten, Startbildschirm, globale Tasten, Drag & Drop
     features/               viewer, thumbnails, outline, search, properties, print, password, goto,
                             annotations (Kommentare), prompt (Rückfragen), settings,
-                            pages (Seitenraster, Seiten-Dialoge, Abläufe für Seiten und neue Dokumente)
+                            pages (Seitenraster, Seiten-Dialoge, Abläufe für Seiten und neue Dokumente),
+                            forms (Ausfüllen), form-edit (Formular bearbeiten), signatures (Unterschrift)
     components/             generische UI-Bausteine (IconButton, Dialog)
-    state/                  zustand-Stores (documents-store, ui-store, annotations-store, history-store), dirty.ts
+    state/                  zustand-Stores (documents, ui, annotations, history, forms, form-edit), dirty.ts
     engine/                 pdf.js-Einrichtung, Laden, Range-Transport, Laufzeit je Dokument, Befehle (session.ts),
                             coords.ts, pdfium-client.ts
     styles/                 Design-Tokens, hell/dunkel
     public/                 beim Build kopierte pdf.js-Ressourcen (nicht eingecheckt)
-  workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, pages, memory, protocol, worker)
+  workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, pages, forms, memory, protocol, worker),
+                            mit pdf-lib: fields (Formularfelder), imported (übernommene Seiten reparieren)
 resources/icon.svg          eigenes App-Symbol (Quelle)
 build/                      icon.png (aus resources/icon.svg erzeugt), after-pack.cjs
 scripts/                    build, dev, generate-fixtures, check-licenses, dist-mac-local, smoke-packaged, make-icon, dev-env.sh
@@ -140,6 +146,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 | Sprache | typescript | **6.0.3** | Apache-2.0 |
 | Rendering | pdfjs-dist | 6.4.299 | Apache-2.0 |
 | Bearbeiten/Speichern | @embedpdf/pdfium | 2.15.1 | MIT + BSD-3 |
+| Formularstruktur, Test-PDFs | @cantoo/pdf-lib | 2.11.1 | MIT |
 | Zustand | zustand | 5.0.15 | MIT |
 | Virtualisierung | @tanstack/react-virtual | 3.14.15 | MIT |
 | i18n | i18next, react-i18next | 26.4.4, 17.0.16 | MIT |
@@ -165,11 +172,11 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 
 ## Tests
 
-- **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js; PDFium-WASM läuft ebenfalls in Node (`test/integration/pdfium-annotations.test.ts`, `pdfium-pages.test.ts`).
-- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
+- **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js; PDFium-WASM und pdf-lib laufen ebenfalls in Node (`test/integration/pdfium-*.test.ts`, `fields.test.ts`).
+- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt), `test/e2e/forms.spec.ts` (Phase 4) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
 - **Fertige App:** `node scripts/smoke-packaged.mjs <Pfad zur .app>` startet das Paket, prüft die Anzeige und speichert einen Kommentar (PDFium aus dem Paket).
 - **Ausgabeprüfung für jede gespeicherte Datei:** `qpdf --check` (in CI installiert, lokal übersprungen, wenn nicht vorhanden), Öffnen mit pdf.js, PDFium und `@cantoo/pdf-lib`, Annotationen haben /AP. Unter macOS zusätzlich mit PDFKit (die Engine von Apple Vorschau): `test/e2e/pdfkit.ts` (JavaScript for Automation). Acrobat Reader: manuelle Checkliste im Phasenbericht.
-- **Test-PDFs** (`test/fixtures/pdfs/`): Text, Scan (nur Bild), Formular (AcroForm), verschlüsselt (Benutzer- und Besitzerpasswort), eingeschränkt, beschädigt (kaputte xref, abgeschnitten), mit Links und Lesezeichen, mit Kommentaren (`kommentare.pdf`: Antwort, Prüfstatus). Signiert folgt in Phase 4. „Sehr groß“ (600 Seiten, mehr als 100 MB) erzeugt `scripts/generate-fixtures.ts` nach `test/fixtures/generated/`.
+- **Test-PDFs** (`test/fixtures/pdfs/`): Text, Scan (nur Bild), Formular (AcroForm), verschlüsselt (Benutzer- und Besitzerpasswort), eingeschränkt, beschädigt (kaputte xref, abgeschnitten), mit Links und Lesezeichen, mit Kommentaren (`kommentare.pdf`: Antwort, Prüfstatus). Signiert folgt mit PAdES in Phase 7. „Sehr groß“ (600 Seiten, mehr als 100 MB) erzeugt `scripts/generate-fixtures.ts` nach `test/fixtures/generated/`.
 
 ## Befehle
 
@@ -216,5 +223,8 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 - `python3` ist auf diesem Mac nicht nutzbar (Xcode-Lizenz nicht bestätigt). Für Skripte Node verwenden.
 - pdf.js gibt den Puffer von `getDocument({ data })` an seinen Worker ab (danach leer). Bytes, die man behalten will, als Kopie übergeben (`document-loader.ts`).
 - PDFium: `FPDF_MovePages` erwartet als Ziel den Index in der Liste **ohne** die verschobenen Seiten (`moveTarget` in `src/shared/pages.ts`). `EPDFImageObj_SetJpeg/SetPng(0, 0, Bildobjekt, Datenzeiger, Länge)`.
+- pdf.js zeichnet unter `ENABLE_FORMS` den Anmerkungsspeicher nicht mit; `combineFormsWithStorage` (`runtime.ts`) ergänzt die Speicher-Absicht, sonst erscheinen ausgeblendete Kommentare wieder.
+- pdf.js liest die QuickInfo (`/TU`) nur am Widget, nicht am Feld; die App schreibt sie an beide. pdf-lib vergrößert neue Felder um die Rahmenbreite; `fields.ts` setzt das Rechteck danach exakt.
+- PDFium passt `/Parent` beim Kopieren von Seiten nicht an (Formularfelder, Popups). Deshalb nach jedem Zusammensetzen und jeder Einfügung aus einer Datei `imported.ts`.
 - Native Menü-Kürzel (z. B. Cmd+A mit `role: selectAll`) erreichen den Renderer auf dem Mac nicht als Tastendruck.
 - Große parallele Prüf-Workflows mit vielen Agenten haben das Nutzungslimit des Auftraggebers zweimal ausgeschöpft. Nur sparsam einsetzen.

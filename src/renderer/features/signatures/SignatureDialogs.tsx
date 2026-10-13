@@ -292,11 +292,16 @@ export function CreateSignatureDialog() {
           </DialogButton>
           {imagePreview && (
             <div className={styles.imagePreview}>
-              <img src={`data:image/png;base64,${toBase64(imagePreview.png)}`} alt={t('signatures.savedAlt')} />
+              <img src={`data:image/png;base64,${toBase64(imagePreview.png)}`} alt={t('signatures.savedAlt')} data-testid="signature-image-preview" />
             </div>
           )}
           <label className={styles.check}>
-            <input type="checkbox" checked={removeBackground} onChange={(event) => setRemoveBackground(event.target.checked)} />
+            <input
+              type="checkbox"
+              checked={removeBackground}
+              onChange={(event) => setRemoveBackground(event.target.checked)}
+              data-testid="signature-remove-background"
+            />
             {t('signatures.removeBackground')}
           </label>
         </>

@@ -1,12 +1,14 @@
 // Phase 4: Formulare und Unterschrift. Arbeitet auf Kopien der Test-PDFs.
 import { expect, test, type Page } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { crc32, deflateSync } from 'node:zlib';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { fixture } from '../fixtures/expectations';
+import type { ElectronApplication } from '@playwright/test';
 import { launchApp, menuClick, menuItemState, waitForDocument, type AppHandle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 
@@ -99,7 +101,75 @@ test.describe('Formulare', () => {
   });
 });
 
+// Kleines PNG: weißer Hintergrund mit schwarzem Balken (wie eine eingescannte Unterschrift)
+function scannedSignaturePng(): Buffer {
+  const width = 200;
+  const height = 80;
+  const raw = Buffer.alloc((width * 3 + 1) * height, 255);
+  for (let y = 30; y < 50; y++) {
+    raw[y * (width * 3 + 1)] = 0;
+    for (let x = 20; x < 180; x++) raw.fill(0, y * (width * 3 + 1) + 1 + x * 3, y * (width * 3 + 1) + 4 + x * 3);
+  }
+  for (let y = 0; y < height; y++) raw[y * (width * 3 + 1)] = 0;
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 2;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+async function stubOpenDialog(app: ElectronApplication, filePath: string): Promise<void> {
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [file] })) as typeof dialog.showOpenDialog;
+  }, filePath);
+}
+
 test.describe('Unterschrift', () => {
+  test('aus einem Bild: heller Hintergrund wird durchsichtig', async () => {
+    const handle = await openCopy('text.pdf', 12);
+    const { page, app, file, dir } = handle;
+    const image = path.join(dir, 'unterschrift.png');
+    writeFileSync(image, scannedSignaturePng());
+    await stubOpenDialog(app, image);
+    await page.getByTestId('sign-button').click();
+    await page.getByTestId('signature-mode-image').click();
+    await page.getByTestId('signature-image-pick').click();
+    const preview = page.getByTestId('signature-image-preview');
+    await expect(preview).toBeVisible();
+    const naturalWidth = () => preview.evaluate((img: HTMLImageElement) => img.naturalWidth);
+    // Mit Entfernen des Hintergrunds bleibt nur der Balken (plus Rand), ohne das ganze Bild
+    await expect.poll(naturalWidth).toBeLessThan(200);
+    await page.getByTestId('signature-remove-background').uncheck();
+    await expect.poll(naturalWidth).toBe(200);
+    await page.getByTestId('signature-remove-background').check();
+    await expect.poll(naturalWidth).toBeLessThan(200);
+    await page.getByTestId('signature-keep').uncheck();
+    await page.getByTestId('signature-use').click();
+    await menuClick(app, 'view.fitPage');
+    await expect(page.getByTestId('zoom-select')).toHaveValue('page-fit');
+    const box = await stableOverlayBox(page);
+    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.7);
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    expect(await stampCount(file)).toBe(1);
+    await handle.close();
+  });
+
   test('zeichnen, für später speichern, setzen und speichern', async () => {
     const handle = await openCopy('text.pdf', 12);
     const { page, app, file, dir } = handle;
