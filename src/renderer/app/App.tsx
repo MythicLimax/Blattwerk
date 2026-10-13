@@ -3,6 +3,7 @@ import { api } from '../api';
 import { handleCloseRequest, handleOpenResult, executeCommand } from '../engine/session';
 import { CommentToolbar } from '../features/annotations/CommentToolbar';
 import { BusyOverlay } from '../features/pages/BusyOverlay';
+import { ChooseSignatureDialog, CreateSignatureDialog } from '../features/signatures/SignatureDialogs';
 import { CombineDialog, PageDialogs, SourcePasswordDialog } from '../features/pages/PageDialogs';
 import { GoToPageDialog } from '../features/goto/GoToPageDialog';
 import { PasswordDialog } from '../features/password/PasswordDialog';
@@ -38,6 +39,7 @@ export function App() {
   const commentToolsVisible = useUi((s) => s.commentToolsVisible);
   const pageDialog = useUi((s) => s.pageDialog);
   const combine = useUi((s) => s.combine);
+  const signatureDialog = useUi((s) => s.signatureDialog);
 
   useEffect(() => {
     const offOpened = api.onFileOpened((result) => void handleOpenResult(result));
@@ -95,6 +97,8 @@ export function App() {
       {settingsOpen && <SettingsDialog />}
       {pageDialog && <PageDialogs key={`${pageDialog.kind}-${pageDialog.tabId}`} dialog={pageDialog} />}
       {combine && <CombineDialog sources={combine} />}
+      {signatureDialog === 'choose' && <ChooseSignatureDialog />}
+      {signatureDialog === 'create' && <CreateSignatureDialog />}
       <SourcePasswordDialog />
       <BusyOverlay />
       {prompt && <PromptDialog key={`${prompt.kind}-${prompt.tabId}`} prompt={prompt} />}

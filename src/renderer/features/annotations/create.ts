@@ -12,6 +12,7 @@ import type {
   Rect,
   Rgb,
   ShapeAnnotation,
+  SignatureAnnotation,
   StampAnnotation,
   StampId,
 } from '../../../shared/annotations';
@@ -25,6 +26,9 @@ export const FREETEXT_SIZE = { width: 180, height: 40 };
 export const SHAPE_SIZE = { width: 100, height: 60 };
 export const LINE_LENGTH = 100;
 export const STAMP_SIZE = { width: 160, height: 48 };
+// Breite einer neu gesetzten Unterschrift (Höhe nach Seitenverhältnis des Bildes, höchstens 80 pt)
+export const SIGNATURE_WIDTH = 180;
+const SIGNATURE_MAX_HEIGHT = 80;
 
 export function createMarkup(base: Base, kind: MarkupAnnotation['kind'], quads: Quad[], color: Rgb): MarkupAnnotation {
   return { ...base, kind, quads, rect: rectOfQuads(quads), color };
@@ -72,6 +76,19 @@ export function createStamp(base: Base, at: Point, stamp: StampId, label: string
   const { width, height } = STAMP_SIZE;
   const rect: Rect = [at.x - width / 2, at.y - height / 2, at.x + width / 2, at.y + height / 2];
   return { ...base, kind: 'stamp', stamp, label, rect, color };
+}
+
+// Unterschrift: mittig um den Klickpunkt, Seitenverhältnis des Bildes bleibt erhalten
+export function createSignature(base: Base, at: Point, image: string, imageWidth: number, imageHeight: number): SignatureAnnotation {
+  const aspect = imageHeight / imageWidth;
+  let width = SIGNATURE_WIDTH;
+  let height = width * aspect;
+  if (height > SIGNATURE_MAX_HEIGHT) {
+    height = SIGNATURE_MAX_HEIGHT;
+    width = height / aspect;
+  }
+  const rect: Rect = [at.x - width / 2, at.y - height / 2, at.x + width / 2, at.y + height / 2];
+  return { ...base, kind: 'signature', image, imageWidth, imageHeight, rect, color: { r: 0, g: 0, b: 0 } };
 }
 
 // Hängt einen weiteren Strich an eine Freihandzeichnung an.

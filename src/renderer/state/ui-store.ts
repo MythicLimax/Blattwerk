@@ -65,6 +65,8 @@ interface UiState {
   busy: string | null;
   // Dateien werden gerade über das Seitenraster gezogen (dort einfügen statt als Tab öffnen)
   fileDropInsert: boolean;
+  // Dialog für Unterschriften: Auswahl gespeicherter oder neue anlegen
+  signatureDialog: 'choose' | 'create' | null;
   setSidebarVisible: (visible: boolean) => void;
   setRightPanelVisible: (visible: boolean) => void;
   openProperties: (tabId: string | null) => void;
@@ -85,6 +87,7 @@ interface UiState {
   setPasswordRequest: (request: PasswordRequest | null) => void;
   setBusy: (busy: string | null) => void;
   setFileDropInsert: (value: boolean) => void;
+  setSignatureDialog: (dialog: 'choose' | 'create' | null) => void;
 }
 
 export type PromptAnswer = 'save' | 'discard' | 'cancel' | 'overwrite' | 'saveAs';
@@ -118,6 +121,7 @@ export const useUi = create<UiState>((set) => ({
   passwordRequest: null,
   busy: null,
   fileDropInsert: false,
+  signatureDialog: null,
   setSidebarVisible: (sidebarVisible) => set({ sidebarVisible }),
   setRightPanelVisible: (rightPanelVisible) => set({ rightPanelVisible }),
   openProperties: (propertiesTabId) => set({ propertiesTabId }),
@@ -140,4 +144,5 @@ export const useUi = create<UiState>((set) => ({
   setPasswordRequest: (passwordRequest) => set({ passwordRequest }),
   setBusy: (busy) => set({ busy }),
   setFileDropInsert: (fileDropInsert) => set({ fileDropInsert }),
+  setSignatureDialog: (signatureDialog) => set({ signatureDialog }),
 }));

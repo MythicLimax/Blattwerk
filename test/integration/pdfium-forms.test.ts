@@ -8,7 +8,8 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { computeFormChanges, type FormFieldValue, type WidgetInfo } from '../../src/shared/forms';
 import { PdfiumEngine } from '../../src/workers/pdfium/engine';
-import { fixture } from '../fixtures/expectations';
+import type { Annotation } from '../../src/shared/annotations';
+import { fixture, imageFixture } from '../fixtures/expectations';
 
 const require = createRequire(import.meta.url);
 pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
@@ -76,6 +77,40 @@ describe('PDFium-Engine: Formulare ausfüllen', () => {
     expect(() => engine.process(form(), null, none, [], { incremental: true }, [{ ref: '999R', pageIndex: 0, kind: 'text', text: 'x' }])).toThrow(
       /nicht gefunden/,
     );
+  });
+});
+
+describe('PDFium-Engine: Unterschriften', () => {
+  it('speichert eine Unterschrift als Stempel mit Bild', async () => {
+    const png = readFileSync(imageFixture('transparent.png')).toString('base64');
+    const signature: Annotation = {
+      id: 'sig-1',
+      ref: null,
+      pageIndex: 0,
+      kind: 'signature',
+      rect: [300, 100, 480, 190],
+      color: { r: 0, g: 0, b: 0 },
+      opacity: 1,
+      contents: '',
+      author: 'Test',
+      created: '',
+      modified: '',
+      replies: [],
+      statuses: [],
+      image: png,
+      imageWidth: 200,
+      imageHeight: 100,
+    };
+    const saved = engine.applyAndSave(form(), null, { upserts: [{ annotation: signature, appearance: true }], deletions: [] }, { incremental: true });
+    const task = pdfjs.getDocument({ data: saved.slice(), verbosity: 0 });
+    const pdf = await task.promise;
+    const page = await pdf.getPage(1);
+    const stamp = (await page.getAnnotations()).find((a) => a.subtype === 'Stamp');
+    expect(stamp?.hasAppearance).toBe(true);
+    expect(stamp?.rect.map(Math.round)).toEqual([300, 100, 480, 190]);
+    const operators = await page.getOperatorList();
+    expect(operators.fnArray).toContain(pdfjs.OPS.paintImageXObject);
+    await task.destroy();
   });
 });
 

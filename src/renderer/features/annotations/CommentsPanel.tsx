@@ -6,6 +6,7 @@ import {
   MoveUpRight,
   PenLine,
   Square,
+  Signature,
   Stamp,
   StickyNote,
   Strikethrough,
@@ -40,6 +41,7 @@ const KIND_ICONS: Record<AnnotationKind, LucideIcon> = {
   line: Minus,
   arrow: MoveUpRight,
   stamp: Stamp,
+  signature: Signature,
 };
 
 const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short' });
@@ -185,7 +187,7 @@ const CommentCard = memo(function CommentCard({
   };
 
   // Freitext zeigt seinen Inhalt auf der Seite und wird dort bearbeitet; Stempel tragen keinen eigenen Text.
-  const text = a.kind === 'freetext' || a.kind === 'stamp' ? '' : a.contents;
+  const text = a.kind === 'freetext' || a.kind === 'stamp' || a.kind === 'signature' ? '' : a.contents;
 
   return (
     <article
@@ -211,6 +213,7 @@ const CommentCard = memo(function CommentCard({
       {a.kind === 'freetext' && <p className={styles.preview}>{a.contents}</p>}
       {/* Die Beschriftung vorhandener Stempel liefert pdf.js nicht; dann steht dort nur „Stempel“. */}
       {a.kind === 'stamp' && <p className={styles.preview}>{a.label || t('tools.stamp')}</p>}
+      {a.kind === 'signature' && <p className={styles.preview}>{t('tools.signature')}</p>}
 
       {a.kind !== 'freetext' &&
         (selected && !readOnly ? (

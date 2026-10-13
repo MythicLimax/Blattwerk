@@ -13,7 +13,8 @@ export type AnnotationKind =
   | 'circle'
   | 'line'
   | 'arrow'
-  | 'stamp';
+  | 'stamp'
+  | 'signature';
 
 export const MARKUP_KINDS: readonly AnnotationKind[] = ['highlight', 'underline', 'strikeout', 'squiggly'];
 
@@ -120,6 +121,15 @@ export interface StampAnnotation extends AnnotationBase {
   label: string;
 }
 
+// Unterschrift (gezeichnet, getippt oder als Bild) als Stempel mit Bild. Das Bild ist ein PNG (Base64),
+// gespeichert wird es als Stamp-Anmerkung mit dem Bild als Darstellung.
+export interface SignatureAnnotation extends AnnotationBase {
+  kind: 'signature';
+  image: string;
+  imageWidth: number;
+  imageHeight: number;
+}
+
 export type Annotation =
   | MarkupAnnotation
   | NoteAnnotation
@@ -127,7 +137,8 @@ export type Annotation =
   | InkAnnotation
   | ShapeAnnotation
   | LineAnnotation
-  | StampAnnotation;
+  | StampAnnotation
+  | SignatureAnnotation;
 
 // Änderungen, die beim Speichern auf die Datei angewendet werden.
 export interface AnnotationUpsert {

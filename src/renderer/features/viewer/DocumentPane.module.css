@@ -80,3 +80,17 @@
   background: rgb(0 0 0 / 0.12);
   color: var(--color-text);
 }
+
+/* Hinweis beim Platzieren einer Unterschrift */
+.hint {
+  position: absolute;
+  top: var(--space-3);
+  left: 50%;
+  z-index: 9;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-popover);
+  transform: translateX(-50%);
+  pointer-events: none;
+}

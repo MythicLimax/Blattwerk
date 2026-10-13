@@ -8,7 +8,7 @@ export function isMovable(a: Annotation): boolean {
 }
 
 export function isResizable(a: Annotation): boolean {
-  return ['square', 'circle', 'freetext', 'stamp'].includes(a.kind);
+  return ['square', 'circle', 'freetext', 'stamp', 'signature'].includes(a.kind);
 }
 
 const movePoint = (p: Point, dx: number, dy: number): Point => ({ x: p.x + dx, y: p.y + dy });
@@ -34,6 +34,17 @@ export function translate(a: Annotation, dx: number, dy: number): Annotation {
 
 export function withRect(a: Annotation, rect: Rect): Annotation {
   return { ...a, rect: normalizeRect(rect) };
+}
+
+// Größe ändern an einer Ecke (fixed bleibt stehen). Unterschriften behalten ihr Seitenverhältnis.
+export function resizeFrom(a: Annotation, fixed: Point, to: Point): Annotation {
+  if (a.kind !== 'signature') return withRect(a, [fixed.x, fixed.y, to.x, to.y]);
+  const aspect = a.imageHeight / a.imageWidth;
+  const width = Math.max(8, Math.abs(to.x - fixed.x));
+  const height = width * aspect;
+  const x2 = to.x >= fixed.x ? fixed.x + width : fixed.x - width;
+  const y2 = to.y >= fixed.y ? fixed.y + height : fixed.y - height;
+  return withRect(a, [fixed.x, fixed.y, x2, y2]);
 }
 
 // Rahmen für eine Linie: Endpunkte plus Platz für Linienstärke und Pfeilspitze.

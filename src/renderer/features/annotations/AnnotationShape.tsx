@@ -128,6 +128,20 @@ export function AnnotationShape({ annotation: a, geometry }: { annotation: Annot
           {a.kind === 'arrow' && <polyline points={arrowHead(geometry, a.start, a.end, a.width)} strokeLinejoin="round" />}
         </g>
       );
+    case 'signature': {
+      const r = geometry.rectToView(a.rect);
+      return (
+        <image
+          href={`data:image/png;base64,${a.image}`}
+          x={r.x}
+          y={r.y}
+          width={r.w}
+          height={r.h}
+          preserveAspectRatio="none"
+          opacity={a.opacity}
+        />
+      );
+    }
     case 'stamp': {
       const r = geometry.rectToView(a.rect);
       // Stempel aus anderen Programmen: Aussehen unbekannt, bis zum Speichern nur der Umriss an der neuen Stelle

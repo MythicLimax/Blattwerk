@@ -77,7 +77,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const currentColor = selected ? selected.color : target ? colors[target] : null;
   const currentWidth = selected && 'width' in selected ? selected.width : width;
   const currentFontSize = selected?.kind === 'freetext' ? selected.fontSize : fontSize;
-  const showColor = target !== null && target !== 'stamp' && !readOnly;
+  const showColor = target !== null && target !== 'stamp' && target !== 'signature' && !readOnly;
   const showWidth = target !== null && WIDTH_KINDS.has(target) && !readOnly;
   const showFontSize = target === 'freetext' && !readOnly;
 

@@ -430,6 +430,17 @@ export function redoTab(tabId: string): void {
   });
 }
 
+// Unterschreiben: gespeicherte Unterschrift wählen oder, wenn es noch keine gibt, gleich eine anlegen.
+export function startSigning(): void {
+  const tab = getActiveTab();
+  if (!tab || tab.status !== 'ready' || tab.mode !== 'view') return;
+  if (!tab.canAnnotate) {
+    useUi.getState().notify(t('signatures.notAllowed'));
+    return;
+  }
+  void api.signatures.list().then((list) => useUi.getState().setSignatureDialog(list.length > 0 ? 'choose' : 'create'));
+}
+
 // Offene Texteingaben (Kommentartext, Textfeld auf der Seite) übernehmen, bevor das Dokument weiterverarbeitet,
 // gespeichert, gedruckt oder geschlossen wird. Die Felder übernehmen ihren Text beim Verlassen.
 export function commitPendingEdits(): void {
@@ -545,6 +556,10 @@ export function executeCommand(command: CommandId): void {
   if (command === 'window.nextTab') return switchTab(1);
   if (command === 'window.previousTab') return switchTab(-1);
   if (runPageCommand(command, getActiveTab())) return;
+  if (command === 'tools.sign') {
+    startSigning();
+    return;
+  }
 
   const tab = getActiveTab();
   if (!tab) return;

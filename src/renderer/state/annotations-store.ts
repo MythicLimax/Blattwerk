@@ -14,10 +14,18 @@ export type Tool =
   | 'circle'
   | 'line'
   | 'arrow'
-  | 'stamp';
+  | 'stamp'
+  | 'signature';
+
+// Unterschrift, die beim nächsten Klick auf die Seite gesetzt wird (PNG als Base64)
+export interface PendingSignature {
+  image: string;
+  width: number;
+  height: number;
+}
 
 export const MARKUP_TOOLS: readonly Tool[] = ['highlight', 'underline', 'strikeout', 'squiggly'];
-export const DRAWING_TOOLS: readonly Tool[] = ['note', 'freetext', 'ink', 'square', 'circle', 'line', 'arrow', 'stamp'];
+export const DRAWING_TOOLS: readonly Tool[] = ['note', 'freetext', 'ink', 'square', 'circle', 'line', 'arrow', 'stamp', 'signature'];
 
 // Änderungen am Kommentarbestand. Jede ist umkehrbar (Rückgängig/Wiederholen).
 export type Command =
@@ -64,6 +72,7 @@ export const DEFAULT_COLORS: Record<Tool, Rgb> = {
   line: { r: 0.85, g: 0.11, b: 0.11 },
   arrow: { r: 0.85, g: 0.11, b: 0.11 },
   stamp: { r: 0.13, g: 0.55, b: 0.13 },
+  signature: { r: 0, g: 0, b: 0 },
 };
 
 interface AnnotationsState {
@@ -73,6 +82,7 @@ interface AnnotationsState {
   width: number;
   fontSize: number;
   stamp: StampId;
+  pendingSignature: PendingSignature | null;
   init: (tabId: string) => void;
   // Gesicherten Zustand eines Dokumentstands wiederherstellen (Rückgängig/Wiederholen von Seitenoperationen)
   restore: (tabId: string, tab: TabAnnotations) => void;
@@ -91,6 +101,8 @@ interface AnnotationsState {
   setWidth: (width: number) => void;
   setFontSize: (size: number) => void;
   setStamp: (stamp: StampId) => void;
+  // Unterschrift zum Setzen wählen (schaltet das Werkzeug ein) oder verwerfen
+  setPendingSignature: (signature: PendingSignature | null) => void;
 }
 
 function run(items: Annotation[], command: Command): Annotation[] {
@@ -135,6 +147,7 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     width: 2,
     fontSize: 12,
     stamp: 'approved',
+    pendingSignature: null,
     init: (tabId) => set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...EMPTY } } })),
     restore: (tabId, tab) =>
       set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...tab, loaded: true, editingId: null } } })),
@@ -194,6 +207,8 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     setWidth: (width) => set({ width }),
     setFontSize: (fontSize) => set({ fontSize }),
     setStamp: (stamp) => set({ stamp }),
+    setPendingSignature: (pendingSignature) =>
+      set((state) => ({ pendingSignature, tool: pendingSignature ? 'signature' : state.tool === 'signature' ? 'select' : state.tool })),
   };
 });
 

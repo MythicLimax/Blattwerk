@@ -1,5 +1,16 @@
 // Prüfungen für Daten, die über IPC aus dem Renderer kommen. Der Renderer gilt als nicht vertrauenswürdig.
-import { MAX_FILE_NAME, MAX_NEW_FILES, MAX_READ_CHUNK, type MenuState, type NamedBytes, type PickKind, type ViewMode } from './ipc';
+import {
+  MAX_FILE_NAME,
+  MAX_NEW_FILES,
+  MAX_READ_CHUNK,
+  MAX_SIGNATURE_BYTES,
+  MAX_SIGNATURE_SIDE,
+  type MenuState,
+  type NamedBytes,
+  type PickKind,
+  type SignatureInput,
+  type ViewMode,
+} from './ipc';
 
 const VIEW_MODES: readonly ViewMode[] = ['single', 'continuous', 'two-page', 'two-page-continuous'];
 
@@ -87,6 +98,24 @@ export function validateNamedPdfs(value: unknown): NamedBytes[] | null {
     result.push({ name, bytes });
   }
   return result;
+}
+
+// Neue Unterschrift: PNG (Signatur geprüft), höchstens 2 MB, Maße 1 bis 4000 Pixel
+export function isSignatureInput(value: unknown): value is SignatureInput {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  const png = v.png;
+  const side = (n: unknown) => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= MAX_SIGNATURE_SIDE;
+  const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  return (
+    (v.kind === 'drawn' || v.kind === 'typed' || v.kind === 'image') &&
+    png instanceof Uint8Array &&
+    png.length > 8 &&
+    png.length <= MAX_SIGNATURE_BYTES &&
+    pngSignature.every((b, i) => png[i] === b) &&
+    side(v.width) &&
+    side(v.height)
+  );
 }
 
 export function validateAuthorName(value: unknown): string | null {

@@ -9,6 +9,7 @@ import type {
   Rect,
   Reply,
   Rgb,
+  SignatureAnnotation,
   StampAnnotation,
   StatusEntry,
 } from '../../shared/annotations';
@@ -32,6 +33,8 @@ const SUBTYPE = {
   strikeout: 12,
   stamp: 13,
   ink: 15,
+  // Unterschriften sind Stempel mit Bild
+  signature: 13,
 } as const;
 
 const COLOR_TYPE = { color: 0, interior: 1 } as const;
@@ -231,7 +234,7 @@ export class PdfiumEngine {
       this.#setCommon(annot, a, isNew, now);
       if (isNew || upsert.appearance) {
         this.#setKindSpecific(doc, annot, a, isNew);
-        if (a.kind !== 'stamp') m.EPDFAnnot_GenerateAppearance(annot);
+        if (a.kind !== 'stamp' && a.kind !== 'signature') m.EPDFAnnot_GenerateAppearance(annot);
       }
       for (const reply of a.replies) this.#upsertReply(pagePtr, annot, a, reply, now);
       for (const status of a.statuses) if (status.ref === null) this.#addStatus(pagePtr, annot, a, status, now);
@@ -273,7 +276,7 @@ export class PdfiumEngine {
       this.#setString(annot, 'CreationDate', a.created || toPdfDate(now));
       this.#setString(annot, 'NM', a.id);
     }
-    if (a.kind !== 'stamp' && a.kind !== 'freetext') this.#setColor(annot, COLOR_TYPE.color, a.color);
+    if (a.kind !== 'stamp' && a.kind !== 'signature' && a.kind !== 'freetext') this.#setColor(annot, COLOR_TYPE.color, a.color);
     m.EPDFAnnot_SetOpacity(annot, byte(a.opacity));
     // Vorhandene Anmerkungen behalten ihre Merkmale (z. B. gesperrt, nicht drucken).
     if (isNew) m.FPDFAnnot_SetFlags(annot, a.kind === 'note' ? FLAG.print | FLAG.noZoom | FLAG.noRotate : FLAG.print);
@@ -315,6 +318,9 @@ export class PdfiumEngine {
       case 'stamp':
         if (isNew) this.#buildStampAppearance(doc, annot, a);
         break;
+      case 'signature':
+        if (isNew) this.#buildImageAppearance(doc, annot, a);
+        break;
     }
   }
 
@@ -332,6 +338,25 @@ export class PdfiumEngine {
   }
 
   // Stempel: Rahmen und Beschriftung als Seitenobjekte; PDFium erzeugt daraus den Appearance Stream.
+  // Darstellung aus einem PNG, das den ganzen Rahmen ausfüllt (Unterschriften)
+  #buildImageAppearance(doc: number, annot: number, a: SignatureAnnotation): void {
+    const m = this.#m;
+    const [left, bottom, right, top] = a.rect;
+    const binary = atob(a.image);
+    const data = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    const image = m.FPDFPageObj_NewImageObj(doc);
+    const loaded = withBuffer(m, data.length, (ptr) => {
+      m.pdfium.HEAPU8.set(data, ptr);
+      return m.EPDFImageObj_SetPng(0, 0, image, ptr, data.length);
+    });
+    if (!loaded) {
+      m.FPDFPageObj_Destroy(image);
+      throw new PdfiumError('Bild der Unterschrift lässt sich nicht einbetten');
+    }
+    m.FPDFImageObj_SetMatrix(image, right - left, 0, 0, top - bottom, left, bottom);
+    m.FPDFAnnot_AppendObject(annot, image);
+  }
+
   #buildStampAppearance(doc: number, annot: number, a: StampAnnotation): void {
     const m = this.#m;
     const [left, bottom, right, top] = a.rect;

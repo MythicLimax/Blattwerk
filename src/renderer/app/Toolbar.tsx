@@ -11,6 +11,7 @@ import {
   RotateCw,
   Save,
   Search,
+  Signature,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -239,6 +240,13 @@ export function Toolbar() {
 
       {ready && (
         <div className={styles.group}>
+          <IconButton
+            icon={Signature}
+            label={t('toolbar.sign')}
+            disabled={!viewing || !tab.canAnnotate}
+            onClick={() => executeCommand('tools.sign')}
+            data-testid="sign-button"
+          />
           <IconButton
             icon={LayoutGrid}
             label={t('toolbar.organize')}

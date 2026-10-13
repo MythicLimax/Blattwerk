@@ -20,6 +20,7 @@ import {
   isFileId,
   isPdfBytes,
   isPickKind,
+  isSignatureInput,
   isSafeLocalPath,
   sanitizeFileName,
   validateAuthorName,
@@ -29,6 +30,7 @@ import {
 import { atomicWrite } from './files/atomic-write';
 import type { FileRegistry } from './files/file-registry';
 import type { RecentFiles } from './files/recent-files';
+import type { SignatureStore } from './files/signatures';
 import { t } from './i18n';
 import { printWindow } from './print';
 import { confirmAndOpenExternal } from './security';
@@ -49,6 +51,7 @@ export interface IpcContext {
   setAuthorName: (name: string) => Promise<AppSettings>;
   onCloseConfirmed: (win: BrowserWindow) => void;
   onCloseCancelled: (win: BrowserWindow) => void;
+  signatures: SignatureStore;
 }
 
 export async function showOpenDialog(win: BrowserWindow | null): Promise<string[]> {
@@ -292,6 +295,16 @@ export function registerIpc(ctx: IpcContext): void {
       return { ok: false, error: 'write-failed', detail: `${names.length}/${valid.length}: ${String(error)}` };
     }
     return { ok: true, folder: path.basename(folder), names };
+  });
+
+  handle(IPC.signaturesList, () => ctx.signatures.list());
+  handle(IPC.signaturesAdd, async (_event, input: unknown) => {
+    if (!isSignatureInput(input)) throw new Error('invalid-signature');
+    return ctx.signatures.add(input);
+  });
+  handle(IPC.signaturesRemove, async (_event, id: unknown) => {
+    if (typeof id !== 'string' || id.length > 64) return ctx.signatures.list();
+    return ctx.signatures.remove(id);
   });
 
   handle(IPC.settingsGet, () => ctx.getSettings());

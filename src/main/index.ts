@@ -8,6 +8,7 @@ import { IPC, type AppSettings, type MenuState, type OpenResult, type RecentFile
 import { APP_ID, APP_ORIGIN, PRODUCT_NAME } from '../shared/product';
 import { FileRegistry } from './files/file-registry';
 import { RecentFiles } from './files/recent-files';
+import { SignatureStore } from './files/signatures';
 import { setAsDefaultPdfApp } from './default-app';
 import { t } from './i18n';
 import { registerIpc, showOpenDialog } from './ipc';
@@ -44,6 +45,7 @@ const preloadPath = path.join(moduleDir, '..', 'preload', 'index.cjs');
 
 const files = new FileRegistry();
 let recent: RecentFiles;
+let signatures: SignatureStore;
 let mainWindow: BrowserWindow | null = null;
 let rendererReady = false;
 // Erst nach dem Start (Einstellungen gelesen, IPC registriert) dürfen Fenster entstehen.
@@ -297,6 +299,7 @@ void app.whenReady().then(async () => {
   hardenSession(devServerOrigin);
   handleAppScheme(rendererDir);
   recent = new RecentFiles(path.join(app.getPath('userData'), 'recent-files.json'));
+  signatures = new SignatureStore(path.join(app.getPath('userData'), 'signatures.json'));
   settings = await settingsStore.read();
   windowState = settings.window;
   if (process.platform === 'darwin') {
@@ -306,6 +309,7 @@ void app.whenReady().then(async () => {
   registerIpc({
     files,
     recent,
+    signatures,
     appVersion: app.getVersion(),
     isTrustedSender,
     onMenuState: (win, state) => {

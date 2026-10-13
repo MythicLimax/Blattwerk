@@ -24,6 +24,10 @@ export const IPC = {
   registerDropped: 'files:register-dropped',
   saveNewFile: 'files:save-new',
   saveToFolder: 'files:save-to-folder',
+  // Phase 4: gespeicherte Unterschriften
+  signaturesList: 'signatures:list',
+  signaturesAdd: 'signatures:add',
+  signaturesRemove: 'signatures:remove',
   // Renderer → Hauptprozess (send)
   menuState: 'app:menu-state',
   rendererReady: 'app:renderer-ready',
@@ -72,6 +76,30 @@ export interface NamedBytes {
 export type SaveToFolderResult =
   | { ok: true; folder: string; names: string[] }
   | { ok: false; error: SaveNewErrorCode; detail?: string };
+
+export type SignatureKind = 'drawn' | 'typed' | 'image';
+
+// Neue Unterschrift aus dem Renderer: PNG-Bytes mit Maßen
+export interface SignatureInput {
+  kind: SignatureKind;
+  png: Uint8Array;
+  width: number;
+  height: number;
+}
+
+// Gespeicherte Unterschrift (PNG als Base64)
+export interface SavedSignature {
+  id: string;
+  kind: SignatureKind;
+  png: string;
+  width: number;
+  height: number;
+  created: number;
+}
+
+export const MAX_SIGNATURES = 20;
+export const MAX_SIGNATURE_BYTES = 2 * 1024 * 1024;
+export const MAX_SIGNATURE_SIDE = 4000;
 
 // Obergrenzen für neue Dokumente über IPC
 export const MAX_NEW_FILES = 1000;

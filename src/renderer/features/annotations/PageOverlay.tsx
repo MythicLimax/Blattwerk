@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as R
 import { useTranslation } from 'react-i18next';
 import type { Annotation, FreeTextAnnotation, InkAnnotation, Point, Rect } from '../../../shared/annotations';
 import { boundsOf, normalizeRect } from '../../../shared/annotations';
-import { useAnnotations, type Tool } from '../../state/annotations-store';
+import { DRAWING_TOOLS as STORE_DRAWING_TOOLS, useAnnotations, type Tool } from '../../state/annotations-store';
 import { useUi } from '../../state/ui-store';
 import { useDocuments } from '../../state/documents-store';
 import type { PageGeometry } from '../../engine/coords';
@@ -22,12 +22,13 @@ import {
   createLine,
   createNote,
   createShape,
+  createSignature,
   createStamp,
   FREETEXT_SIZE,
   SHAPE_SIZE,
   simplifyPath,
 } from './create';
-import { dragRect, isMovable, isResizable, lineRect, translate, withRect } from './geometry';
+import { dragRect, isMovable, isResizable, lineRect, resizeFrom, translate } from './geometry';
 import styles from './PageOverlay.module.css';
 
 // Laufende Mausaktion auf der Seite
@@ -46,7 +47,7 @@ const lastInk = new Map<string, { id: string; pageIndex: number; time: number }>
 // Bildschirmpixel → Einheiten des SVG (PDF-Punkte); pdf.js rechnet 1 Punkt = 96/72 Pixel bei 100 %.
 const pxToUnits = (px: number, scale: number) => px / (scale * (96 / 72));
 
-const DRAWING_TOOLS = new Set<Tool>(['note', 'freetext', 'ink', 'square', 'circle', 'line', 'arrow', 'stamp']);
+const DRAWING_TOOLS = new Set<Tool>(STORE_DRAWING_TOOLS);
 
 function corners([l, b, r, t]: Rect): Point[] {
   return [
@@ -64,7 +65,7 @@ function preview(a: Annotation, gesture: Gesture | null): Annotation {
     case 'move':
       return translate(a, gesture.dx, gesture.dy);
     case 'resize':
-      return withRect(a, normalizeRect([gesture.fixed.x, gesture.fixed.y, gesture.to.x, gesture.to.y]));
+      return resizeFrom(a, gesture.fixed, gesture.to);
     case 'endpoint': {
       if (a.kind !== 'line' && a.kind !== 'arrow') return a;
       const start = gesture.which === 'start' ? gesture.to : a.start;
@@ -148,6 +149,12 @@ export function PageOverlay({
         addAnnotation(tabId, createStamp(base, at, stamp, t(`stamps.${stamp}`), colors.stamp));
         store().setTool('select');
         return;
+      case 'signature': {
+        const signature = store().pendingSignature;
+        if (signature) addAnnotation(tabId, createSignature(base, at, signature.image, signature.width, signature.height));
+        store().setPendingSignature(null);
+        return;
+      }
       case 'ink':
         capture(event);
         setGesture({ kind: 'ink', points: [at] });
@@ -298,7 +305,7 @@ export function PageOverlay({
       className={[
         styles.svg,
         drawing ? styles.drawing : '',
-        drawing && (tool === 'note' || tool === 'stamp') ? styles.place : '',
+        drawing && (tool === 'note' || tool === 'stamp' || tool === 'signature') ? styles.place : '',
         gesture ? styles.capturing : '',
       ].join(' ')}
       viewBox={`0 0 ${geometry.width} ${geometry.height}`}

@@ -89,7 +89,8 @@
       "insertFromFile": "Aus Datei …",
       "insertBlank": "Leere Seite …",
       "extract": "Seiten extrahieren …",
-      "split": "Dokument teilen …"
+      "split": "Dokument teilen …",
+      "sign": "Unterschreiben …"
     }
   },
   "dialog": {
@@ -196,7 +197,8 @@
     },
     "save": "Speichern",
     "comment": "Kommentieren",
-    "organize": "Seiten organisieren"
+    "organize": "Seiten organisieren",
+    "sign": "Unterschreiben"
   },
   "viewMode": {
     "single": "Einzelne Seite",
@@ -327,7 +329,8 @@
     "circle": "Ellipse",
     "line": "Linie",
     "arrow": "Pfeil",
-    "stamp": "Stempel"
+    "stamp": "Stempel",
+    "signature": "Unterschrift"
   },
   "colors": {
     "yellow": "Gelb",
@@ -501,5 +504,35 @@
     "insertBlank": "Leere Seite einfügen …",
     "extract": "Seiten extrahieren …",
     "split": "Dokument teilen …"
+  },
+  "signatures": {
+    "chooseTitle": "Unterschreiben",
+    "createTitle": "Neue Unterschrift",
+    "new": "Neue Unterschrift …",
+    "none": "Noch keine Unterschrift gespeichert.",
+    "use": "Unterschrift verwenden",
+    "remove": "Gespeicherte Unterschrift löschen",
+    "savedAlt": "Unterschrift",
+    "cancel": "Abbrechen",
+    "mode": {
+      "draw": "Zeichnen",
+      "type": "Tippen",
+      "image": "Bild"
+    },
+    "color": "Farbe",
+    "colors": {
+      "black": "Schwarz",
+      "blue": "Blau"
+    },
+    "clear": "Zeichnung löschen",
+    "padLabel": "Hier unterschreiben",
+    "padHint": "Mit Maus, Trackpad oder Stift hier unterschreiben",
+    "name": "Name",
+    "font": "Schrift",
+    "pickImage": "Bild auswählen …",
+    "removeBackground": "Weißen Hintergrund entfernen",
+    "keep": "Für später speichern",
+    "placeHint": "Klicke auf die Stelle, an der die Unterschrift stehen soll. Esc bricht ab.",
+    "notAllowed": "Dieses Dokument erlaubt keine Kommentare und damit auch keine Unterschrift."
   }
 }

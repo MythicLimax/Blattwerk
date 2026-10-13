@@ -14,6 +14,8 @@ import type {
   SaveNewResult,
   SaveResult,
   SaveToFolderResult,
+  SavedSignature,
+  SignatureInput,
 } from '../shared/ipc';
 
 export interface BlattwerkApi {
@@ -39,6 +41,11 @@ export interface BlattwerkApi {
   // Neues Dokument über den Sichern-Dialog speichern, auf Wunsch danach im Tab öffnen
   saveNewFile(bytes: Uint8Array, suggestedName: string, referenceFileId: string | null, openAfter: boolean): Promise<SaveNewResult>;
   saveFilesToFolder(files: NamedBytes[], referenceFileId: string | null): Promise<SaveToFolderResult>;
+  signatures: {
+    list(): Promise<SavedSignature[]>;
+    add(input: SignatureInput): Promise<SavedSignature[]>;
+    remove(id: string): Promise<SavedSignature[]>;
+  };
   getSettings(): Promise<AppSettings>;
   setAuthorName(name: string): Promise<AppSettings>;
   confirmClose(): void;
