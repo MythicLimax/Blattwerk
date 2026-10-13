@@ -66,3 +66,24 @@ Eine Unterschrift ist ein Stempel (`/Stamp`) mit eingebettetem PNG. Das ist dies
 
 - Gezeichnete, getippte und als Bild übernommene Unterschriften werden zu einem eng zugeschnittenen PNG mit durchsichtigem Hintergrund.
 - Gespeicherte Unterschriften liegen im Profil des Nutzers (`signatures.json`, höchstens 20, je höchstens 2 MB). Der Hauptprozess prüft sie, bevor er sie annimmt.
+
+## Seiten aus anderen PDFs: Verweise reparieren
+
+PDFium kopiert beim Zusammenführen, Einfügen und Extrahieren Seiten samt Anmerkungen. Den Schlüssel `/Parent` passt es dabei absichtlich nicht an (`fpdf_ppo.cpp`). Er zeigt danach auf ein beliebiges Objekt des Zieldokuments. Das hat zwei Folgen:
+
+- **Formularfelder:** Sie wären nicht mehr ausfüllbar. Das Feld selbst fehlt, und das Widget zeigt teils auf sich selbst.
+- **Notiz-Popups:** Sie verlieren die Verbindung zu ihrem Kommentar.
+
+`src/workers/pdfium/imported.ts` repariert das mit pdf-lib nach jedem Zusammensetzen und jeder Einfügung aus einer Datei.
+
+1. Anmerkungen der Ziel- und der Quellseite werden über ihre Position einander zugeordnet. PDFium übernimmt `/Annots` in derselben Reihenfolge. Stimmt die Anzahl nicht, bleibt die Seite unverändert.
+2. Bei Popups zeigt `/Parent` wieder auf den Kommentar derselben Seite.
+3. Bei Widgets wird die Feldkette aus der Quelle kopiert und `/Parent` neu gesetzt. Die Kinder stehen in der Reihenfolge der Quelle.
+4. Fehlen Knöpfe einer Optionsgruppe, weil nur ein Teil der Seiten übernommen wurde, werden `/Opt` und die Zustandsnamen angepasst.
+5. Die übernommenen Felder kommen ins Formularverzeichnis. Gibt es einen Namen schon, bekommt die Kopie einen freien Namen, zum Beispiel „name 2“. So bleiben die Werte getrennt.
+
+**Warum Umbenennen:** Acrobat legt gleichnamige Felder zusammen, dann teilen sie ihren Wert. Wer zwei ausgefüllte Exemplare desselben Formulars zusammenführt, verlöre damit die Werte des zweiten.
+
+**Wann nichts passiert:**
+- Quelldateien ohne Formular und ohne Popups bleiben unberührt. Die Prüfung kostet bei 600 Seiten mit 119 MB etwa 0,1 s.
+- In verschlüsselte Zieldokumente kann pdf-lib nicht schreiben. Dort bleiben die Verweise, wie PDFium sie hinterlässt (bekannte Einschränkung).

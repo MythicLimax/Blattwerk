@@ -44,7 +44,28 @@ const FLAG = { readOnly: 1, required: 2, multiline: 1 << 12 } as const;
 // Aussehen neuer Felder: dünner grauer Rahmen, durchsichtiger Hintergrund, schwarze Schrift
 const BORDER = rgb(0.45, 0.45, 0.45);
 const TEXT = rgb(0, 0, 0);
-const DA_FONT = 'Helv';
+export const DA_FONT = 'Helv';
+
+// Schriftverweis /Helv im Formular-Ressourcenverzeichnis (/DR), damit /DA überall auflösbar ist
+export function ensureHelvetica(doc: PDFDocument, acroForm: PDFDict): void {
+  const context = doc.context;
+  let resources = acroForm.lookup(PDFName.of('DR'));
+  if (!(resources instanceof PDFDict)) {
+    resources = context.obj({});
+    acroForm.set(PDFName.of('DR'), resources as PDFDict);
+  }
+  const dr = resources as PDFDict;
+  let fonts = dr.lookup(PDFName.of('Font'));
+  if (!(fonts instanceof PDFDict)) {
+    fonts = context.obj({});
+    dr.set(PDFName.of('Font'), fonts as PDFDict);
+  }
+  const fontDict = fonts as PDFDict;
+  if (!fontDict.has(PDFName.of(DA_FONT))) {
+    const helvetica = context.register(context.obj({ Type: 'Font', Subtype: 'Type1', BaseFont: 'Helvetica', Encoding: 'WinAnsiEncoding' }));
+    fontDict.set(PDFName.of(DA_FONT), helvetica);
+  }
+}
 
 function parseRef(id: string): PDFRef {
   const match = /^(\d+)R(\d*)$/.exec(id);
@@ -108,32 +129,8 @@ class FieldEditor {
     return this.#font;
   }
 
-  // Schriftverweis /Helv im Formular-Ressourcenverzeichnis, damit /DA überall auflösbar ist
-  #ensureDefaultResources(): void {
-    const acroForm = this.#form.acroForm.dict;
-    const context = this.#doc.context;
-    let resources = acroForm.lookup(PDFName.of('DR'));
-    if (!(resources instanceof PDFDict)) {
-      resources = context.obj({});
-      acroForm.set(PDFName.of('DR'), resources as PDFDict);
-    }
-    const dr = resources as PDFDict;
-    let fonts = dr.lookup(PDFName.of('Font'));
-    if (!(fonts instanceof PDFDict)) {
-      fonts = context.obj({});
-      dr.set(PDFName.of('Font'), fonts as PDFDict);
-    }
-    const fontDict = fonts as PDFDict;
-    if (!fontDict.has(PDFName.of(DA_FONT))) {
-      const helvetica = context.register(
-        context.obj({ Type: 'Font', Subtype: 'Type1', BaseFont: 'Helvetica', Encoding: 'WinAnsiEncoding' }),
-      );
-      fontDict.set(PDFName.of(DA_FONT), helvetica);
-    }
-  }
-
   #setFontSize(field: PDFField, size: number): void {
-    this.#ensureDefaultResources();
+    ensureHelvetica(this.#doc, this.#form.acroForm.dict);
     const da = `/${DA_FONT} ${size} Tf 0 g`;
     field.acroField.setDefaultAppearance(da);
     for (const widget of field.acroField.getWidgets()) {
@@ -381,7 +378,7 @@ function renumberAfterRemoval(field: PDFRadioGroup | PDFCheckBox, index: number)
   if (removedOn && value instanceof PDFName && value === removedOn) acro.dict.set(PDFName.of('V'), PDFName.of('Off'));
 }
 
-function renameState(widget: PDFWidgetAnnotation, from: PDFName, to: PDFName): void {
+export function renameState(widget: PDFWidgetAnnotation, from: PDFName, to: PDFName): void {
   const ap = widget.dict.lookup(PDFName.of('AP'));
   if (ap instanceof PDFDict) {
     for (const key of ['N', 'D', 'R']) {

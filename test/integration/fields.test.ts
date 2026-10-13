@@ -6,12 +6,13 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { PDFDocument } from '@cantoo/pdf-lib';
+import { type PDFDict, PDFDocument, PDFHexString, PDFName, type PDFRef } from '@cantoo/pdf-lib';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_FIELD_SETTINGS, type FieldOperation, type FieldSettings, type FormFieldValue } from '../../src/shared/forms';
 import { PdfiumEngine } from '../../src/workers/pdfium/engine';
 import { applyFieldOperations, FieldOperationError } from '../../src/workers/pdfium/fields';
+import { repairComposed, repairInserted } from '../../src/workers/pdfium/imported';
 import { fixture, PASSWORDS } from '../fixtures/expectations';
 
 const require = createRequire(import.meta.url);
@@ -228,5 +229,74 @@ describe('Formularfelder löschen', () => {
 
   it('meldet unbekannte Felder', async () => {
     await expect(applyFieldOperations(read('formular.pdf'), [{ type: 'deleteField', ref: '999R' }])).rejects.toMatchObject({ code: 'field-missing' });
+  });
+});
+
+describe('Übernommene Seiten (Zusammenführen, Einfügen)', () => {
+  const source = (data: Uint8Array, pages: number[] | null = null) => ({
+    data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer,
+    password: null,
+    pages,
+  });
+
+  it('Zusammenführen: Felder bleiben ausfüllbar, doppelte Namen werden getrennt', async () => {
+    const parts = [
+      { type: 'pdf' as const, source: source(read('text.pdf'), [0]) },
+      { type: 'pdf' as const, source: source(read('formular.pdf')) },
+      { type: 'pdf' as const, source: source(read('formular.pdf')) },
+    ];
+    const composed = engine.compose(parts);
+    const output = await repairComposed(composed, parts);
+    await checkOutput(composed, output);
+    const names = Object.keys(await values(output));
+    expect(names.sort()).toEqual(['einverstanden', 'einverstanden 2', 'farbe', 'farbe 2', 'land', 'land 2', 'name', 'name 2']);
+    // Optionsgruppen behalten ihre Werte; beide Kopien lassen sich unabhängig ausfüllen
+    const second = await widgets(output, 3);
+    expect(second.filter((w) => w.fieldName === 'farbe 2').map((w) => w.buttonValue)).toEqual(['rot', 'gruen', 'blau']);
+    const first = (await widgets(output, 2)).find((w) => w.fieldName === 'name');
+    const filled = engine.process(output, null, none, [], { incremental: true }, [
+      { ref: first?.id ?? '', pageIndex: 1, kind: 'text', text: 'Erste' },
+      { ref: second.find((w) => w.fieldName === 'name 2')?.id ?? '', pageIndex: 2, kind: 'text', text: 'Zweite' },
+      { ref: second.find((w) => w.buttonValue === 'blau')?.id ?? '', pageIndex: 2, kind: 'checked', checked: true },
+    ]);
+    expect(await values(filled)).toMatchObject({ name: 'Erste', 'name 2': 'Zweite', 'farbe 2': 'blau' });
+  });
+
+  it('Seiten mit Formular in ein Formular einfügen', async () => {
+    const original = read('formular.pdf');
+    const op = { type: 'insertPdf' as const, at: 1, source: source(read('formular.pdf')) };
+    const inserted = engine.process(original, null, none, [op], { incremental: true });
+    const output = await repairInserted(inserted, op.source, op.at);
+    await checkOutput(original, output);
+    const doc = await PDFDocument.load(output, { updateMetadata: false });
+    expect(doc.getForm().getFields().map((f) => f.getName())).toEqual(['name', 'einverstanden', 'farbe', 'land', 'name 2', 'einverstanden 2', 'farbe 2', 'land 2']);
+  });
+
+  it('Popups zeigen nach dem Übernehmen wieder auf ihren Kommentar', async () => {
+    // Notiz mit Popup, wie Acrobat sie anlegt
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([300, 300]);
+    const note = doc.context.register(doc.context.obj({ Type: 'Annot', Subtype: 'Text', Rect: [10, 10, 30, 30], Contents: PDFHexString.fromText('Hallo') }));
+    const popup = doc.context.register(doc.context.obj({ Type: 'Annot', Subtype: 'Popup', Rect: [40, 40, 200, 120], Parent: note }));
+    (doc.context.lookup(note) as PDFDict).set(PDFName.of('Popup'), popup);
+    page.node.set(PDFName.of('Annots'), doc.context.obj([note, popup]));
+    const withPopup = await doc.save({ useObjectStreams: false });
+    const parts = [
+      { type: 'pdf' as const, source: source(read('text.pdf'), [0]) },
+      { type: 'pdf' as const, source: source(withPopup) },
+    ];
+    const composed = engine.compose(parts);
+    const output = await repairComposed(composed, parts);
+    const result = await PDFDocument.load(output, { updateMetadata: false });
+    const annots = result.getPage(1).node.Annots();
+    const [noteRef, popupRef] = [annots?.get(0), annots?.get(1)];
+    const popupDict = result.context.lookup(popupRef as PDFRef) as PDFDict;
+    expect(String(popupDict.get(PDFName.of('Parent')))).toBe(String(noteRef));
+  });
+
+  it('ohne Formular und Popups bleibt alles, wie es ist', async () => {
+    const parts = [{ type: 'pdf' as const, source: source(read('text.pdf'), [0, 1]) }];
+    const composed = engine.compose(parts);
+    expect(await repairComposed(composed, parts)).toBe(composed);
   });
 });
