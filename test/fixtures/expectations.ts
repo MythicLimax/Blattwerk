@@ -35,3 +35,9 @@ export const COMMENTS_PDF = {
   squareText: 'Rahmen um den Absatz',
   squareTopLeft: { x: 300, y: 640 },
 };
+
+// Bilder für Phase 3 (scripts/generate-fixtures.ts): vier farbige Viertel, oben links rot, oben rechts grün,
+// unten links blau, unten rechts gelb; transparent.png hat einen Alphakanal.
+export const IMAGES_DIR = path.resolve(import.meta.dirname, 'images');
+export const imageFixture = (name: 'foto.jpg' | 'viertel.png' | 'transparent.png') => path.join(IMAGES_DIR, name);
+export const IMAGE_SIZE = { 'foto.jpg': [320, 240], 'viertel.png': [320, 240], 'transparent.png': [200, 100] } as const;

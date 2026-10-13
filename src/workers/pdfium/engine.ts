@@ -13,7 +13,9 @@ import type {
   StatusEntry,
 } from '../../shared/annotations';
 import { STAMP_STYLES, toPdfDate } from '../../shared/annotations';
+import type { ComposePart, PageOperation } from '../../shared/pages';
 import { copyOut, withBuffer, withFloats, withWString, type Pdfium } from './memory';
+import { Allocations, applyPageOperation, composeDocument, inspectDocument } from './pages';
 
 // Werte aus PDFium bzw. @embedpdf/models (siehe docs/entscheidungen/0005-kommentare.md)
 const SUBTYPE = {
@@ -82,6 +84,55 @@ export class PdfiumEngine {
   // Öffnet die Datei, wendet die Änderungen an und liefert die neuen Bytes.
   // Inkrementell: Die ursprünglichen Bytes bleiben unverändert am Anfang der Datei (Signaturen bleiben gültig).
   applyAndSave(bytes: Uint8Array, password: string | null, changes: AnnotationChanges, options: SaveOptions): Uint8Array {
+    return this.process(bytes, password, changes, [], options);
+  }
+
+  // Wie applyAndSave, danach zusätzlich Seitenoperationen. Kommentaränderungen beziehen sich auf die Seiten
+  // vor den Operationen und werden deshalb zuerst angewendet.
+  process(
+    bytes: Uint8Array,
+    password: string | null,
+    changes: AnnotationChanges,
+    operations: PageOperation[],
+    options: SaveOptions,
+  ): Uint8Array {
+    const m = this.#m;
+    const memory = new Allocations(m);
+    try {
+      return this.#process(bytes, password, changes, operations, options, memory);
+    } finally {
+      memory.release();
+    }
+  }
+
+  // Neues Dokument aus Teilen (Zusammenführen, Extrahieren, Teilen, Bilder → PDF), vollständig gespeichert.
+  compose(parts: ComposePart[]): Uint8Array {
+    const m = this.#m;
+    const memory = new Allocations(m);
+    try {
+      const doc = composeDocument(m, parts, memory);
+      try {
+        return this.#save(doc, SAVE_FULL);
+      } finally {
+        m.FPDF_CloseDocument(doc);
+      }
+    } finally {
+      memory.release();
+    }
+  }
+
+  inspect(bytes: Uint8Array, password: string | null) {
+    return inspectDocument(this.#m, bytes, password);
+  }
+
+  #process(
+    bytes: Uint8Array,
+    password: string | null,
+    changes: AnnotationChanges,
+    operations: PageOperation[],
+    options: SaveOptions,
+    memory: Allocations,
+  ): Uint8Array {
     const m = this.#m;
     return withBuffer(m, bytes.length, (dataPtr) => {
       m.pdfium.HEAPU8.set(bytes, dataPtr);
@@ -105,6 +156,7 @@ export class PdfiumEngine {
         } finally {
           for (const ptr of pages.values()) m.FPDF_ClosePage(ptr);
         }
+        for (const operation of operations) applyPageOperation(m, doc, operation, memory);
         return this.#save(doc, options.incremental ? SAVE_INCREMENTAL : SAVE_FULL);
       } finally {
         m.FPDF_CloseDocument(doc);

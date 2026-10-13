@@ -25,6 +25,7 @@ import { crc32, deflateSync } from 'node:zlib';
 const root = path.resolve(import.meta.dirname, '..');
 const outDir = path.join(root, 'test', 'fixtures', 'pdfs');
 const generatedDir = path.join(root, 'test', 'fixtures', 'generated');
+const imagesDir = path.join(root, 'test', 'fixtures', 'images');
 const FIXED_DATE = new Date(Date.UTC(2026, 0, 15, 9, 30, 0));
 
 // Diese Werte prüfen die Tests. Bei Änderungen auch test/fixtures/expectations.ts anpassen.
@@ -363,6 +364,71 @@ async function buildScanPdf(textPdf: Uint8Array): Promise<Uint8Array | null> {
   }
 }
 
+// Bild in vier farbigen Vierteln (oben links rot, oben rechts grün, unten links blau, unten rechts gelb),
+// damit Tests die Ausrichtung nach dem Einbetten prüfen können.
+function quadrantPixels(width: number, height: number): Uint8Array {
+  const data = new Uint8Array(width * height * 3);
+  const colors = [
+    [220, 30, 30],
+    [30, 170, 60],
+    [30, 60, 220],
+    [240, 200, 20],
+  ];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const color = colors[(y < height / 2 ? 0 : 2) + (x < width / 2 ? 0 : 1)] as number[];
+      data.set(color, (y * width + x) * 3);
+    }
+  }
+  return data;
+}
+
+// PNG mit Alphakanal (Farbtyp 6): linke Hälfte deckend rot, rechte Hälfte halb durchsichtig blau
+function encodeRgbaPng(width: number, height: number): Uint8Array {
+  const chunk = (type: string, data: Uint8Array) => {
+    const out = Buffer.alloc(12 + data.length);
+    out.writeUInt32BE(data.length, 0);
+    out.write(type, 4, 'latin1');
+    Buffer.from(data).copy(out, 8);
+    out.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type, 'latin1'), Buffer.from(data)])) >>> 0, 8 + data.length);
+    return out;
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  const raw = Buffer.alloc((width * 4 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const o = y * (width * 4 + 1) + 1 + x * 4;
+      raw.set(x < width / 2 ? [220, 30, 30, 255] : [30, 60, 220, 128], o);
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', new Uint8Array()),
+  ]);
+}
+
+// JPEG-Foto (Querformat 320 × 240) aus dem Viertelbild; unter macOS wandelt sips das PNG um.
+function buildJpeg(): Uint8Array | null {
+  if (process.platform !== 'darwin') return null;
+  const tmp = path.join(tmpdir(), `blattwerk-jpeg-${randomBytes(4).toString('hex')}`);
+  mkdirSync(tmp, { recursive: true });
+  try {
+    const pngPath = path.join(tmp, 'foto.png');
+    const jpgPath = path.join(tmp, 'foto.jpg');
+    writeFileSync(pngPath, encodePng(320, 240, quadrantPixels(320, 240)));
+    execFileSync('/usr/bin/sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', '90', pngPath, '--out', jpgPath], { stdio: 'ignore' });
+    return new Uint8Array(readFileSync(jpgPath));
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 // Große Datei: 600 Seiten mit je einem Rauschbild (nicht komprimierbar), insgesamt über 100 MB.
 async function buildLargePdf(): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
@@ -409,6 +475,19 @@ async function main(): Promise<void> {
   write('kaputte-xref.pdf', breakXref(text));
   write('abgeschnitten.pdf', text.subarray(0, Math.floor(text.length * 0.7)));
   write('kein-pdf.pdf', Buffer.from('Das ist kein PDF, sondern einfacher Text.\n', 'utf8'));
+
+  // Bilder für Phase 3 (Bilder in PDF umwandeln, Bilder als Seiten einfügen)
+  mkdirSync(imagesDir, { recursive: true });
+  const writeImage = (name: string, data: Uint8Array) => {
+    if (only && only !== name) return;
+    writeFileSync(path.join(imagesDir, name), data);
+    console.log(`${name}: ${(data.length / 1024).toFixed(1)} KB`);
+  };
+  writeImage('viertel.png', encodePng(320, 240, quadrantPixels(320, 240)));
+  writeImage('transparent.png', encodeRgbaPng(200, 100));
+  const jpeg = only && only !== 'foto.jpg' ? null : buildJpeg();
+  if (jpeg) writeImage('foto.jpg', jpeg);
+  else if (!only && !existsSync(path.join(imagesDir, 'foto.jpg'))) console.warn('foto.jpg kann nur unter macOS erzeugt werden.');
 
   const scan = only && only !== 'scan.pdf' ? null : await buildScanPdf(text);
   if (scan) write('scan.pdf', scan);
