@@ -14,6 +14,7 @@ export const SECRETS = {
   comment: 'GEHEIM-KOMMENTAR-7777',
   title: 'GEHEIM-TITEL-3333',
   xmp: 'GEHEIM-XMP-5555',
+  alt: 'GEHEIM-ALT-6060',
 } as const;
 
 export const PUBLIC = {
@@ -90,6 +91,14 @@ export async function buildRedactionPdf(): Promise<Uint8Array> {
     { Type: 'Metadata', Subtype: 'XML' },
   );
   doc.catalog.set(PDFName.of('Metadata'), context.register(xmp));
+
+  // Barrierefreies PDF: Beschreibung des Bildes im Strukturbaum
+  const figure = context.register(context.obj({ Type: 'StructElem', S: 'Figure', Alt: PDFHexString.fromText(SECRETS.alt), Pg: page.ref }));
+  doc.catalog.set(PDFName.of('StructTreeRoot'), context.register(context.obj({ Type: 'StructTreeRoot', K: [figure] })));
+  doc.catalog.set(PDFName.of('MarkInfo'), context.obj({ Marked: true }));
+
+  // Fertiges Vorschaubild der Seite (zeigt den Inhalt vor dem Schwärzen)
+  page.node.set(PDFName.of('Thumb'), image.ref);
 
   const second = doc.addPage([595.28, 841.89]);
   second.drawText(PUBLIC.page2, { x: 56, y: 780, size: 12, font });

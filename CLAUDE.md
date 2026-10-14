@@ -15,8 +15,8 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | 2 | Kommentieren | erledigt ([Bericht](docs/phasen/phase-2.md)) |
 | 3 | Seiten organisieren | erledigt ([Bericht](docs/phasen/phase-3.md)) |
 | 4 | Formulare und Unterschrift | erledigt ([Bericht](docs/phasen/phase-4.md)) |
-| 5 | Bearbeiten (inkl. Schwärzen) | als Nächstes |
-| 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | offen |
+| 5 | Bearbeiten (inkl. Schwärzen) | erledigt ([Bericht](docs/phasen/phase-5.md)) |
+| 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | als Nächstes |
 | 7 | Profi (PAdES, PDF/A, Tags) | offen |
 
 Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig.
@@ -49,7 +49,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Renderer hat keinen Node-Zugriff.** Alles Dateisystem läuft über `window.blattwerk` (Typ in `src/preload/api-types.ts`) → IPC → Hauptprozess. Der Renderer kennt nur Datei-IDs.
 - **Anzeigen mit den Viewer-Bausteinen von pdf.js** (`PDFViewer`, `PDFFindController`, `PDFLinkService`), siehe [ADR 0002](docs/entscheidungen/0002-anzeige-mit-pdfjs-viewer.md). Parsen, Schriften und Bilddekodierung laufen im Worker, gezeichnet wird zeitgeteilt im Hauptthread. Vollständiges Rendern im Worker wurde geprüft und ist nicht nötig (gemessen in den Oberflächentests).
 - **Ändern und Speichern mit PDFium-WASM** (`@embedpdf/pdfium`), siehe [0001](docs/entscheidungen/0001-pdf-bibliotheken.md). Zugriff nur über die eigene Schicht `src/workers/pdfium/` (`engine.ts`, Speicherhilfen in `memory.ts`), nie direkt auf das Modul. Ein Worker für die ganze App (`src/renderer/engine/pdfium-client.ts`): startet beim ersten Auftrag, beendet sich 2 s nach dem letzten (WASM-Speicher schrumpft sonst nie).
-- **Strukturänderungen mit @cantoo/pdf-lib** im selben Worker, nur wo PDFium es nicht kann ([ADR 0007](docs/entscheidungen/0007-formulare.md)): Formularfelder anlegen, ändern, löschen (`fields.ts`) und Verweise nach dem Übernehmen von Seiten reparieren (`imported.ts`). Immer inkrementell (`commit()`), nie in verschlüsselten Dokumenten, erst bei Bedarf geladen (eigener Bundle-Teil).
+- **Strukturänderungen mit @cantoo/pdf-lib** im selben Worker, nur wo PDFium es nicht kann: Formularfelder (`fields.ts`, [ADR 0007](docs/entscheidungen/0007-formulare.md)), Verweise nach dem Übernehmen von Seiten (`imported.ts`), Wasserzeichen und Kopf-/Fußzeilen als eigene Inhaltsströme (`stamping.ts`, [ADR 0009](docs/entscheidungen/0009-wasserzeichen.md)), Vor- und Nacharbeiten beim Schwärzen (`sanitize.ts`, [ADR 0008](docs/entscheidungen/0008-schwaerzen.md)). Inkrementell (`commit()`), außer beim Schwärzen (vollständig neu, ohne unerreichbare Objekte). Nie in verschlüsselten Dokumenten. Erst bei Bedarf geladen (eigener Bundle-Teil).
 - **Große Dateien** (über 8 MB): eigener `PDFDataRangeTransport` (`src/renderer/engine/range-transport.ts`) liest 1-MB-Blöcke per IPC, höchstens 6 gleichzeitig. Kleinere Dateien werden in einem Stück gelesen.
 - **Laden ist abbrechbar:** `LoadedDocumentHandle.promise` lehnt beim Schließen ab; der pdf.js-Worker wird erst nach `task.destroy()` beendet.
 
@@ -66,7 +66,11 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Formulare ausfüllen** ([ADR 0007](docs/entscheidungen/0007-formulare.md)): pdf.js zeigt Felder als Eingabefelder (`AnnotationMode.ENABLE_FORMS`). `computeFormChanges` (`src/shared/forms.ts`) vergleicht seinen Anmerkungsspeicher mit der Datei (`forms-store`, `features/forms/form-sync.ts`). Beim Speichern übernimmt PDFium die Werte (`workers/pdfium/forms.ts`).
 - **Formular bearbeiten:** `TabState.formEditing`, Ebene `features/form-edit/FormEditOverlay.tsx` über der Seite (pdf.js-Felder und Kommentare sind dann nicht bedienbar), Zustand in `form-edit-store`. Jede Änderung ist eine `FieldOperation` und damit ein neuer Dokumentstand (`applyFieldOperations` in `session.ts`, Scrollposition bleibt über `rememberScroll`).
 - **Unterschrift:** Stempel mit PNG (`SignatureAnnotation`); gespeicherte Unterschriften im Profil (`src/main/files/signatures.ts`, IPC `signatures*`).
-- Dieses Verfahren (Snapshot der Dokumentbytes) gilt auch für Feldänderungen (Phase 4) und Inhaltsänderungen ab Phase 5.
+- **Schwärzen** ([ADR 0008](docs/entscheidungen/0008-schwaerzen.md)): Markierungen sind Kommentare der Art `redact` (Leiste `features/redaction/`, `ui.redactToolsVisible`). Anwenden (`applyRedactionMarks` in `session.ts`, `planRedaction`) ruft im Worker `redactDocument` auf: geteilte Bilder trennen (`sanitize.ts`), Inhalte entfernen (`redact.ts`, PDFium), Reste und ältere Stände verwerfen, vollständig neu schreiben. Suchen und schwärzen nutzt die PDFium-Textsuche (`text-search.ts`).
+- **Wasserzeichen, Kopf-/Fußzeilen, Seitenzahlen** ([ADR 0009](docs/entscheidungen/0009-wasserzeichen.md)): `StampOperation` (`src/shared/stamping.ts`), Dialoge in `features/stamping/`, eigene Inhaltsströme mit Kennung `/BlattwerkArtifact`.
+- **Inhalt bearbeiten** ([ADR 0010](docs/entscheidungen/0010-inhalt-bearbeiten.md)): `TabState.contentEditing`, Ebene `features/content-edit/ContentEditOverlay.tsx`, Zustand `content-edit-store`. Objekte listet PDFium je Seite (`listObjects`, Index gilt nur für einen Stand); Änderungen sind `ContentOperation` (`content.ts`, PDFium schreibt den Seiteninhalt neu).
+- Es ist immer höchstens ein Bearbeitungsmodus aktiv (Kommentieren, Schwärzen, Formular bearbeiten, Inhalt bearbeiten, Seiten organisieren).
+- Dieses Verfahren (Snapshot der Dokumentbytes) gilt für Seiten-, Feld-, Wasserzeichen- und Inhaltsänderungen sowie für das Schwärzen. Nach dem Speichern beginnt der Verlauf neu.
 
 ### Speichern (Grundregeln aus der Spezifikation, ab Phase 2)
 
@@ -100,7 +104,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0007)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0010)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
@@ -113,15 +117,16 @@ src/
     features/               viewer, thumbnails, outline, search, properties, print, password, goto,
                             annotations (Kommentare), prompt (Rückfragen), settings,
                             pages (Seitenraster, Seiten-Dialoge, Abläufe für Seiten und neue Dokumente),
-                            forms (Ausfüllen), form-edit (Formular bearbeiten), signatures (Unterschrift)
+                            forms (Ausfüllen), form-edit (Formular bearbeiten), signatures (Unterschrift),
+                            redaction (Schwärzen), stamping (Wasserzeichen, Kopf-/Fußzeilen), content-edit (Inhalt bearbeiten)
     components/             generische UI-Bausteine (IconButton, Dialog)
-    state/                  zustand-Stores (documents, ui, annotations, history, forms, form-edit), dirty.ts
+    state/                  zustand-Stores (documents, ui, annotations, history, forms, form-edit, content-edit), dirty.ts
     engine/                 pdf.js-Einrichtung, Laden, Range-Transport, Laufzeit je Dokument, Befehle (session.ts),
                             coords.ts, pdfium-client.ts
     styles/                 Design-Tokens, hell/dunkel
     public/                 beim Build kopierte pdf.js-Ressourcen (nicht eingecheckt)
-  workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, pages, forms, memory, protocol, worker),
-                            mit pdf-lib: fields (Formularfelder), imported (übernommene Seiten reparieren)
+  workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, pages, forms, redact, text-search, content, memory,
+                            protocol, worker), mit pdf-lib: fields, imported, sanitize + redaction, stamping
 resources/icon.svg          eigenes App-Symbol (Quelle)
 build/                      icon.png (aus resources/icon.svg erzeugt), after-pack.cjs
 scripts/                    build, dev, generate-fixtures, check-licenses, dist-mac-local, smoke-packaged, make-icon, dev-env.sh
@@ -146,7 +151,8 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 | Sprache | typescript | **6.0.3** | Apache-2.0 |
 | Rendering | pdfjs-dist | 6.4.299 | Apache-2.0 |
 | Bearbeiten/Speichern | @embedpdf/pdfium | 2.15.1 | MIT + BSD-3 |
-| Formularstruktur, Test-PDFs | @cantoo/pdf-lib | 2.11.1 | MIT |
+| Formularstruktur, Schwärzen, Wasserzeichen, Test-PDFs | @cantoo/pdf-lib | 2.11.1 | MIT |
+| Tests (Teilschriften) | @cantoo/fontkit | 2.0.12 (nur Entwicklung) | MIT |
 | Zustand | zustand | 5.0.15 | MIT |
 | Virtualisierung | @tanstack/react-virtual | 3.14.15 | MIT |
 | i18n | i18next, react-i18next | 26.4.4, 17.0.16 | MIT |
@@ -172,8 +178,8 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 
 ## Tests
 
-- **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js; PDFium-WASM und pdf-lib laufen ebenfalls in Node (`test/integration/pdfium-*.test.ts`, `fields.test.ts`).
-- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt), `test/e2e/forms.spec.ts` (Phase 4) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
+- **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js; PDFium-WASM und pdf-lib laufen ebenfalls in Node (`test/integration/pdfium-*.test.ts`, `fields.test.ts`, `redaction.test.ts`, `stamping.test.ts`, `content.test.ts`). Das Test-PDF zum Schwärzen erzeugt `test/fixtures/redaction.ts` im Test (Geheimnisse an allen bekannten Verstecken).
+- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt), `test/e2e/forms.spec.ts` (Phase 4), `test/e2e/edit.spec.ts` (Phase 5) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
 - **Fertige App:** `node scripts/smoke-packaged.mjs <Pfad zur .app>` startet das Paket, prüft die Anzeige und speichert einen Kommentar (PDFium aus dem Paket).
 - **Ausgabeprüfung für jede gespeicherte Datei:** `qpdf --check` (in CI installiert, lokal übersprungen, wenn nicht vorhanden), Öffnen mit pdf.js, PDFium und `@cantoo/pdf-lib`, Annotationen haben /AP. Unter macOS zusätzlich mit PDFKit (die Engine von Apple Vorschau): `test/e2e/pdfkit.ts` (JavaScript for Automation). Acrobat Reader: manuelle Checkliste im Phasenbericht.
 - **Test-PDFs** (`test/fixtures/pdfs/`): Text, Scan (nur Bild), Formular (AcroForm), verschlüsselt (Benutzer- und Besitzerpasswort), eingeschränkt, beschädigt (kaputte xref, abgeschnitten), mit Links und Lesezeichen, mit Kommentaren (`kommentare.pdf`: Antwort, Prüfstatus). Signiert folgt mit PAdES in Phase 7. „Sehr groß“ (600 Seiten, mehr als 100 MB) erzeugt `scripts/generate-fixtures.ts` nach `test/fixtures/generated/`.
@@ -226,5 +232,10 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 - pdf.js zeichnet unter `ENABLE_FORMS` den Anmerkungsspeicher nicht mit; `combineFormsWithStorage` (`runtime.ts`) ergänzt die Speicher-Absicht, sonst erscheinen ausgeblendete Kommentare wieder.
 - pdf.js liest die QuickInfo (`/TU`) nur am Widget, nicht am Feld; die App schreibt sie an beide. pdf-lib vergrößert neue Felder um die Rahmenbreite; `fields.ts` setzt das Rechteck danach exakt.
 - PDFium passt `/Parent` beim Kopieren von Seiten nicht an (Formularfelder, Popups). Deshalb nach jedem Zusammensetzen und jeder Einfügung aus einer Datei `imported.ts`.
+- PDFium kopiert beim Schwärzen Bildpunkte im Bildobjekt selbst um (auch die Transparenzmaske); geteilte Bilder würden auf allen Seiten geschwärzt. Deshalb vorher `isolateSharedXObjects`. Vektorpfade lässt PDFium unangetastet; ganz verdeckte entfernt `redact.ts`.
+- `FPDFPage_GenerateContent` schreibt den ganzen Seiteninhalt neu. Für reine Ergänzungen (Wasserzeichen) deshalb pdf-lib mit eigenem Strom.
+- pdf-lib ersetzt nicht darstellbare Zeichen in Standardschriften stillschweigend durch „?“ (`getCharacterSet` prüfen) und fasst Seiteninhalt bei jeder Bearbeitung in q … Q (`autoNormalizeCTM` abschalten).
+- `FPDFFont_GetBaseFontName` liefert Namen ohne Teilschrift-Präfix; fehlende Zeichen erkennt man am Ersatzzeichen (gleicher Glyphenpfad wie U+F8FF).
+- In Tests nach einer Dokumentänderung oder dem Speichern `waitForDocument` abwarten, bevor der nächste Menübefehl kommt (während des Neuladens sind Befehle wirkungslos).
 - Native Menü-Kürzel (z. B. Cmd+A mit `role: selectAll`) erreichen den Renderer auf dem Mac nicht als Tastendruck.
 - Große parallele Prüf-Workflows mit vielen Agenten haben das Nutzungslimit des Auftraggebers zweimal ausgeschöpft. Nur sparsam einsetzen.

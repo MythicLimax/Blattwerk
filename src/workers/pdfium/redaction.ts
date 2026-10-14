@@ -18,5 +18,5 @@ export async function redactDocument(
   const merged = mergeAreas(areas);
   const isolated = await isolateSharedXObjects(bytes, merged.map((area) => area.pageIndex));
   const redacted = engine.redact(isolated, password, changes, formValues, merged);
-  return finishRedaction(redacted, options);
+  return finishRedaction(redacted, options, merged.map((area) => area.pageIndex));
 }

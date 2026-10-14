@@ -1,7 +1,7 @@
 // Schwärzen (Phase 5): Prüft, dass markierte Inhalte wirklich aus der Datei verschwinden, nicht nur überdeckt werden.
 // Geprüft wird jede Stelle, an der sich Inhalt in einer PDF-Datei verstecken kann, in allen üblichen Kodierungen.
 import { init, type WrappedPdfiumModule } from '@embedpdf/pdfium';
-import { decodePDFRawStream, PDFDict, PDFDocument, PDFName, type PDFNumber, PDFRawStream } from '@cantoo/pdf-lib';
+import { decodePDFRawStream, degrees, PDFDict, PDFDocument, PDFName, type PDFNumber, PDFRawStream, StandardFonts } from '@cantoo/pdf-lib';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -122,6 +122,7 @@ describe('Schwärzen', () => {
     expect(view.info).toContain(SECRETS.title);
     const objects = (await decodedObjects(original)).join('\n');
     for (const secret of Object.values(SECRETS)) expect(containsSecret(objects, secret), secret).toBe(true);
+    expect((await PDFDocument.load(original)).getPage(0).node.has(PDFName.of('Thumb'))).toBe(true);
   });
 
   it('entfernt Text, Bildinhalt, Vektorgrafik, Links, Felder, Kommentare und Metadaten endgültig', async () => {
@@ -167,9 +168,10 @@ describe('Schwärzen', () => {
     expect(renderedPixel(output, 1, ir - 20, it - 20)).not.toEqual([0, 0, 0]);
     expect(renderedPixel(output, 0, ir - 20, (ib + it) / 2)).not.toEqual([0, 0, 0]);
 
-    // 6. Andere Programme öffnen das Ergebnis
+    // 6. Andere Programme öffnen das Ergebnis; kein Vorschaubild mit dem alten Inhalt
     expect(engine.canOpen(output, null)).toBe(true);
-    await PDFDocument.load(output, { updateMetadata: false });
+    const reloaded = await PDFDocument.load(output, { updateMetadata: false });
+    expect(reloaded.getPages().some((page) => page.node.has(PDFName.of('Thumb')))).toBe(false);
   });
 
   it('kleine Vektorformen im Bereich verschwinden aus der Seite', async () => {
@@ -284,6 +286,41 @@ describe('Schwärzen', () => {
     expect(view.texts[0]).not.toContain('GEHEIM-STROM');
     expect(view.texts[0]).toContain('-STROM-0815');
     expect(view.annotations.join(' ')).not.toContain('Redact');
+  });
+
+  it('getaggter Ersatztext, Inline-Bilder und gedrehte Seiten', async () => {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([400, 400]);
+    const context = doc.context;
+    const name = page.node.newFontDictionary('F', font.ref).asString();
+    // Ersatztext für Vorlesehilfen im Inhaltsstrom und ein Bild direkt im Inhalt (BI … EI)
+    const content = [
+      `/Span <</ActualText (GEHEIM-ACTUAL) /MCID 0>> BDC BT ${name} 12 Tf 50 300 Td (sichtbar) Tj ET EMC`,
+      'q 20 0 0 20 50 200 cm BI /W 2 /H 2 /CS /RGB /BPC 8 ID \xff\x00\x00\xff\x00\x00\xff\x00\x00\xff\x00\x00 EI Q',
+      `BT ${name} 12 Tf 200 300 Td (OEFFENTLICH) Tj ET`,
+    ].join('\n');
+    page.node.addContentStream(context.register(context.stream(content)));
+    const rotated = doc.addPage([400, 300]);
+    rotated.setRotation(degrees(90));
+    rotated.drawText('GEHEIM-GEDREHT', { x: 50, y: 150, size: 12, font });
+    const bytes = await doc.save({ useObjectStreams: false });
+    const output = await redactDocument(
+      engine,
+      bytes,
+      null,
+      none,
+      [],
+      [
+        { pageIndex: 0, rects: [[40, 190, 120, 320]], quads: [] },
+        { pageIndex: 1, rects: [[40, 140, 200, 170]], quads: [] },
+      ],
+      { removeMetadata: true },
+    );
+    const objects = [Buffer.from(output).toString('latin1'), ...(await decodedObjects(output))].join('\n');
+    for (const secret of ['GEHEIM-ACTUAL', 'GEHEIM-GEDREHT', 'sichtbar']) expect(containsSecret(objects, secret), secret).toBe(false);
+    expect(objects).not.toMatch(/\bBI\b[\s\S]{0,40}\bID\b/);
+    expect(containsSecret(objects, 'OEFFENTLICH')).toBe(true);
   });
 
   it('verweigert verschlüsselte Dokumente', async () => {

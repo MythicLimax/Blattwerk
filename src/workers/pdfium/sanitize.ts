@@ -27,7 +27,14 @@ const NAME = {
   Fields: PDFName.of('Fields'),
   Kids: PDFName.of('Kids'),
   Metadata: PDFName.of('Metadata'),
+  Thumb: PDFName.of('Thumb'),
+  StructTreeRoot: PDFName.of('StructTreeRoot'),
+  K: PDFName.of('K'),
+  Pg: PDFName.of('Pg'),
 } as const;
+
+// Texte im Strukturbaum (barrierefreie PDFs), die Inhalte beschreiben oder ersetzen
+const DESCRIPTIONS = ['Alt', 'ActualText', 'E'].map((key) => PDFName.of(key));
 
 const refKey = (ref: PDFRef) => `${ref.objectNumber} ${ref.generationNumber}`;
 
@@ -170,9 +177,40 @@ function reachable(doc: PDFDocument): Set<string> {
   return seen;
 }
 
-export async function finishRedaction(bytes: Uint8Array, options: { removeMetadata: boolean }): Promise<Uint8Array> {
+// Beschreibungen im Strukturbaum (z. B. /Alt „Unterschrift von …“) für Elemente auf geschwärzten Seiten entfernen.
+// Welche Elemente genau geschwärzte Inhalte beschreiben, lässt sich nicht sicher feststellen; deshalb alle der Seite.
+function removeStructureDescriptions(doc: PDFDocument, pageIndices: number[]): void {
+  const pages = new Set(pageIndices.filter((i) => i >= 0 && i < doc.getPageCount()).map((i) => refKey(doc.getPage(i).ref)));
+  const root = doc.catalog.lookup(NAME.StructTreeRoot);
+  if (pages.size === 0 || !(root instanceof PDFDict)) return;
+  const seen = new Set<string>();
+  const visit = (node: PDFObject | undefined, page: string | null, depth: number) => {
+    if (node === undefined || depth > 256) return;
+    if (node instanceof PDFRef) {
+      if (seen.has(refKey(node))) return;
+      seen.add(refKey(node));
+      visit(doc.context.lookup(node), page, depth + 1);
+      return;
+    }
+    if (node instanceof PDFArray) {
+      for (const child of node.asArray()) visit(child, page, depth + 1);
+      return;
+    }
+    if (!(node instanceof PDFDict)) return;
+    const own = node.get(NAME.Pg);
+    const current = own instanceof PDFRef ? refKey(own) : page;
+    if (current !== null && pages.has(current)) for (const key of DESCRIPTIONS) node.delete(key);
+    visit(node.get(NAME.K), current, depth + 1);
+  };
+  visit(root.get(NAME.K), null, 0);
+}
+
+export async function finishRedaction(bytes: Uint8Array, options: { removeMetadata: boolean }, pageIndices: number[] = []): Promise<Uint8Array> {
   const doc = await load(bytes, false);
   removeOrphanFields(doc);
+  removeStructureDescriptions(doc, pageIndices);
+  // Fertige Vorschaubilder der Seiten zeigen den alten Inhalt; Anzeigeprogramme erzeugen sie bei Bedarf selbst.
+  for (const page of doc.getPages()) page.node.delete(NAME.Thumb);
   if (options.removeMetadata) {
     doc.catalog.delete(NAME.Metadata);
     doc.context.trailerInfo.Info = undefined;

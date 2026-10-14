@@ -47,6 +47,8 @@ PDFium speichert danach **vollständig** (`FPDF_NO_INCREMENTAL`).
 ### 3. Reste entfernen (pdf-lib, `sanitize.ts`)
 
 - Formularfelder ohne Widget werden aus dem Formularverzeichnis entfernt. Sonst stünde ihr Wert weiter in der Datei.
+- Fertige Vorschaubilder der Seiten (`/Thumb`) werden entfernt. Sie zeigen den alten Inhalt; Anzeigeprogramme erzeugen sie selbst neu.
+- In barrierefreien PDFs werden die Beschreibungen im Strukturbaum (`/Alt`, `/ActualText`, `/E`) für alle Elemente der geschwärzten Seiten entfernt. Welches Element genau den geschwärzten Inhalt beschreibt, lässt sich nicht sicher feststellen. Eine Bildbeschreibung wie „Unterschrift von …“ bliebe sonst lesbar.
 - Auf Wunsch werden die Dokumentinformationen und die XMP-Metadaten gelöscht.
 - **Alle nicht mehr erreichbaren Objekte werden verworfen.** Dazu gehören ältere Stände der Datei aus inkrementellen Speicherungen: Ein früher gelöschter Kommentar stünde sonst noch im alten Teil der Datei.
 - Die Datei wird mit pdf-lib vollständig neu geschrieben. Sie hat danach genau einen Stand und keinen Verweis `/Prev`.
@@ -63,6 +65,8 @@ PDFium speichert danach **vollständig** (`FPDF_NO_INCREMENTAL`).
 - Titel, XMP,
 - ein Bild, das auch auf Seite 2 steht,
 - eine kleine Vektorform,
+- eine Bildbeschreibung im Strukturbaum und ein fertiges Vorschaubild der Seite,
+- Ersatztext im Inhaltsstrom, ein Bild direkt im Inhalt und eine gedrehte Seite (eigener Test),
 - ein älterer Stand mit einem gelöschten Kommentar.
 
 Geprüft wird:
