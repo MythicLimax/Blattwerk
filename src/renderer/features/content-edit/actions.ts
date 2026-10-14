@@ -38,8 +38,8 @@ export function toggleContentEditing(tab: TabState): void {
   useDocuments.getState().updateTab(tab.id, { contentEditing: true });
 }
 
-function run(tabId: string, operation: ContentOperation): Promise<boolean> {
-  return applyContentOperations(tabId, [operation], { keepScroll: true });
+function run(tabId: string, operation: ContentOperation | ContentOperation[]): Promise<boolean> {
+  return applyContentOperations(tabId, Array.isArray(operation) ? operation : [operation], { keepScroll: true });
 }
 
 // Neuer Text: at ist die linke obere Ecke der ersten Zeile in PDF-Punkten; baseline die erste Grundlinie
@@ -50,19 +50,21 @@ export async function addText(tabId: string, pageIndex: number, baseline: Point,
   return run(tabId, { type: 'addText', pageIndex, origin: baseline, lines, font: style.font, size: style.size, color: style.color });
 }
 
-export async function editText(tabId: string, pageIndex: number, index: number, value: string, before: string): Promise<boolean> {
+// merge: weitere Stücke derselben Zeile (siehe lineOf), die im ersten aufgehen
+export async function editText(tabId: string, pageIndex: number, index: number, merge: number[], value: string, before: string): Promise<boolean> {
   const text = value.replace(/\n/g, ' ');
   if (text === before) return false;
   // Leere Zeile: wie Löschen
-  if (text.trim() === '') return run(tabId, { type: 'delete', pageIndex, indices: [index] });
-  return run(tabId, { type: 'editText', pageIndex, index, text });
+  if (text.trim() === '') return run(tabId, { type: 'delete', pageIndex, indices: [index, ...merge] });
+  return run(tabId, { type: 'editText', pageIndex, index, text, ...(merge.length > 0 ? { merge } : {}) });
 }
 
-export async function transformObject(tabId: string, pageIndex: number, index: number, matrix: Matrix, bounds: Rect): Promise<void> {
+// members: alle Objekte der Einheit (index ist ihr Anker)
+export async function transformObject(tabId: string, pageIndex: number, index: number, members: number[], matrix: Matrix, bounds: Rect): Promise<void> {
   const store = useContentEdit.getState();
   store.setPending(tabId, { pageIndex, index, bounds });
   try {
-    await run(tabId, { type: 'transform', pageIndex, index, matrix });
+    await run(tabId, members.map((member) => ({ type: 'transform' as const, pageIndex, index: member, matrix })));
   } finally {
     store.setPending(tabId, null);
   }
@@ -73,7 +75,7 @@ export function deleteSelectedObject(tab: TabState): boolean {
   const selected = store.selected[tab.id];
   if (!tab.contentEditing || !selected) return false;
   store.select(tab.id, null);
-  void run(tab.id, { type: 'delete', pageIndex: selected.pageIndex, indices: [selected.index] });
+  void run(tab.id, { type: 'delete', pageIndex: selected.pageIndex, indices: selected.members });
   return true;
 }
 

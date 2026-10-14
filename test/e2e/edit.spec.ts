@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { decodePDFRawStream, PDFDocument, PDFRawStream } from '@cantoo/pdf-lib';
+import { decodePDFRawStream, PDFDocument, PDFRawStream, StandardFonts } from '@cantoo/pdf-lib';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { Rect } from '../../src/shared/annotations';
 import { fixture, imageFixture, TEXT_PDF } from '../fixtures/expectations';
@@ -290,6 +290,44 @@ test.describe('Inhalt bearbeiten', () => {
   }
 
   const line = (page: Page, text: string) => page.locator(`[data-testid="content-object"][data-text="${text}"]`).first();
+
+  test('Doppelklick bearbeitet die ganze Zeile, auch wenn das PDF sie in Stücken speichert', async () => {
+    const dir = tempDir();
+    const file = path.join(dir, 'stuecke.pdf');
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const pdfPage = doc.addPage([595, 842]);
+    let x = 60;
+    for (const piece of ['Dieser', 'Satz', 'besteht', 'aus', 'Stücken']) {
+      pdfPage.drawText(piece, { x, y: 700, size: 16, font });
+      x += font.widthOfTextAtSize(piece, 16) + 4;
+    }
+    writeFileSync(file, await doc.save());
+    const { page, app, close } = await launchApp([file], { userData: dir });
+    await waitForDocument(page, 1);
+    await page.getByTestId('content-edit-button').click();
+    await menuClick(app, 'view.fitPage');
+    // Die Zeile erscheint als ein Objekt; Verschieben bewegt alle Stücke
+    const whole = page.locator('[data-testid="content-object"][data-text="Dieser Satz besteht aus Stücken"]');
+    await expect(page.locator('[data-testid="content-object"][data-kind="text"]')).toHaveCount(1);
+    const before = await whole.boundingBox();
+    if (!before) throw new Error('Zeile fehlt');
+    await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2 + 30, { steps: 4 });
+    await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2 + 60, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => (await whole.boundingBox())?.y ?? 0).toBeGreaterThan(before.y + 40);
+    await expect.poll(async () => Math.round((await whole.boundingBox())?.width ?? 0)).toBe(Math.round(before.width));
+    await whole.dblclick();
+    const editor = page.getByTestId('content-text-editor');
+    await expect(editor).toHaveValue('Dieser Satz besteht aus Stücken');
+    await editor.fill('Jetzt ist es ein ganzer Satz');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('[data-testid="content-object"][data-kind="text"]')).toHaveCount(1);
+    await expect(page.locator('[data-testid="content-object"][data-text^="Jetzt ist es ein ganzer Satz"]')).toBeVisible();
+    await close();
+  });
 
   test('Textzeile ändern, neuen Text einfügen, verschieben und löschen', async () => {
     const { page, app, file, close } = await openText();

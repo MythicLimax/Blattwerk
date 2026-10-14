@@ -9,7 +9,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { missingChars, scalingAbout, translation, type ContentOperation } from '../../src/shared/content';
+import { editUnits, lineOf, lineText, missingChars, scalingAbout, translation, type ContentOperation } from '../../src/shared/content';
 import { PdfiumEngine } from '../../src/workers/pdfium/engine';
 import { fixture, imageFixture } from '../fixtures/expectations';
 
@@ -46,6 +46,49 @@ async function items(bytes: Uint8Array, pageNumber = 1): Promise<Item[]> {
 }
 
 describe('Inhalt bearbeiten', () => {
+  it('fasst Textstücke einer Zeile zusammen und ändert sie als Ganzes', async () => {
+    // Wie aus Textprogrammen: eine Zeile in mehreren Stücken, dazu ein fettes Wort und eine zweite Spalte
+    const doc = await PDFDocument.create();
+    const regular = await doc.embedFont(StandardFonts.Helvetica);
+    const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+    const page0 = doc.addPage([600, 300]);
+    let x = 40;
+    for (const piece of ['Dies ist', 'ein', 'zerstückelter', 'Satz']) {
+      page0.drawText(piece, { x, y: 200, size: 12, font: regular });
+      x += regular.widthOfTextAtSize(piece, 12) + 3;
+    }
+    page0.drawText('fett', { x: x + 1, y: 200, size: 12, font: bold });
+    page0.drawText('Spalte', { x: 450, y: 200, size: 12, font: regular });
+    page0.drawText('Nächste Zeile', { x: 40, y: 180, size: 12, font: regular });
+    const bytes = await doc.save({ useObjectStreams: false });
+    const objects = engine.listObjects(bytes, null, [0])[0]?.objects ?? [];
+    // PDFium hängt Stücken mit Lücke dahinter ein erzeugtes Leerzeichen an
+    const ein = objects.find((o) => o.text?.trim() === 'ein');
+    const pieces = lineOf(objects, ein?.index ?? -1);
+    expect(pieces.map((o) => o.text?.trim())).toEqual(['Dies ist', 'ein', 'zerstückelter', 'Satz']);
+    expect(lineText(pieces)).toBe('Dies ist ein zerstückelter Satz');
+    expect(lineOf(objects, objects.find((o) => o.text?.trim() === 'Spalte')?.index ?? -1)).toHaveLength(1);
+
+    expect(editUnits(objects).map((unit) => [unit.text, unit.members.length])).toEqual([
+      ['Dies ist ein zerstückelter Satz', 4],
+      ['fett', 1],
+      ['Spalte', 1],
+      ['Nächste Zeile', 1],
+    ]);
+
+    const [anchor, ...rest] = pieces;
+    const output = run(bytes, [
+      { type: 'editText', pageIndex: 0, index: anchor?.index ?? -1, text: 'Ein ganz neuer Satz', merge: rest.map((o) => o.index) },
+    ]);
+    const list = (await items(output)).map((item) => item.str);
+    expect(list).toContain('Ein ganz neuer Satz');
+    for (const gone of ['Dies ist', 'ein', 'zerstückelter', 'Satz']) expect(list).not.toContain(gone);
+    expect(list).toEqual(expect.arrayContaining(['fett', 'Spalte', 'Nächste Zeile']));
+    const edited = (await items(output)).find((item) => item.str === 'Ein ganz neuer Satz');
+    expect(edited?.transform.map(Math.round)).toEqual([12, 0, 0, 12, 40, 200]);
+  });
+
+
   it('liefert die sichtbare Schriftgröße auch bei skalierter Textmatrix', async () => {
     const doc = await PDFDocument.create();
     const font = await doc.embedFont(StandardFonts.Helvetica);

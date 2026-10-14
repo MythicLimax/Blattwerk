@@ -23,6 +23,8 @@ Die Spezifikation verlangt, vorher zu erklären, was beim Bearbeiten vorhandenen
 
 - **Werkzeug:** PDFium (`src/workers/pdfium/content.ts`), denn nur PDFium kann vorhandene Seitenobjekte lesen und ändern.
 - **Objekte:** Eine Zeile oder ein Zeilenstück ist ein Textobjekt. Bilder und Formular-XObjects sind je ein Objekt. Vektorgrafik wird nicht einzeln angeboten; Seiten bestehen oft aus Tausenden Pfaden.
+- **Zeilen statt Stücke** (ergänzt 2026-10-14, Version 0.5.3): Textprogramme speichern eine Zeile oft in vielen Stücken (Wörter, Wortteile). `editUnits` (`src/shared/content.ts`) fasst Stücke zusammen, die auf derselben Höhe liegen, dieselbe Schrift, Größe und Farbe haben und nur durch kleine Lücken getrennt sind. Die Zeile ist dann eine Einheit: auswählen, verschieben, skalieren und löschen wirken auf alle Stücke. Beim Ändern schreibt PDFium den ganzen Text ins erste Stück und entfernt die übrigen (`editText` mit `merge`). Andere Schriften in der Zeile (zum Beispiel ein fettes Wort) und große Lücken (Spalten, Tabellen) bleiben getrennt, damit keine Formatierung stillschweigend verloren geht.
+- **Schriftgröße:** Viele PDFs setzen Größe 1 und skalieren über die Textmatrix. Für die Eingabe zählt die sichtbare Größe (`visualSize`).
 - **Speichern:** Nach jeder Änderung schreibt PDFium den Inhalt der Seite neu (`FPDFPage_GenerateContent`). Das ist für echte Inhaltsänderungen unvermeidlich, so arbeitet auch Acrobat. Gespeichert wird inkrementell.
 - **Fehlende Zeichen erkennen:** PDFium liefert für ein fehlendes Zeichen die Form des Ersatzzeichens (.notdef). Die App vergleicht deshalb mit einem Zeichen, das keine Schrift enthält (U+F8FF). Geprüft werden der westeuropäische Zeichensatz und alle Zeichen, die auf der Seite in dieser Schrift vorkommen. So bleibt eine vorhandene Schrift erhalten, wann immer es geht.
 - **Gedrehte Seiten:** Neuer Text und neue Bilder stehen aufrecht zur Anzeige.
@@ -36,6 +38,7 @@ Die Spezifikation verlangt, vorher zu erklären, was beim Bearbeiten vorhandenen
 ## Einschränkungen
 
 - Kein Neuumbruch von Absätzen (siehe oben).
+- Eine geänderte Zeile verliert Abstände, die das Ursprungsprogramm zwischen Stücken gesetzt hatte (zum Beispiel bei Blocksatz); die Wörter stehen danach mit normalen Abständen.
 - Schriftart, Größe und Farbe vorhandener Zeilen lassen sich nicht direkt umstellen. Möglich ist: Zeile löschen und neu schreiben.
 - Inhalte in Formular-XObjects (zum Beispiel aus manchen Grafikprogrammen) lassen sich nur als Ganzes verschieben oder löschen.
 - Für andere Schriftsysteme fehlen eingebettete Schriften (wie in ADR 0009).

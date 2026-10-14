@@ -229,9 +229,16 @@ export function applyContentOperation(m: Pdfium, doc: number, operation: Content
         }
         break;
       }
-      case 'editText':
+      case 'editText': {
+        // Erst den Text ins erste Stück schreiben (behält seine Lage in der Objektliste), dann die übrigen Stücke der
+        // Zeile von hinten entfernen, damit die Positionen davor gültig bleiben
         replaceText(m, doc, page, operation.pageIndex, operation.index, operation.text);
+        for (const index of [...new Set(operation.merge ?? [])].filter((i) => i !== operation.index).sort((x, y) => y - x)) {
+          const object = objectAt(m, page, index);
+          if (m.FPDFPage_RemoveObject(page, object)) m.FPDFPageObj_Destroy(object);
+        }
         break;
+      }
     }
     if (!m.FPDFPage_GenerateContent(page)) throw new ContentError(`Seite ${operation.pageIndex + 1} lässt sich nicht neu schreiben`);
   });

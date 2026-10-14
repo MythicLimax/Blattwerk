@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { normalizeRect, type Point, type Rect } from '../../../shared/annotations';
-import { missingChars, scalingAbout, translation, type PageObjectInfo, type PageObjects } from '../../../shared/content';
+import { editUnits, missingChars, scalingAbout, translation, type EditUnit, type PageObjectInfo, type PageObjects } from '../../../shared/content';
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
 import { useContentEdit, type TextEditing } from '../../state/content-edit-store';
@@ -10,8 +10,8 @@ import styles from './ContentEditOverlay.module.css';
 import { pageObjects } from './page-objects';
 
 type Gesture =
-  | { kind: 'move'; object: PageObjectInfo; origin: Point; dx: number; dy: number }
-  | { kind: 'scale'; object: PageObjectInfo; fixed: Point; to: Point };
+  | { kind: 'move'; object: EditUnit; origin: Point; dx: number; dy: number }
+  | { kind: 'scale'; object: EditUnit; fixed: Point; to: Point };
 
 const MIN_EDITOR_PX = 11;
 const pxToUnits = (px: number, scale: number) => px / (scale * (96 / 72));
@@ -101,16 +101,16 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     store().setTool('select');
   };
 
-  const onObjectPointerDown = (event: ReactPointerEvent, object: PageObjectInfo) => {
+  const onObjectPointerDown = (event: ReactPointerEvent, object: EditUnit) => {
     if (tool !== 'select' || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
-    store().select(tabId, { pageIndex, index: object.index });
+    store().select(tabId, { pageIndex, index: object.index, members: object.members });
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
     setGesture({ kind: 'move', object, origin: toPdf(event), dx: 0, dy: 0 });
   };
 
-  const onHandlePointerDown = (event: ReactPointerEvent, object: PageObjectInfo, corner: number) => {
+  const onHandlePointerDown = (event: ReactPointerEvent, object: EditUnit, corner: number) => {
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
@@ -134,31 +134,33 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     const bounds = previewBounds(current.object, current);
     if (current.kind === 'move') {
       if (Math.hypot(current.dx, current.dy) < 0.5) return;
-      void transformObject(tabId, pageIndex, current.object.index, translation(current.dx, current.dy), bounds);
+      void transformObject(tabId, pageIndex, current.object.index, current.object.members, translation(current.dx, current.dy), bounds);
       return;
     }
     const factor = scaleFactor(current.object, current.fixed, current.to);
     if (Math.abs(factor - 1) < 0.01) return;
-    void transformObject(tabId, pageIndex, current.object.index, scalingAbout(factor, current.fixed.x, current.fixed.y), bounds);
+    void transformObject(tabId, pageIndex, current.object.index, current.object.members, scalingAbout(factor, current.fixed.x, current.fixed.y), bounds);
   };
 
-  const startEdit = (object: PageObjectInfo) => {
-    if (object.kind !== 'text') return;
-    store().select(tabId, { pageIndex, index: object.index });
+  // Text bearbeiten: immer die ganze Zeile, auch wenn das PDF sie in mehreren Stücken speichert (siehe editUnits)
+  const startEdit = (unit: EditUnit) => {
+    if (unit.kind !== 'text') return;
+    store().select(tabId, { pageIndex, index: unit.index, members: unit.members });
     store().setEditing({
       tabId,
       pageIndex,
       mode: 'edit',
-      index: object.index,
-      bounds: object.bounds,
-      text: object.text ?? '',
-      fontSize: object.visualSize ?? object.fontSize ?? 12,
-      ...(object.font ? { font: object.font } : {}),
+      index: unit.index,
+      merge: unit.members.filter((member) => member !== unit.index),
+      bounds: unit.bounds,
+      text: unit.text ?? '',
+      fontSize: unit.visualSize ?? unit.fontSize ?? 12,
+      ...(unit.font ? { font: unit.font } : {}),
     });
   };
 
   const handleSize = pxToUnits(8, scale);
-  const objects = listing?.objects ?? [];
+  const objects = useMemo(() => editUnits(listing?.objects ?? []), [listing]);
 
   return (
     <>
@@ -266,7 +268,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
     useContentEdit.getState().setEditing(null);
     if (impossible) return;
     if (editing.mode === 'edit') {
-      void editText(editing.tabId, editing.pageIndex, editing.index, value, initial);
+      void editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, value, initial);
     } else {
       const baseline = geometry.toPdf(editing.at.x, editing.at.y + baselineOffset(style.size));
       void addText(editing.tabId, editing.pageIndex, baseline, value);
