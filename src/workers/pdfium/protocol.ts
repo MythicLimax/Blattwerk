@@ -5,6 +5,7 @@ import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
 import type { StampOperation } from '../../shared/stamping';
 import type { ContentOperation, PageObjects } from '../../shared/content';
+import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
 
 // Kommentaränderungen, Formularwerte und (optional) Seiten- oder Feldoperationen anwenden, neue Bytes liefern
 export interface ProcessRequest {
@@ -69,7 +70,35 @@ export interface ListObjectsRequest {
   pages: number[];
 }
 
-export type WorkerRequest = ProcessRequest | ComposeRequest | InspectRequest | RedactRequest | FindTextRequest | ListObjectsRequest;
+// Kennwortschutz und Berechtigungen lesen
+export interface SecurityRequest {
+  id: number;
+  type: 'security';
+  bytes: ArrayBuffer;
+  password: string | null;
+}
+
+// Kennwortschutz setzen, ändern oder entfernen (settings null): Kommentare und Formularwerte übernehmen, Schutz
+// entfernen, auf Wunsch neu verschlüsseln. Immer vollständig neu geschrieben.
+export interface ProtectRequest {
+  id: number;
+  type: 'protect';
+  bytes: ArrayBuffer;
+  password: string | null;
+  changes: AnnotationChanges;
+  formValues: FormFieldValue[];
+  settings: SecuritySettings | null;
+}
+
+export type WorkerRequest =
+  | ProcessRequest
+  | ComposeRequest
+  | InspectRequest
+  | RedactRequest
+  | FindTextRequest
+  | ListObjectsRequest
+  | SecurityRequest
+  | ProtectRequest;
 
 export type InspectResult = { ok: true; pageCount: number } | { ok: false; reason: 'password' | 'invalid' };
 
@@ -100,4 +129,5 @@ export type WorkerResponse =
   | { id: number; ok: true; kind: 'inspect'; result: InspectResult }
   | { id: number; ok: true; kind: 'matches'; matches: TextMatch[]; truncated: boolean }
   | { id: number; ok: true; kind: 'objects'; pages: PageObjects[] }
+  | { id: number; ok: true; kind: 'security'; security: DocumentSecurity }
   | { id: number; ok: false; code: WorkerErrorCode; error: string };

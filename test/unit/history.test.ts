@@ -8,7 +8,7 @@ const TAB = 'tab-h';
 const state = () => useHistory.getState().tabs[TAB] as TabHistory;
 const bytes = (size: number) => new Uint8Array(size);
 const doc = (size: number, page = 1): DocState => ({ bytes: bytes(size), annotations: null, page, selection: [] });
-const leaving = (page = 1, selection: number[] = []) => ({ annotations: null, page, selection });
+const leaving = (page = 1, selection: number[] = []) => ({ annotations: null, page, selection, password: null });
 
 describe('Verlauf der Dokumentstände', () => {
   beforeEach(() => useHistory.getState().reset(TAB));

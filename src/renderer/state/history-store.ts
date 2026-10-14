@@ -13,6 +13,8 @@ export interface DocState {
   page: number;
   // Auswahl im Raster „Seiten organisieren“ beim Verlassen (0-basiert)
   selection: number[];
+  // Kennwort, mit dem dieser Stand geöffnet wird (Kennwortschutz ändert es); undefined = wie beim Öffnen der Datei
+  password?: string | null;
 }
 
 // Was beim Verlassen eines Stands mitgesichert wird
@@ -20,6 +22,7 @@ export interface Leaving {
   annotations: TabAnnotations | null;
   page: number;
   selection: number[];
+  password: string | null;
 }
 
 export interface TabHistory {

@@ -9,6 +9,7 @@ import { RedactApplyDialog, RedactFindDialog } from '../features/redaction/Redac
 import { RedactToolbar } from '../features/redaction/RedactToolbar';
 import { HeaderFooterDialog, PageNumbersDialog, WatermarkDialog } from '../features/stamping/StampDialogs';
 import { TooltipHost } from '../components/Tooltip';
+import { SecurityDialog } from '../features/security/SecurityDialog';
 import { BusyOverlay } from '../features/pages/BusyOverlay';
 import { ChooseSignatureDialog, CreateSignatureDialog } from '../features/signatures/SignatureDialogs';
 import { CombineDialog, PageDialogs, SourcePasswordDialog } from '../features/pages/PageDialogs';
@@ -48,6 +49,7 @@ export function App() {
   const redactToolsVisible = useUi((s) => s.redactToolsVisible);
   const redactDialog = useUi((s) => s.redactDialog);
   const stampDialog = useUi((s) => s.stampDialog);
+  const securityDialogOpen = useUi((s) => s.securityDialogOpen);
   const pageDialog = useUi((s) => s.pageDialog);
   const combine = useUi((s) => s.combine);
   const signatureDialog = useUi((s) => s.signatureDialog);
@@ -120,6 +122,7 @@ export function App() {
       {stampDialog === 'watermark' && active?.status === 'ready' && <WatermarkDialog tab={active} />}
       {stampDialog === 'headerFooter' && active?.status === 'ready' && <HeaderFooterDialog tab={active} />}
       {stampDialog === 'pageNumbers' && active?.status === 'ready' && <PageNumbersDialog tab={active} />}
+      {securityDialogOpen && active?.status === 'ready' && <SecurityDialog tab={active} />}
       <SourcePasswordDialog />
       <BusyOverlay />
       {prompt && <PromptDialog key={`${prompt.kind}-${prompt.tabId}`} prompt={prompt} />}

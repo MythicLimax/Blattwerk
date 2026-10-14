@@ -45,6 +45,7 @@ const loadFields = () => import('./fields');
 const loadImported = () => import('./imported');
 const loadRedaction = () => import('./redaction');
 const loadStamping = () => import('./stamping');
+const loadProtection = () => import('./protection');
 
 const NO_CHANGES = { upserts: [], deletions: [] };
 
@@ -143,6 +144,17 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
         case 'listObjects':
           reply({ id: request.id, ok: true, kind: 'objects', pages: pdfium.listObjects(new Uint8Array(request.bytes), request.password, request.pages) });
           return;
+        case 'security':
+          reply({ id: request.id, ok: true, kind: 'security', security: pdfium.security(new Uint8Array(request.bytes), request.password) });
+          return;
+        case 'protect': {
+          const { settings } = request;
+          let output = pdfium.process(new Uint8Array(request.bytes), request.password, request.changes, [], { incremental: false, removeSecurity: true }, request.formValues);
+          const protectedOutput = settings && (settings.openPassword !== null || settings.permissionsPassword !== null);
+          if (protectedOutput) output = await (await loadProtection()).encryptDocument(output, settings);
+          replyBytes(request.id, output, pdfium, protectedOutput ? (settings.openPassword ?? settings.permissionsPassword) : null);
+          return;
+        }
         case 'inspect':
           reply({ id: request.id, ok: true, kind: 'inspect', result: pdfium.inspect(new Uint8Array(request.bytes), request.password) });
           return;

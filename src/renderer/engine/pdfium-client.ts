@@ -2,6 +2,7 @@
 // nach dem letzten beendet. Der WASM-Speicher von PDFium wächst mit großen Dateien und schrumpft nie;
 // erst das Beenden gibt ihn frei.
 import type { AnnotationChanges } from '../../shared/annotations';
+import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
@@ -169,4 +170,22 @@ export async function inspectDocument(bytes: Uint8Array, password: string | null
   const response = await send({ type: 'inspect', bytes: buffer, password }, [buffer]);
   if (response.kind !== 'inspect') throw new PdfiumClientError('failed', 'unerwartete Antwort');
   return response.result;
+}
+
+// Kennwortschutz und Berechtigungen lesen. Die Bytes bleiben beim Aufrufer nutzbar.
+export async function readSecurity(bytes: Uint8Array, password: string | null): Promise<DocumentSecurity> {
+  const buffer = bytes.slice().buffer as ArrayBuffer;
+  const response = await send({ type: 'security', bytes: buffer, password }, [buffer]);
+  if (response.kind !== 'security') throw new PdfiumClientError('failed', 'unerwartete Antwort');
+  return response.security;
+}
+
+// Kennwortschutz setzen, ändern oder entfernen (settings null). Liefert das vollständig neu geschriebene Dokument.
+export function protectDocument(
+  bytes: Uint8Array,
+  password: string | null,
+  input: { changes: AnnotationChanges; formValues: FormFieldValue[]; settings: SecuritySettings | null },
+): Promise<Uint8Array> {
+  const buffer = ownBuffer(bytes);
+  return bytesOf(send({ type: 'protect', bytes: buffer, password, ...input }, [buffer]));
 }

@@ -40,3 +40,20 @@ export function inspectWithPdfKit(file: string, renderTo?: string): PdfKitResult
   });
   return JSON.parse(output.trim()) as PdfKitResult;
 }
+
+const UNLOCK_SCRIPT = `
+ObjC.import('PDFKit');
+function run(argv) {
+  const doc = $.PDFDocument.alloc.initWithURL($.NSURL.fileURLWithPath(argv[0]));
+  if (!doc || doc.isNil()) return JSON.stringify({ opened: false });
+  const unlocked = doc.isLocked ? doc.unlockWithPassword(argv[1]) : true;
+  return JSON.stringify({ opened: true, encrypted: doc.isEncrypted, unlocked, allowsPrinting: doc.allowsPrinting });
+}
+`;
+
+// Öffnet eine verschlüsselte Datei mit PDFKit und dem Kennwort (wie Vorschau nach der Kennworteingabe)
+export function unlockWithPdfKit(file: string, password: string): { opened: boolean; encrypted?: boolean; unlocked?: boolean; allowsPrinting?: boolean } {
+  const script = path.join(tmpdir(), 'blattwerk-pdfkit-unlock.js');
+  writeFileSync(script, UNLOCK_SCRIPT);
+  return JSON.parse(execFileSync('osascript', ['-l', 'JavaScript', script, file, password], { encoding: 'utf8' }).trim());
+}

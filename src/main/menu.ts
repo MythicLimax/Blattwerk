@@ -227,6 +227,12 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
     ],
   };
 
+  // Werkzeuge (Phase 6)
+  const toolsMenu: MenuItemConstructorOptions = {
+    label: t('menu.tools.title'),
+    submenu: [cmd('tools.security', t('menu.tools.security'), { enabled: viewing })],
+  };
+
   const navMenu: MenuItemConstructorOptions = {
     label: t('menu.nav.title'),
     submenu: [
@@ -273,7 +279,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       ]
     : [];
 
-  return [...appMenu, fileMenu, editMenu, viewMenu, documentMenu, navMenu, windowMenu];
+  return [...appMenu, fileMenu, editMenu, viewMenu, documentMenu, toolsMenu, navMenu, windowMenu];
 }
 
 export function applyMenu(ctx: MenuContext): void {

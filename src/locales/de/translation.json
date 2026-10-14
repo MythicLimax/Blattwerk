@@ -103,6 +103,10 @@
       "removeHeaderFooter": "Entfernen",
       "pageNumbers": "Seitenzahlen hinzufügen …",
       "editContent": "Inhalt bearbeiten"
+    },
+    "tools": {
+      "title": "Werkzeuge",
+      "security": "Kennwortschutz …"
     }
   },
   "dialog": {
@@ -173,11 +177,11 @@
       "verify": "Das Ergebnis ließ sich nicht prüfen. Das Dokument wurde nicht verändert.",
       "failed": "Die Seiten konnten nicht bearbeitet werden.",
       "form": "Ein Formularfeld konnte nicht übernommen werden.",
-      "field-encrypted": "Formularfelder lassen sich in verschlüsselten Dokumenten nicht bearbeiten.",
+      "field-encrypted": "Formularfelder lassen sich in verschlüsselten Dokumenten nicht bearbeiten. Entfernen Sie zuerst den Kennwortschutz (Werkzeuge → Kennwortschutz).",
       "field-missing": "Das Formularfeld wurde nicht gefunden.",
       "field-name": "Der Feldname ist ungültig oder schon vergeben.",
-      "redact-encrypted": "Schwärzen ist in verschlüsselten Dokumenten noch nicht möglich. Entfernen Sie zuerst den Kennwortschutz.",
-      "stamp-encrypted": "In verschlüsselten Dokumenten lassen sich noch keine Wasserzeichen, Kopf- oder Fußzeilen ändern. Entfernen Sie zuerst den Kennwortschutz.",
+      "redact-encrypted": "Schwärzen ist in verschlüsselten Dokumenten nicht möglich. Entfernen Sie zuerst den Kennwortschutz (Werkzeuge → Kennwortschutz).",
+      "stamp-encrypted": "In verschlüsselten Dokumenten lassen sich keine Wasserzeichen, Kopf- oder Fußzeilen ändern. Entfernen Sie zuerst den Kennwortschutz (Werkzeuge → Kennwortschutz).",
       "stamp-characters": "Diese Zeichen kann die gewählte Schrift nicht darstellen: {{detail}}",
       "stamp-nothing": "Das Dokument enthält nichts davon, das {{appName}} hinzugefügt hat.",
       "stamp-image": "Das Bild konnte nicht eingebettet werden.",
@@ -774,5 +778,49 @@
     "impossible": "Nicht darstellbar: {{chars}}",
     "notAllowed": "Dieses Dokument erlaubt keine Änderungen am Inhalt.",
     "failed": "Die Änderung konnte nicht ausgeführt werden. Das Dokument wurde nicht verändert."
+  },
+  "security": {
+    "title": "Kennwortschutz",
+    "statusOpen": "Dieses Dokument ist nicht geschützt.",
+    "statusProtected": "Dieses Dokument ist geschützt. Neue Einstellungen ersetzen den bisherigen Schutz.",
+    "requireOpen": "Kennwort zum Öffnen verlangen",
+    "openPassword": "Kennwort zum Öffnen",
+    "repeat": "Wiederholen",
+    "restrict": "Drucken und Bearbeiten einschränken",
+    "permissionsPassword": "Berechtigungskennwort",
+    "printing": "Drucken:",
+    "print": {
+      "high": "erlaubt",
+      "low": "nur niedrige Auflösung",
+      "none": "nicht erlaubt"
+    },
+    "flags": {
+      "copying": "Text und Bilder kopieren",
+      "annotating": "Kommentieren",
+      "fillingForms": "Formularfelder ausfüllen und unterschreiben",
+      "assembling": "Seiten einfügen, drehen und löschen",
+      "modifying": "Inhalt ändern",
+      "accessibility": "Text für Vorlesehilfen freigeben"
+    },
+    "restrictHint": "Einschränkungen beachten nicht alle Programme. Sie schützen vor versehentlichem Ändern, nicht vor Absicht.",
+    "rewriteHint": "Verschlüsselt wird mit AES-256. Die Datei wird dabei vollständig neu geschrieben; gespeichert wird sie erst mit „Sichern“.",
+    "signedWarning": "Das Dokument enthält digitale Signaturen. Sie werden durch das Neuschreiben ungültig.",
+    "problems": {
+      "missing-password": "Bitte geben Sie ein Kennwort ein.",
+      "open-mismatch": "Die beiden Kennwörter zum Öffnen stimmen nicht überein.",
+      "permissions-mismatch": "Die beiden Berechtigungskennwörter stimmen nicht überein.",
+      "same-passwords": "Kennwort zum Öffnen und Berechtigungskennwort müssen sich unterscheiden.",
+      "too-long": "Das Kennwort ist zu lang (höchstens 127 Zeichen).",
+      "characters": "Bitte nur Buchstaben ohne Umlaute und ß, Ziffern und Satzzeichen verwenden. Apple Vorschau kann andere Zeichen in Kennwörtern nicht prüfen."
+    },
+    "ownerNeeded": "Um den Schutz zu ändern oder zu entfernen, brauchen Sie das Berechtigungskennwort dieses Dokuments.",
+    "ownerWrong": "Das Berechtigungskennwort ist falsch.",
+    "unlock": "Weiter",
+    "remove": "Schutz entfernen",
+    "cancel": "Abbrechen",
+    "apply": "Übernehmen",
+    "applied": "Der Kennwortschutz ist eingerichtet. Speichern Sie das Dokument, damit er in der Datei gilt.",
+    "removed": "Der Kennwortschutz ist entfernt. Speichern Sie das Dokument, damit das in der Datei gilt.",
+    "failed": "Der Kennwortschutz ließ sich nicht ändern."
   }
 }

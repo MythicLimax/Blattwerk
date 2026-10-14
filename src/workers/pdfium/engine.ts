@@ -18,6 +18,7 @@ import type { FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, TextSearchOptions } from '../../shared/redaction';
 import type { ContentOperation, PageObjects } from '../../shared/content';
+import { ALL_PERMISSIONS, PERMISSION_BIT, permissionsFromBits, type DocumentSecurity } from '../../shared/security';
 import { applyContentOperation, listPageObjects } from './content';
 import { applyFormValues } from './forms';
 import { applyRedactions } from './redact';
@@ -64,6 +65,8 @@ const FLAG = { hidden: 2, print: 4, noZoom: 8, noRotate: 16 } as const;
 
 const SAVE_INCREMENTAL = 1;
 const SAVE_FULL = 2;
+// Vollständig und ohne Verschlüsselung (Kennwortschutz entfernen)
+const SAVE_REMOVE_SECURITY = 3;
 
 export class PdfiumError extends Error {
   constructor(message: string) {
@@ -74,6 +77,8 @@ export class PdfiumError extends Error {
 
 export interface SaveOptions {
   incremental: boolean;
+  // Verschlüsselung entfernen (vollständig neu schreiben); nur für „Kennwortschutz“
+  removeSecurity?: boolean;
   // Für Datumsfelder; in Tests fest vorgegeben
   now?: Date;
 }
@@ -217,10 +222,24 @@ export class PdfiumEngine {
         if (areas.length > 0) applyRedactions(m, doc, areas);
         for (const operation of contentOperations) applyContentOperation(m, doc, operation, memory);
         for (const operation of operations) applyPageOperation(m, doc, operation, memory);
-        return this.#save(doc, options.incremental ? SAVE_INCREMENTAL : SAVE_FULL);
+        return this.#save(doc, options.removeSecurity ? SAVE_REMOVE_SECURITY : options.incremental ? SAVE_INCREMENTAL : SAVE_FULL);
       } finally {
         m.FPDF_CloseDocument(doc);
       }
+    });
+  }
+
+  // Kennwortschutz des Dokuments, wie es mit diesem Kennwort geöffnet ist
+  security(bytes: Uint8Array, password: string | null): DocumentSecurity {
+    const m = this.#m;
+    return this.#withDocument(bytes, password, (doc) => {
+      const encrypted = m.FPDF_GetSecurityHandlerRevision(doc) !== -1;
+      const user = m.FPDF_GetDocUserPermissions(doc) >>> 0;
+      // Mit dem Berechtigungskennwort geöffnet (oder ohne Einschränkungen): PDFium meldet alle Rechte
+      const effective = m.FPDF_GetDocPermissions(doc) >>> 0;
+      const permissions = encrypted ? permissionsFromBits(user) : ALL_PERMISSIONS;
+      const ownerAccess = !encrypted || Object.values(PERMISSION_BIT).every((bit) => (effective & bit) !== 0);
+      return { encrypted, ownerAccess, permissions };
     });
   }
 

@@ -18,7 +18,8 @@ import { currentFormChanges, syncFormChanges } from '../features/forms/form-sync
 import { useContentEdit } from '../state/content-edit-store';
 import { useFormEdit } from '../state/form-edit-store';
 import { useForms } from '../state/forms-store';
-import { historyDirty, tabHistory, useHistory, type DocState } from '../state/history-store';
+import type { SecuritySettings } from '../../shared/security';
+import { historyDirty, tabHistory, useHistory, type DocState, type Leaving } from '../state/history-store';
 import type { FieldOperation } from '../../shared/forms';
 import type { RedactionOptions } from '../../shared/redaction';
 import type { StampOperation } from '../../shared/stamping';
@@ -28,7 +29,7 @@ import type { PageOperation } from '../../shared/pages';
 import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
 import { useUi, type PromptAnswer } from '../state/ui-store';
 import { openTemporary, startLoading } from './document-loader';
-import { PdfiumClientError, processDocument, redactDocument } from './pdfium-client';
+import { PdfiumClientError, processDocument, protectDocument, readSecurity, redactDocument } from './pdfium-client';
 import { pdfjs } from './pdfjs';
 import { createRuntime, destroyRuntime, dispatchFind, getRuntime, rememberScroll, setRuntimeDocument } from './runtime';
 
@@ -100,25 +101,31 @@ async function loadIntoTab(tabId: string, file: FileInfo, knownPassword: string 
       pdf.getMetadata().catch(() => null),
       pdf.getPermissions().catch(() => null),
     ]);
+    // pdf.js meldet die Einschränkungen auch, wenn das Dokument mit dem Berechtigungskennwort geöffnet wurde. Dann
+    // gelten sie nicht (PDFium unterscheidet das).
+    const security = permissions === null ? null : await readSecurity(await pdf.getData(), runtime.password).catch(() => null);
+    if (getRuntime(tabId) !== runtime) return;
+    const full = permissions === null || security?.ownerAccess === true;
     const info = (metadata?.info ?? {}) as Record<string, unknown>;
     const title = typeof info.Title === 'string' && info.Title.trim() ? info.Title.trim() : null;
     useDocuments.getState().updateTab(tabId, {
       status: 'ready',
       pageCount: pdf.numPages,
       title,
-      canPrint: permissions === null || permissions.has(pdfjs.PermissionFlag.PRINT),
-      canAnnotate: permissions === null || permissions.has(pdfjs.PermissionFlag.MODIFY_ANNOTATIONS),
+      canPrint: full || permissions.has(pdfjs.PermissionFlag.PRINT),
+      canAnnotate: full || permissions.has(pdfjs.PermissionFlag.MODIFY_ANNOTATIONS),
       // Seiten zusammenstellen erlaubt „Ändern“ oder (ab 128 Bit) das eigene Recht „Zusammenstellen“
       canAssemble:
-        permissions === null ||
+        full ||
         permissions.has(pdfjs.PermissionFlag.MODIFY_CONTENTS) ||
         permissions.has(pdfjs.PermissionFlag.ASSEMBLE),
-      canExtract: permissions === null || permissions.has(pdfjs.PermissionFlag.COPY),
+      canExtract: full || permissions.has(pdfjs.PermissionFlag.COPY),
       // pdf.js liefert Berechtigungen nur für verschlüsselte Dokumente; dort sind Feldänderungen nicht möglich.
       canEditForms: permissions === null,
       encrypted: permissions !== null,
       // Inhalt ändern erlaubt (Berechtigung „Ändern“)
-      canModify: permissions === null || permissions.has(pdfjs.PermissionFlag.MODIFY_CONTENTS),
+      canModify: full || permissions.has(pdfjs.PermissionFlag.MODIFY_CONTENTS),
+      ownerAccess: full,
     });
     if (options.annotations) useAnnotations.getState().restore(tabId, options.annotations);
     else void loadAnnotations(tabId);
@@ -313,7 +320,7 @@ const fileOf = (tab: TabState): FileInfo => ({ fileId: tab.fileId, name: tab.nam
 async function showState(tabId: string, state: DocState): Promise<void> {
   const tab = findTab(tabId);
   if (!tab) return;
-  const password = getRuntime(tabId)?.password ?? null;
+  const password = state.password !== undefined ? state.password : (getRuntime(tabId)?.password ?? null);
   destroyRuntime(tabId);
   useAnnotations.getState().init(tabId);
   useForms.getState().drop(tabId);
@@ -331,6 +338,11 @@ function leavingAnnotations(tabId: string, keepRedo: boolean): TabAnnotations | 
   const annotations = tabAnnotations(tabId);
   if (!annotations) return null;
   return { ...annotations, redo: keepRedo ? annotations.redo : [], editingId: null, selectedId: null };
+}
+
+// Was beim Verlassen eines Stands mitgesichert wird (Kommentare, Seite, Auswahl, Kennwort)
+function leavingState(tabId: string, tab: TabState, keepRedo: boolean): Leaving {
+  return { annotations: leavingAnnotations(tabId, keepRedo), page: tab.currentPage, selection: tab.pageSelection, password: getRuntime(tabId)?.password ?? null };
 }
 
 function operationErrorMessage(error: unknown, fallbackKey: string): string {
@@ -448,8 +460,8 @@ async function runDocumentOperations(tabId: string, input: DocumentOperations, a
     });
     if (getRuntime(tabId)?.pdf !== pdf) return false;
     const page = Math.max(1, after.page ?? tab.currentPage);
-    const next = { bytes, annotations: null, page, selection: after.selection ?? [] };
-    const leaving = { annotations: leavingAnnotations(tabId, false), page: tab.currentPage, selection: tab.pageSelection };
+    const next = { bytes, annotations: null, page, selection: after.selection ?? [], password: runtime.password };
+    const leaving = leavingState(tabId, tab, false);
     useHistory.getState().push(tabId, leaving, next);
     if (after.keepScroll) rememberScroll(tabId);
     await showState(tabId, next);
@@ -482,8 +494,8 @@ async function runRedaction(tabId: string, options: RedactionOptions): Promise<b
     const forms = await currentFormChanges(tabId);
     const bytes = await redactDocument(await pdf.getData(), runtime.password, { changes: plan.changes, formValues: forms, areas: plan.areas, options });
     if (getRuntime(tabId)?.pdf !== pdf) return false;
-    const next = { bytes, annotations: null, page: tab.currentPage, selection: [] };
-    const leaving = { annotations: leavingAnnotations(tabId, false), page: tab.currentPage, selection: tab.pageSelection };
+    const next = { bytes, annotations: null, page: tab.currentPage, selection: [], password: runtime.password };
+    const leaving = leavingState(tabId, tab, false);
     useHistory.getState().push(tabId, leaving, next);
     rememberScroll(tabId);
     await showState(tabId, next);
@@ -495,11 +507,53 @@ async function runRedaction(tabId: string, options: RedactionOptions): Promise<b
   }
 }
 
+// Kennwortschutz setzen, ändern oder entfernen (Phase 6, ADR 0011). ownerPassword: Berechtigungskennwort, falls das
+// Dokument nur mit dem Kennwort zum Öffnen geöffnet wurde. Das Ergebnis ist ein neuer, vollständig neu geschriebener
+// Stand; die Datei ändert sich erst beim Speichern.
+export function applyProtection(tabId: string, settings: SecuritySettings | null, ownerPassword: string | null): Promise<boolean> {
+  commitPendingEdits();
+  if (findTab(tabId)?.working) return Promise.resolve(false);
+  return enqueue(tabId, () => runProtection(tabId, settings, ownerPassword));
+}
+
+// Prüft das Berechtigungskennwort eines geöffneten Dokuments
+export async function checkOwnerPassword(tabId: string, password: string): Promise<boolean> {
+  const pdf = getRuntime(tabId)?.pdf;
+  if (!pdf) return false;
+  const security = await readSecurity(await pdf.getData(), password).catch(() => null);
+  return security?.ownerAccess === true;
+}
+
+async function runProtection(tabId: string, settings: SecuritySettings | null, ownerPassword: string | null): Promise<boolean> {
+  const tab = findTab(tabId);
+  const runtime = getRuntime(tabId);
+  if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf) return false;
+  const pdf = runtime.pdf;
+  try {
+    const annotations = tabAnnotations(tabId);
+    const changes = annotations ? computeChanges(annotations.items, annotations.originals) : { upserts: [], deletions: [] };
+    const forms = await currentFormChanges(tabId);
+    const bytes = await protectDocument(await pdf.getData(), ownerPassword ?? runtime.password, { changes, formValues: forms, settings });
+    if (getRuntime(tabId)?.pdf !== pdf) return false;
+    // In dieser Sitzung mit vollen Rechten weiterarbeiten: Das Berechtigungskennwort öffnet das Dokument ebenfalls.
+    const password = settings ? (settings.permissionsPassword ?? settings.openPassword) : null;
+    const next = { bytes, annotations: null, page: tab.currentPage, selection: [], password };
+    useHistory.getState().push(tabId, leavingState(tabId, tab, false), next);
+    rememberScroll(tabId);
+    await showState(tabId, next);
+    useUi.getState().confirm(t(settings ? 'security.applied' : 'security.removed'));
+    return true;
+  } catch (error) {
+    useUi.getState().notify(operationErrorMessage(error, 'security.failed'), errorMessage(error));
+    return false;
+  }
+}
+
 // Wechselt zu einem anderen Stand im Verlauf (Rückgängig/Wiederholen von Seitenoperationen).
 async function goToState(tabId: string, index: number): Promise<void> {
   const tab = findTab(tabId);
   if (!tab || tab.status !== 'ready' || tab.saving) return;
-  const leaving = { annotations: leavingAnnotations(tabId, true), page: tab.currentPage, selection: tab.pageSelection };
+  const leaving = leavingState(tabId, tab, true);
   const state = useHistory.getState().moveTo(tabId, index, leaving);
   if (!state) return;
   // Im Modus „Formular bearbeiten“ bleibt die Ansicht beim Rückgängigmachen an ihrer Stelle.
@@ -666,6 +720,11 @@ export function executeCommand(command: CommandId): void {
   if (command === 'window.nextTab') return switchTab(1);
   if (command === 'window.previousTab') return switchTab(-1);
   if (runPageCommand(command, getActiveTab())) return;
+  if (command === 'tools.security') {
+    const active = getActiveTab();
+    if (active?.status === 'ready' && !active.working) ui.setSecurityDialogOpen(true);
+    return;
+  }
   if (command === 'tools.sign') {
     startSigning();
     return;

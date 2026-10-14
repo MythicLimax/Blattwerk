@@ -47,6 +47,7 @@ export const COMMANDS = [
   'stamp.headerFooter',
   'stamp.removeHeaderFooter',
   'stamp.pageNumbers',
+  'tools.security',
   'file.combine',
   'file.fromImages',
   'nav.firstPage',
