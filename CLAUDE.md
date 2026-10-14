@@ -215,6 +215,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 - Pinch auf dem Trackpad kommt als `wheel`-Event mit `ctrlKey`. Browser-Zoom per `setVisualZoomLevelLimits(1, 1)` abschalten und selbst zoomen.
 - `File.path` gibt es in Electron nicht mehr. Für Drag & Drop `webUtils.getPathForFile` im Preload nutzen.
 - macOS öffnet Dateien per `open-file`-Event, auch vor `ready`. Windows übergibt sie über `argv` und `second-instance`.
+- Schließen des Fensters beendet die App auch unter macOS (Wunsch des Auftraggebers, 2026-10-14); die Rückfrage zum Speichern kommt vorher.
 - Pfad des Projekts enthält Leerzeichen. In Skripten Pfade immer quoten.
 - iCloud-Ordner (z. B. `~/Documents`) sind ungeeignet: Konfliktkopien in generierten Ordnern und Attribute, an denen `codesign` scheitert.
 - `.tools/package.json` mit `"type": "commonjs"` (legt `dev-env.sh` an): Sonst liest Node die heruntergeladenen Hilfsprogramme von electron-builder als ES-Module.

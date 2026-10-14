@@ -182,3 +182,19 @@ test('Beschriftung erscheint beim Überfahren unter dem Symbol', async () => {
   await expect(tooltip).toBeHidden();
   await close();
 });
+
+test('Fenster schließen fragt bei Änderungen nach und beendet dann die App (auch unter macOS)', async () => {
+  const { page, app } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, TEXT_PDF.pages);
+  await menuClick(app, 'pages.rotateClockwise');
+  await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+  const exited = new Promise<void>((resolve) => app.process().once('exit', () => resolve()));
+  // Wie ein Klick auf den roten Knopf
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+  // Abbrechen: Fenster und App bleiben
+  await page.getByTestId('prompt-cancel').click();
+  await expect(page.getByTestId('tab')).toHaveCount(1);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+  await page.getByTestId('prompt-discard').click();
+  await exited;
+});

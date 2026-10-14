@@ -292,8 +292,10 @@ app.on('before-quit', () => {
   quitting = true;
 });
 
+// Die App hat nur ein Fenster: Schließen beendet sie auf allen Systemen, auch unter macOS (Wunsch des
+// Auftraggebers). Die Rückfrage bei ungespeicherten Änderungen kommt vorher beim Schließen des Fensters.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  app.quit();
 });
 
 app.on('activate', () => {
@@ -350,7 +352,6 @@ void app.whenReady().then(async () => {
       if (win !== mainWindow) return;
       allowClose = true;
       win.close();
-      // Unter macOS beendet das Schließen des letzten Fensters die App nicht von selbst.
       if (quitting) app.quit();
     },
     onCloseCancelled: () => {
