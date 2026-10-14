@@ -36,7 +36,7 @@ export function Notices() {
             type="button"
             className={styles.close}
             aria-label={t('errors.dismiss')}
-            title={t('errors.dismiss')}
+            data-tooltip={t('errors.dismiss')}
             onClick={() => dismiss(notice.id)}
           >
             <X size={14} aria-hidden="true" />

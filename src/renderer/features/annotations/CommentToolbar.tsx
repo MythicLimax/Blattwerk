@@ -150,7 +150,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
               aria-checked={currentColor ? rgbEquals(currentColor, color) : false}
               className={styles.swatch}
               style={{ background: toCss(color) }}
-              title={t(`colors.${id}`)}
+              data-tooltip={t(`colors.${id}`)}
               aria-label={t(`colors.${id}`)}
               onClick={() => chooseColor(color)}
               data-testid={`color-${id}`}
@@ -163,7 +163,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
         <select
           className={styles.select}
           aria-label={t('comments.width')}
-          title={t('comments.width')}
+          data-tooltip={t('comments.width')}
           value={currentWidth}
           onChange={(event) => chooseWidth(Number(event.target.value))}
           data-testid="width-select"
@@ -180,7 +180,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
         <select
           className={styles.select}
           aria-label={t('comments.fontSize')}
-          title={t('comments.fontSize')}
+          data-tooltip={t('comments.fontSize')}
           value={currentFontSize}
           onChange={(event) => chooseFontSize(Number(event.target.value))}
           data-testid="font-size-select"
@@ -197,7 +197,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
         <select
           className={styles.select}
           aria-label={t('comments.stamp')}
-          title={t('comments.stamp')}
+          data-tooltip={t('comments.stamp')}
           value={stamp}
           onChange={(event) => useAnnotations.getState().setStamp(event.target.value as StampId)}
           data-testid="stamp-select"

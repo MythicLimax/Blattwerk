@@ -47,7 +47,7 @@ function ColorChoice({ value, onChange }: { value: Rgb; onChange: (color: Rgb) =
           aria-checked={value === color}
           className={styles.swatch}
           style={{ background: toCss(color) }}
-          title={t(`stamp.colors.${id}`)}
+          data-tooltip={t(`stamp.colors.${id}`)}
           aria-label={t(`stamp.colors.${id}`)}
           onClick={() => onChange(color)}
         />
@@ -391,7 +391,7 @@ export function HeaderFooterDialog({ tab }: { tab: TabState }) {
                 max={100}
                 className={`${fieldStyles.input} ${styles.number}`}
                 value={margins[side]}
-                title={t(`stamp.side.${side}`)}
+                data-tooltip={t(`stamp.side.${side}`)}
                 aria-label={t(`stamp.side.${side}`)}
                 onChange={(event) => setMargins({ ...margins, [side]: Math.max(0, Number(event.target.value) || 0) })}
               />

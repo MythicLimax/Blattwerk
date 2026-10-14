@@ -55,13 +55,13 @@ export function TabBar() {
             <TabIcon tab={tab} />
             <span className={styles.name}>{tab.name}</span>
             {isDirtyState(annotationTabs[tab.id], historyTabs[tab.id], formTabs[tab.id]) && (
-              <span className={styles.dirty} title={t('tabs.unsaved')} aria-label={t('tabs.unsaved')} data-testid="tab-dirty" />
+              <span className={styles.dirty} data-tooltip={t('tabs.unsaved')} aria-label={t('tabs.unsaved')} data-testid="tab-dirty" />
             )}
             <button
               type="button"
               className={styles.close}
               aria-label={t('tabs.close')}
-              title={t('tabs.close')}
+              data-tooltip={t('tabs.close')}
               onClick={(event) => {
                 event.stopPropagation();
                 void closeTab(tab.id);

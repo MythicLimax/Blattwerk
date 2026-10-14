@@ -72,7 +72,7 @@ export function ChooseSignatureDialog() {
             <button
               type="button"
               className={styles.savedButton}
-              title={t('signatures.use')}
+              data-tooltip={t('signatures.use')}
               onClick={() => place({ image: signature.png, width: signature.width, height: signature.height })}
               data-testid="signature-saved"
             >
@@ -248,7 +248,7 @@ export function CreateSignatureDialog() {
               aria-checked={color === ink.css}
               className={styles.swatch}
               style={{ background: ink.css }}
-              title={t(`signatures.colors.${ink.id}`)}
+              data-tooltip={t(`signatures.colors.${ink.id}`)}
               aria-label={t(`signatures.colors.${ink.id}`)}
               onClick={() => setColor(ink.css)}
             />

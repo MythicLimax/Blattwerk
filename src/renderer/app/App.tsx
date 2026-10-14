@@ -8,6 +8,7 @@ import { FormEditToolbar } from '../features/form-edit/FormEditToolbar';
 import { RedactApplyDialog, RedactFindDialog } from '../features/redaction/RedactDialogs';
 import { RedactToolbar } from '../features/redaction/RedactToolbar';
 import { HeaderFooterDialog, PageNumbersDialog, WatermarkDialog } from '../features/stamping/StampDialogs';
+import { TooltipHost } from '../components/Tooltip';
 import { BusyOverlay } from '../features/pages/BusyOverlay';
 import { ChooseSignatureDialog, CreateSignatureDialog } from '../features/signatures/SignatureDialogs';
 import { CombineDialog, PageDialogs, SourcePasswordDialog } from '../features/pages/PageDialogs';
@@ -124,6 +125,7 @@ export function App() {
       {prompt && <PromptDialog key={`${prompt.kind}-${prompt.tabId}`} prompt={prompt} />}
       <Notices />
       <DropOverlay />
+      <TooltipHost />
     </div>
   );
 }

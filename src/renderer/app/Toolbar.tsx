@@ -97,7 +97,7 @@ function ZoomSelect({ tab }: { tab: TabState }) {
     <select
       className={styles.select}
       aria-label={t('toolbar.zoomSelect')}
-      title={t('toolbar.zoomSelect')}
+      data-tooltip={t('toolbar.zoomSelect')}
       data-testid="zoom-select"
       value={selectValue}
       onChange={(event) => {
@@ -131,7 +131,7 @@ function ViewModeSelect({ tab }: { tab: TabState }) {
     <select
       className={styles.select}
       aria-label={t('toolbar.viewMode')}
-      title={t('toolbar.viewMode')}
+      data-tooltip={t('toolbar.viewMode')}
       data-testid="view-mode-select"
       value={tab.viewMode}
       onChange={(event) => {

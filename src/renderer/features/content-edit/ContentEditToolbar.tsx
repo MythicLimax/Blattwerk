@@ -78,7 +78,7 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
         className={styles.select}
         value={style.font}
         aria-label={t('contentEdit.font')}
-        title={t('contentEdit.font')}
+        data-tooltip={t('contentEdit.font')}
         onChange={(event) => useContentEdit.getState().setStyle({ font: event.target.value as StampFont })}
         data-testid="content-font"
       >
@@ -92,7 +92,7 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
         className={styles.select}
         value={style.size}
         aria-label={t('contentEdit.size')}
-        title={t('contentEdit.size')}
+        data-tooltip={t('contentEdit.size')}
         onChange={(event) => useContentEdit.getState().setStyle({ size: Number(event.target.value) })}
         data-testid="content-size"
       >
@@ -111,7 +111,7 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
             aria-checked={style.color === color}
             className={styles.swatch}
             style={{ background: toCss(color) }}
-            title={t(`stamp.colors.${id}`)}
+            data-tooltip={t(`stamp.colors.${id}`)}
             aria-label={t(`stamp.colors.${id}`)}
             onClick={() => useContentEdit.getState().setStyle({ color })}
           />

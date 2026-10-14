@@ -56,7 +56,7 @@ export function StartScreen() {
                     type="button"
                     className={styles.remove}
                     aria-label={t('start.remove')}
-                    title={t('start.remove')}
+                    data-tooltip={t('start.remove')}
                     onClick={() => void api.recent.remove(file.path).then(setRecent)}
                   >
                     <X size={14} aria-hidden="true" />

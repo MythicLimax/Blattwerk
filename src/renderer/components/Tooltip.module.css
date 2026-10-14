@@ -1,0 +1,18 @@
+.tooltip {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-width: 260px;
+  padding: 3px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-popover);
+  font: var(--font-size-sm) / 1.35 var(--font-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  user-select: none;
+}

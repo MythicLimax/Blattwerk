@@ -167,3 +167,18 @@ test('Absturz der Anzeige: Neu laden stellt die App wieder her', async () => {
   expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
   await close();
 });
+
+test('Beschriftung erscheint beim Überfahren unter dem Symbol', async () => {
+  const { page, close } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, TEXT_PDF.pages);
+  const button = page.getByTestId('print-button');
+  const tooltip = page.getByTestId('tooltip');
+  await button.hover();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toHaveText(/Drucken/);
+  const [buttonBox, tipBox] = [await button.boundingBox(), await tooltip.boundingBox()];
+  expect(tipBox && buttonBox && tipBox.y).toBeGreaterThanOrEqual((buttonBox?.y ?? 0) + (buttonBox?.height ?? 0));
+  await page.mouse.move(5, 400);
+  await expect(tooltip).toBeHidden();
+  await close();
+});

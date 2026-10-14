@@ -15,7 +15,7 @@ export function IconButton({ icon: Icon, label, pressed, size = 18, className, .
     <button
       type="button"
       className={[styles.button, pressed ? styles.pressed : '', className ?? ''].join(' ')}
-      title={label}
+      data-tooltip={label}
       aria-label={label}
       aria-pressed={pressed}
       {...rest}

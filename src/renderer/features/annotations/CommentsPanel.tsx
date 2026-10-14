@@ -294,7 +294,7 @@ const CommentCard = memo(function CommentCard({
               className={styles.statusSelect}
               value={status}
               aria-label={t('comments.statusLabel')}
-              title={t('comments.statusLabel')}
+              data-tooltip={t('comments.statusLabel')}
               onChange={(event) => setStatus(tabId, a.id, event.target.value as ReviewStatus)}
               data-testid="comment-status"
             >
