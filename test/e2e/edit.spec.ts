@@ -291,6 +291,36 @@ test.describe('Inhalt bearbeiten', () => {
 
   const line = (page: Page, text: string) => page.locator(`[data-testid="content-object"][data-text="${text}"]`).first();
 
+  test('Absatz bearbeiten: der Text bricht in der Breite des Absatzes neu um', async () => {
+    const dir = tempDir();
+    const file = path.join(dir, 'absatz.pdf');
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const pdfPage = doc.addPage([595, 842]);
+    ['Dies ist der erste Absatz eines Briefes. Er ist so', 'lang, dass er über drei Zeilen läuft und am Ende', 'kurz aufhört.'].forEach((text, i) =>
+      pdfPage.drawText(text, { x: 60, y: 700 - i * 16, size: 12, font }),
+    );
+    writeFileSync(file, await doc.save());
+    const { page, app, close } = await launchApp([file], { userData: dir });
+    await waitForDocument(page, 1);
+    await page.getByTestId('content-edit-button').click();
+    await menuClick(app, 'view.fitPage');
+    const texts = page.locator('[data-testid="content-object"][data-kind="text"]');
+    await expect(texts).toHaveCount(1);
+    await texts.first().dblclick();
+    const editor = page.getByTestId('content-text-editor');
+    await expect(editor).toHaveValue('Dies ist der erste Absatz eines Briefes. Er ist so lang, dass er über drei Zeilen läuft und am Ende kurz aufhört.');
+    await editor.fill('Dies ist der erste Absatz eines Briefes. Er ist jetzt deutlich länger geworden, weil ein ganzer Satz dazugekommen ist, und braucht deshalb mehr Zeilen.');
+    // Eingabe allein beginnt eine neue Zeile, Cmd+Eingabe übernimmt
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Gruß');
+    await page.keyboard.press('Meta+Enter');
+    await expect(editor).toHaveCount(0);
+    await expect(texts.first()).toHaveAttribute('data-text', /^Dies ist der erste Absatz eines Briefes\. Er ist jetzt deutlich länger.*Zeilen\.\nGruß$/s);
+    await close();
+  });
+
   test('Doppelklick bearbeitet die ganze Zeile, auch wenn das PDF sie in Stücken speichert', async () => {
     const dir = tempDir();
     const file = path.join(dir, 'stuecke.pdf');

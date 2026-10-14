@@ -16,7 +16,7 @@ export interface SelectedObject {
 // Texteingabe direkt auf der Seite: neue Zeilen an einer Stelle oder eine vorhandene Zeile ändern
 export type TextEditing =
   | { tabId: string; pageIndex: number; mode: 'new'; at: Point }
-  | { tabId: string; pageIndex: number; mode: 'edit'; index: number; merge: number[]; bounds: Rect; text: string; fontSize: number; font?: string };
+  | { tabId: string; pageIndex: number; mode: 'edit'; index: number; merge: number[]; bounds: Rect; text: string; fontSize: number; font?: string; lines?: number[][] };
 
 export interface TextStyle {
   font: StampFont;

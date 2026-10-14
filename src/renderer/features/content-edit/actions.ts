@@ -60,6 +60,15 @@ export async function editText(tabId: string, pageIndex: number, index: number, 
 }
 
 // members: alle Objekte der Einheit (index ist ihr Anker)
+// Absatz: Text mit harten Umbrüchen, der Worker bricht in der Breite des Absatzes um
+export async function editParagraph(tabId: string, pageIndex: number, lines: number[][], value: string, before: string): Promise<boolean> {
+  const text = value.replace(/\r/g, '').replace(/[ \t]+$/gm, '');
+  if (text === before) return false;
+  if (text.trim() === '') return run(tabId, { type: 'delete', pageIndex, indices: lines.flat() });
+  return run(tabId, { type: 'editParagraph', pageIndex, lines, text });
+}
+
+// members: alle Objekte der Einheit (index ist ihr Anker)
 export async function transformObject(tabId: string, pageIndex: number, index: number, members: number[], matrix: Matrix, bounds: Rect): Promise<void> {
   const store = useContentEdit.getState();
   store.setPending(tabId, { pageIndex, index, bounds });

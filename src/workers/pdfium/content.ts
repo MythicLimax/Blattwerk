@@ -115,7 +115,8 @@ export function listPageObjects(m: Pdfium, doc: number, pageIndex: number): Page
           const fontSize = size?.[0] ?? 0;
           const matrix = readFloats(m, 6, (ptr) => Boolean(m.FPDFPageObj_GetMatrix(object, ptr)));
           const scale = matrix ? Math.hypot(matrix[2] ?? 0, matrix[3] ?? 0) : 1;
-          Object.assign(info, { text, fontSize, visualSize: fontSize * (scale || 1), font: key, color: fillColor(m, object) });
+          const upright = matrix !== null && (matrix[0] ?? 0) > 0 && (matrix[3] ?? 0) > 0 && Math.abs(matrix[1] ?? 0) < 1e-3 && Math.abs(matrix[2] ?? 0) < 1e-3;
+          Object.assign(info, { text, fontSize, visualSize: fontSize * (scale || 1), font: key, color: fillColor(m, object), upright, ...(upright ? { baseline: matrix[5] } : {}) });
         }
         objects.push(info);
       }
@@ -180,6 +181,8 @@ function objectAt(m: Pdfium, page: number, index: number): number {
 
 // Wendet eine Inhaltsoperation an und schreibt den Inhalt der Seite neu.
 export function applyContentOperation(m: Pdfium, doc: number, operation: ContentOperation, memory: Allocations): void {
+  // Vorher auflisten: Ein zweites Laden derselben Seite, während sie offen ist, macht Schrift-Handles ungültig
+  const listing = operation.type === 'editParagraph' ? listPageObjects(m, doc, operation.pageIndex) : null;
   withPage(m, doc, operation.pageIndex, (page) => {
     switch (operation.type) {
       case 'addText': {
@@ -239,6 +242,9 @@ export function applyContentOperation(m: Pdfium, doc: number, operation: Content
         }
         break;
       }
+      case 'editParagraph':
+        if (listing) setParagraph(m, doc, page, listing, operation.lines, operation.text);
+        break;
     }
     if (!m.FPDFPage_GenerateContent(page)) throw new ContentError(`Seite ${operation.pageIndex + 1} lässt sich nicht neu schreiben`);
   });
@@ -267,4 +273,108 @@ function replaceText(m: Pdfium, doc: number, page: number, pageIndex: number, in
   if (matrix) withFloats(m, matrix, (ptr) => m.FPDFPageObj_SetMatrix(replacement, ptr));
   m.FPDFPage_InsertObjectAtIndex(page, replacement, index);
   if (m.FPDFPage_RemoveObject(page, object)) m.FPDFPageObj_Destroy(object);
+}
+
+function removeObject(m: Pdfium, page: number, object: number): void {
+  if (m.FPDFPage_RemoveObject(page, object)) m.FPDFPageObj_Destroy(object);
+}
+
+// Absatz neu setzen (siehe ContentOperation editParagraph). Die Zeilen behalten Schrift, Größe, Farbe, linken Rand
+// und Zeilenabstand; umgebrochen wird in der bisherigen Breite mit den echten Zeichenbreiten der Schrift. Kennt die
+// Schrift nicht alle Zeichen, bekommt der ganze Absatz eine ähnliche Standardschrift.
+function setParagraph(m: Pdfium, doc: number, page: number, listing: PageObjects, lines: number[][], text: string): void {
+  if (lines.length === 0 || lines.some((line) => line.length === 0)) throw new ContentError('Absatz ohne Zeilen');
+  const infos = new Map(listing.objects.map((info) => [info.index, info]));
+  // Erst alle Objekte holen: Nach dem Entfernen gelten die Positionen in der Objektliste nicht mehr
+  const groups = lines.map((members) =>
+    members.map((index) => {
+      const object = objectAt(m, page, index);
+      if (m.FPDFPageObj_GetType(object) !== OBJECT.text) throw new ContentError(`Objekt ${index} ist kein Text`);
+      return object;
+    }),
+  );
+  const anchors = groups.map((group) => group[0] as number);
+  const matrices = anchors.map((anchor) => readFloats(m, 6, (ptr) => Boolean(m.FPDFPageObj_GetMatrix(anchor, ptr))));
+  if (matrices.some((matrix) => !matrix || Math.abs(matrix[1] ?? 0) > 1e-3 || Math.abs(matrix[2] ?? 0) > 1e-3 || (matrix[0] ?? 0) <= 0)) {
+    throw new ContentError('Absatz ist gedreht');
+  }
+  const [first, ...rest] = matrices as number[][];
+  const firstInfo = infos.get(lines[0]?.[0] ?? -1);
+  if (!first || !firstInfo) throw new ContentError('Absatz fehlt');
+  const right = Math.max(...lines.flat().map((index) => infos.get(index)?.bounds[2] ?? -Infinity));
+  const firstX = first[4] ?? 0;
+  const restX = rest[0]?.[4] ?? firstX;
+  const lastY = (matrices[matrices.length - 1] as number[])[5] ?? 0;
+  const gap = lines.length > 1 ? ((first[5] ?? 0) - lastY) / (lines.length - 1) : (firstInfo.visualSize ?? 12) * LINE_HEIGHT;
+  if (!(gap > 0)) throw new ContentError('Zeilenabstand unbekannt');
+
+  const font = firstInfo.font ? listing.fonts[firstInfo.font] : undefined;
+  const substitute = missingChars(text, font) !== '';
+  if (substitute) {
+    const impossible = missingChars(text, undefined);
+    if (impossible) throw new ContentError(impossible, 'content-characters');
+  }
+  const size = firstInfo.fontSize ?? 12;
+  const color = firstInfo.color ?? { r: 0, g: 0, b: 0 };
+  const originalFont = m.FPDFTextObj_GetFont(anchors[0] as number);
+  const renderMode = m.FPDFTextObj_GetTextRenderMode(anchors[0] as number);
+  const replacementFont = substituteFont(font?.name ?? '', m.FPDFFont_GetWeight(originalFont));
+  const make = (value: string): number => {
+    let object: number;
+    if (substitute) object = newTextObject(m, doc, replacementFont, size, value, color);
+    else {
+      object = m.FPDFPageObj_CreateTextObj(doc, originalFont, size);
+      if (!object) throw new ContentError('Textobjekt lässt sich nicht anlegen');
+      withWString(m, value, (ptr) => m.FPDFText_SetText(object, ptr));
+      m.FPDFPageObj_SetFillColor(object, byte(color.r), byte(color.g), byte(color.b), 255);
+    }
+    m.FPDFTextObj_SetTextRenderMode(object, renderMode);
+    return object;
+  };
+  const place = (object: number, matrix: number[]) => withFloats(m, matrix, (ptr) => m.FPDFPageObj_SetMatrix(object, ptr));
+
+  // Messen mit einem Objekt in derselben Schrift und Skalierung, Ursprung bei 0 (PDFium stürzt bei leerem Text in
+  // neu angelegten Objekten ab; gemessen wird deshalb nie ein leerer Text)
+  const ruler = make('x');
+  place(ruler, [first[0] ?? 1, 0, 0, first[3] ?? 1, 0, 0]);
+  const widthOf = (value: string): number => {
+    withWString(m, value, (ptr) => m.FPDFText_SetText(ruler, ptr));
+    return readFloats(m, 4, (ptr) => Boolean(m.FPDFPageObj_GetBounds(ruler, ptr, ptr + 4, ptr + 8, ptr + 12)))?.[2] ?? 0;
+  };
+  const out: string[] = [];
+  try {
+    for (const block of text.split('\n')) {
+      const words = block.split(/[ \t]+/).filter((word) => word !== '');
+      let current = '';
+      for (const word of words) {
+        const candidate = current ? `${current} ${word}` : word;
+        // Ein Wort, das allein nicht passt, steht in einer eigenen Zeile
+        if (!current || (out.length === 0 ? firstX : restX) + widthOf(candidate) <= right + 0.5) current = candidate;
+        else {
+          out.push(current);
+          current = word;
+        }
+      }
+      out.push(current);
+    }
+  } finally {
+    m.FPDFPageObj_Destroy(ruler);
+  }
+  while (out.length > 0 && out[out.length - 1] === '') out.pop();
+
+  groups.forEach((group, i) => {
+    const value = out[i];
+    const keepAnchor = !substitute && value !== undefined && value !== '';
+    group.forEach((object, j) => {
+      if (j === 0 && keepAnchor) withWString(m, value, (ptr) => m.FPDFText_SetText(object, ptr));
+      else removeObject(m, page, object);
+    });
+  });
+  out.forEach((value, i) => {
+    if (value === '' || (!substitute && i < anchors.length)) return;
+    const object = make(value);
+    const own = matrices[i];
+    place(object, own ?? [first[0] ?? 1, 0, 0, first[3] ?? 1, restX, (first[5] ?? 0) - i * gap]);
+    m.FPDFPage_InsertObject(page, object);
+  });
 }

@@ -5,7 +5,7 @@ import { editUnits, missingChars, scalingAbout, translation, type EditUnit, type
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
 import { useContentEdit, type TextEditing } from '../../state/content-edit-store';
-import { addText, baselineOffset, editText, transformObject } from './actions';
+import { addText, baselineOffset, editParagraph, editText, transformObject } from './actions';
 import styles from './ContentEditOverlay.module.css';
 import { pageObjects } from './page-objects';
 
@@ -156,11 +156,12 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
       text: unit.text ?? '',
       fontSize: unit.visualSize ?? unit.fontSize ?? 12,
       ...(unit.font ? { font: unit.font } : {}),
+      ...(unit.lines ? { lines: unit.lines } : {}),
     });
   };
 
   const handleSize = pxToUnits(8, scale);
-  const objects = useMemo(() => editUnits(listing?.objects ?? []), [listing]);
+  const objects = useMemo(() => editUnits(listing?.objects ?? [], listing?.fonts), [listing]);
 
   return (
     <>
@@ -267,7 +268,9 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
     done.current = true;
     useContentEdit.getState().setEditing(null);
     if (impossible) return;
-    if (editing.mode === 'edit') {
+    if (editing.mode === 'edit' && editing.lines) {
+      void editParagraph(editing.tabId, editing.pageIndex, editing.lines, value, initial);
+    } else if (editing.mode === 'edit') {
       void editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, value, initial);
     } else {
       const baseline = geometry.toPdf(editing.at.x, editing.at.y + baselineOffset(style.size));
@@ -280,13 +283,15 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
     useContentEdit.getState().setEditing(null);
   };
 
+  const paragraph = editing.mode === 'edit' && editing.lines !== undefined;
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     event.stopPropagation();
     if (event.key === 'Escape') {
       event.preventDefault();
       cancel();
-    } else if (event.key === 'Enter' && (editing.mode === 'edit' || event.metaKey || event.ctrlKey)) {
-      // Vorhandene Zeile: Eingabe übernimmt; neuer Text: Cmd+Eingabe (Eingabe allein beginnt eine neue Zeile)
+    } else if (event.key === 'Enter' && ((editing.mode === 'edit' && !paragraph) || event.metaKey || event.ctrlKey)) {
+      // Vorhandene Zeile: Eingabe übernimmt; neuer Text und Absätze: Cmd+Eingabe (Eingabe allein beginnt eine neue Zeile)
       event.preventDefault();
       commit();
     }
@@ -299,20 +304,22 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
     left: `${(box.x / geometry.width) * 100}%`,
     top: `${(box.y / geometry.height) * 100}%`,
     minWidth: editing.mode === 'edit' ? `${(box.w / geometry.width) * 100}%` : `${12 * fontSize}px`,
+    // Absatz: feste Breite, die Eingabe bricht um wie später der Absatz
+    ...(paragraph ? { width: `${(box.w / geometry.width) * 100}%`, whiteSpace: 'normal' as const } : {}),
   };
 
   return (
     <div className={styles.editorWrap} style={position}>
       <textarea
         ref={ref}
-        className={styles.editor}
+        className={[styles.editor, paragraph ? styles.paragraph : ''].join(' ')}
         style={{
           fontSize: `${fontSize}px`,
           lineHeight: 1.2,
           ...lookOf(editing.mode === 'edit' ? (font?.name ?? '') : style.font),
           color: editing.mode === 'new' ? `rgb(${style.color.r * 255} ${style.color.g * 255} ${style.color.b * 255})` : undefined,
         }}
-        rows={editing.mode === 'edit' ? 1 : Math.max(1, value.split('\n').length)}
+        rows={editing.mode === 'edit' && !paragraph ? 1 : Math.max(1, value.split('\n').length)}
         value={value}
         aria-label={t('contentEdit.textInput')}
         onChange={(event) => setValue(event.target.value)}

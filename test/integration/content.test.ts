@@ -9,7 +9,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { editUnits, lineOf, lineText, missingChars, scalingAbout, translation, type ContentOperation } from '../../src/shared/content';
+import { editUnits, lineOf, lineText, paragraphText, missingChars, scalingAbout, translation, type ContentOperation } from '../../src/shared/content';
 import { PdfiumEngine } from '../../src/workers/pdfium/engine';
 import { fixture, imageFixture } from '../fixtures/expectations';
 
@@ -46,6 +46,88 @@ async function items(bytes: Uint8Array, pageNumber = 1): Promise<Item[]> {
 }
 
 describe('Inhalt bearbeiten', () => {
+  async function paragraphPdf(): Promise<Uint8Array> {
+    // Absatz wie aus einem Textprogramm: nummeriert, Zeilen in Stücken, letzte Zeile kurz; darunter eine Adresse
+    // (schmal: bleibt einzelne Zeilen)
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page0 = doc.addPage([400, 400]);
+    page0.drawText('1.', { x: 30, y: 300, size: 10, font });
+    const lines = [['Dies ist ein Absatz,', 'der über mehrere'], ['Zeilen läuft und', 'am rechten Rand'], ['umbricht.']];
+    lines.forEach((pieces, i) => {
+      let x = 50;
+      for (const piece of pieces) {
+        page0.drawText(piece, { x, y: 300 - i * 14, size: 10, font });
+        x += font.widthOfTextAtSize(piece, 10) + font.widthOfTextAtSize(' ', 10);
+      }
+    });
+    ['Max Muster', 'Hauptstraße 1', '12345 Ort'].forEach((line, i) => page0.drawText(line, { x: 50, y: 200 - i * 14, size: 10, font }));
+    return doc.save({ useObjectStreams: false });
+  }
+
+  it('Ligaturen in einem eigenen Schriftteil trennen die Zeile nicht', async () => {
+    // Word legt „ft“, „ff“, „fl“ … oft in eine zweite Schrift gleichen Namens
+    const doc = await PDFDocument.create();
+    const main = await doc.embedFont(StandardFonts.Helvetica);
+    const ligatures = await doc.embedFont(StandardFonts.Helvetica);
+    const page0 = doc.addPage([400, 200]);
+    let x = 20;
+    for (const [piece, font] of [['Arbeitsau', main], ['ft', ligatures], ['räge:', main]] as const) {
+      page0.drawText(piece, { x, y: 100, size: 20, font });
+      x += font.widthOfTextAtSize(piece, 20);
+    }
+    const listing = engine.listObjects(await doc.save({ useObjectStreams: false }), null, [0])[0];
+    expect(new Set(listing?.objects.map((o) => o.font)).size).toBe(2);
+    expect(editUnits(listing?.objects ?? [], listing?.fonts).map((unit) => unit.text)).toEqual(['Arbeitsaufträge:']);
+  });
+
+  it('erkennt Absätze mit gewollten und automatischen Umbrüchen', async () => {
+    const bytes = await paragraphPdf();
+    const listing = engine.listObjects(bytes, null, [0])[0];
+    const units = editUnits(listing?.objects ?? [], listing?.fonts);
+    const texts = units.map((unit) => [unit.text, unit.lines?.length ?? 1]);
+    expect(texts).toContainEqual(['Dies ist ein Absatz, der über mehrere Zeilen läuft und am rechten Rand umbricht.', 3]);
+    for (const line of ['Max Muster', 'Hauptstraße 1', '12345 Ort']) expect(texts).toContainEqual([line, 1]);
+    expect(texts).toContainEqual(['1.', 1]);
+    expect(paragraphText([
+      { index: 0, kind: 'text', bounds: [0, 20, 100, 30], text: 'Silben-', fontSize: 10 },
+      { index: 1, kind: 'text', bounds: [0, 6, 40, 16], text: 'trennung', fontSize: 10 },
+    ])).toBe('Silbentrennung');
+    // Kurze Zeile mitten im Absatz: gewollter Umbruch
+    expect(paragraphText([
+      { index: 0, kind: 'text', bounds: [0, 34, 300, 44], text: 'Eine volle Zeile', fontSize: 10 },
+      { index: 1, kind: 'text', bounds: [0, 20, 60, 30], text: 'Ende.', fontSize: 10 },
+      { index: 2, kind: 'text', bounds: [0, 6, 280, 16], text: 'Neuer Gedanke', fontSize: 10 },
+    ])).toBe('Eine volle Zeile Ende.\nNeuer Gedanke');
+  });
+
+  it('bricht einen geänderten Absatz in seiner Breite neu um', async () => {
+    const bytes = await paragraphPdf();
+    const listing = engine.listObjects(bytes, null, [0])[0];
+    const paragraph = editUnits(listing?.objects ?? [], listing?.fonts).find((unit) => unit.text?.startsWith('Dies ist'));
+    const text = 'Dies ist ein deutlich längerer Absatz, der nach der Änderung mehr Zeilen braucht als vorher und trotzdem links bündig bleibt.\nNeue Zeile.';
+    const output = run(bytes, [{ type: 'editParagraph', pageIndex: 0, lines: paragraph?.lines ?? [], text }]);
+    const list = (await items(output)).filter((item) => (item.transform[4] ?? 0) >= 49 && (item.transform[5] ?? 0) > 220);
+    // Alle Zeilen links bei 50, Abstand 14, keine breiter als der alte Absatz
+    const right = Math.max(...(paragraph?.lines ?? []).flat().map((i) => listing?.objects.find((o) => o.index === i)?.bounds[2] ?? 0));
+    expect(list.map((item) => Math.round((item.transform[4] ?? 0)))).toEqual(list.map(() => 50));
+    expect(list.map((item) => Math.round((item.transform[5] ?? 0)))).toEqual(list.map((_, i) => 300 - i * 14));
+    const font = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+    for (const item of list) expect(50 + font.widthOfTextAtSize(item.str, 10)).toBeLessThanOrEqual(right + 1);
+    expect(list.map((item) => item.str).join(' ').replace(' Neue Zeile.', '\nNeue Zeile.')).toBe(text);
+    expect(list.at(-1)?.str).toBe('Neue Zeile.');
+    expect(list.length).toBeGreaterThan(3);
+    // Nummer und Adresse unverändert
+    const all = (await items(output)).map((item) => item.str);
+    expect(all).toEqual(expect.arrayContaining(['1.', 'Max Muster', 'Hauptstraße 1', '12345 Ort']));
+
+    // Kürzer: überzählige Zeilen verschwinden
+    const short = run(bytes, [{ type: 'editParagraph', pageIndex: 0, lines: paragraph?.lines ?? [], text: 'Kurz.' }]);
+    const shortList = (await items(short)).filter((item) => (item.transform[5] ?? 0) > 220 && (item.transform[4] ?? 0) >= 49);
+    expect(shortList.map((item) => item.str)).toEqual(['Kurz.']);
+  });
+
+
   it('fasst Textstücke einer Zeile zusammen und ändert sie als Ganzes', async () => {
     // Wie aus Textprogrammen: eine Zeile in mehreren Stücken, dazu ein fettes Wort und eine zweite Spalte
     const doc = await PDFDocument.create();

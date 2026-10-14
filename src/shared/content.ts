@@ -21,6 +21,10 @@ export interface PageObjectInfo {
   // Schlüssel in PageObjects.fonts
   font?: string;
   color?: Rgb;
+  // Text läuft waagerecht von links nach rechts (nicht gedreht oder gespiegelt); nur solche Zeilen bilden Absätze
+  upright?: boolean;
+  // Höhe der Grundlinie (nur bei upright)
+  baseline?: number;
 }
 
 export interface PageFontInfo {
@@ -50,7 +54,10 @@ export type ContentOperation =
   | { type: 'delete'; pageIndex: number; indices: number[] }
   // Text einer vorhandenen Zeile ersetzen. merge: weitere Textstücke derselben Zeile, die dabei entfallen (der neue
   // Text steht dann ganz im Objekt index)
-  | { type: 'editText'; pageIndex: number; index: number; text: string; merge?: number[] };
+  | { type: 'editText'; pageIndex: number; index: number; text: string; merge?: number[] }
+  // Absatz neu setzen: lines = Stücke je bisheriger Zeile (Anker zuerst), text mit harten Zeilenumbrüchen (\n). Der
+  // Worker bricht mit den echten Zeichenbreiten in der Breite des Absatzes um.
+  | { type: 'editParagraph'; pageIndex: number; lines: number[][]; text: string };
 
 // Höchstens so viele Objekte je Seite werden zum Bearbeiten angeboten
 export const MAX_PAGE_OBJECTS = 3000;
@@ -104,8 +111,14 @@ const sameRgb = (a: Rgb | undefined, b: Rgb | undefined) =>
 
 const sizeOf = (object: PageObjectInfo) => object.visualSize ?? object.fontSize ?? 0;
 
-function sameLine(a: PageObjectInfo, b: PageObjectInfo): boolean {
-  if (a.kind !== 'text' || b.kind !== 'text' || a.font !== b.font || !sameRgb(a.color, b.color)) return false;
+// Schriften vergleichen über den Namen: Textprogramme legen Ligaturen (fi, ff, ft …) oft in einen eigenen Teil derselben
+// Schrift, der in der PDF-Datei eine eigene Schrift ist.
+type Fonts = Record<string, PageFontInfo> | undefined;
+const sameFont = (a: PageObjectInfo, b: PageObjectInfo, fonts: Fonts) =>
+  a.font === b.font || (a.font !== undefined && b.font !== undefined && Boolean(fonts?.[a.font]?.name) && fonts?.[a.font]?.name === fonts?.[b.font]?.name);
+
+function sameLine(a: PageObjectInfo, b: PageObjectInfo, fonts: Fonts): boolean {
+  if (a.kind !== 'text' || b.kind !== 'text' || !sameFont(a, b, fonts) || !sameRgb(a.color, b.color)) return false;
   const size = sizeOf(a);
   if (size <= 0 || Math.abs(size - sizeOf(b)) > size * 0.05) return false;
   // Höhe: Grundlinien nahe beieinander (die Unterkante schwankt mit Unterlängen, deshalb Mitte und Überlappung)
@@ -116,10 +129,10 @@ function sameLine(a: PageObjectInfo, b: PageObjectInfo): boolean {
 }
 
 // Alle Stücke der Zeile, zu der das Objekt index gehört, von links nach rechts
-export function lineOf(objects: PageObjectInfo[], index: number): PageObjectInfo[] {
+export function lineOf(objects: PageObjectInfo[], index: number, fonts?: Record<string, PageFontInfo>): PageObjectInfo[] {
   const start = objects.find((object) => object.index === index);
   if (!start || start.kind !== 'text') return start ? [start] : [];
-  const candidates = objects.filter((object) => object === start || sameLine(start, object)).sort((a, b) => a.bounds[0] - b.bounds[0]);
+  const candidates = objects.filter((object) => object === start || sameLine(start, object, fonts)).sort((a, b) => a.bounds[0] - b.bounds[0]);
   const at = candidates.indexOf(start);
   const size = sizeOf(start);
   const fits = (left: PageObjectInfo, right: PageObjectInfo) => {
@@ -147,9 +160,10 @@ export function lineText(pieces: PageObjectInfo[]): string {
 
 // Seitenobjekte für die Bearbeitung: Textstücke einer Zeile als eine Einheit (Anker = erstes Stück, members = alle
 // Stücke einschließlich Anker), Bilder und Grafikgruppen einzeln
-export type EditUnit = PageObjectInfo & { members: number[] };
+// lines: nur bei Absätzen, Stücke je Zeile
+export type EditUnit = PageObjectInfo & { members: number[]; lines?: number[][] };
 
-export function editUnits(objects: PageObjectInfo[]): EditUnit[] {
+export function editUnits(objects: PageObjectInfo[], fonts?: Record<string, PageFontInfo>): EditUnit[] {
   const assigned = new Set<number>();
   const units: EditUnit[] = [];
   for (const object of objects) {
@@ -158,12 +172,104 @@ export function editUnits(objects: PageObjectInfo[]): EditUnit[] {
       units.push({ ...object, members: [object.index] });
       continue;
     }
-    const pieces = lineOf(objects, object.index).filter((piece) => !assigned.has(piece.index));
+    const pieces = lineOf(objects, object.index, fonts).filter((piece) => !assigned.has(piece.index));
     for (const piece of pieces) assigned.add(piece.index);
     const [anchor = object] = pieces;
     units.push({ ...anchor, bounds: unionBounds(pieces), text: lineText(pieces), members: pieces.map((piece) => piece.index) });
   }
-  return units;
+  return groupParagraphs(units, fonts);
+}
+
+// Zeilen, die direkt untereinander stehen, links bündig sind (die erste darf eingerückt sein), gleich aussehen und
+// gleichmäßigen Abstand haben, bilden einen Absatz. Zeilen mit weiteren Textstücken daneben (anders formatiertes
+// Wort, zweite Spalte) und gedrehter Text bleiben einzelne Zeilen.
+function sameStyle(a: PageObjectInfo, b: PageObjectInfo, fonts: Fonts): boolean {
+  const size = sizeOf(a);
+  return sameFont(a, b, fonts) && sameRgb(a.color, b.color) && size > 0 && Math.abs(size - sizeOf(b)) <= size * 0.05;
+}
+
+function groupParagraphs(units: EditUnit[], fonts: Fonts): EditUnit[] {
+  const texts = units.filter((unit) => unit.kind === 'text');
+  // Nur Textspalten: Sehr schmale Blöcke (Adressen, Tabellenzellen) bleiben einzelne Zeilen, dort sind Umbrüche fast
+  // immer gewollt
+  const lines = texts.filter((unit) => unit.upright === true && unit.baseline !== undefined && sizeOf(unit) > 0).sort((a, b) => b.bounds[3] - a.bounds[3]);
+  // Weitere Textstücke in derselben Zeile innerhalb der Breite [left, right]? Links davor (Nummer, Aufzählungszeichen)
+  // stört nicht.
+  const hasNeighbour = (line: EditUnit, left: number, right: number) =>
+    texts.some((other) => {
+      if (other === line) return false;
+      const middle = (other.bounds[1] + other.bounds[3]) / 2;
+      return middle > line.bounds[1] && middle < line.bounds[3] && other.bounds[0] < right && other.bounds[2] > left;
+    });
+  const used = new Set<EditUnit>();
+  const paragraphs: EditUnit[][] = [];
+  for (const start of lines) {
+    if (used.has(start)) continue;
+    const size = sizeOf(start);
+    const paragraph = [start];
+    let left = start.bounds[0];
+    let right = start.bounds[2];
+    if (hasNeighbour(start, left, right + size)) continue;
+    let gap = 0;
+    for (;;) {
+      const current = paragraph[paragraph.length - 1] as EditUnit;
+      // Nächste Zeile darunter, die sich waagerecht mit dem Absatz überschneidet
+      const next = lines.find(
+        (line) => !used.has(line) && !paragraph.includes(line) && line.bounds[3] < current.bounds[3] - size * 0.5 && line.bounds[0] < right && line.bounds[2] > left,
+      );
+      if (!next || !sameStyle(start, next, fonts)) break;
+      const step = (current.baseline ?? 0) - (next.baseline ?? 0);
+      if (step < size * 0.9 || step > size * 2.3 || (gap > 0 && Math.abs(step - gap) > size * 0.15)) break;
+      const second = paragraph[1];
+      const aligned = second
+        ? Math.abs(next.bounds[0] - second.bounds[0]) <= size * 0.6
+        : Math.abs(next.bounds[0] - start.bounds[0]) <= size * 0.6 || (start.bounds[0] > next.bounds[0] && start.bounds[0] - next.bounds[0] <= size * 4);
+      if (!aligned || hasNeighbour(next, Math.min(left, next.bounds[0]), Math.max(right, next.bounds[2]))) break;
+      gap = gap || step;
+      paragraph.push(next);
+      left = Math.min(left, next.bounds[0]);
+      right = Math.max(right, next.bounds[2]);
+    }
+    if (paragraph.length < 2 || right - left < size * 12) continue;
+    for (const line of paragraph) used.add(line);
+    paragraphs.push(paragraph);
+  }
+  if (paragraphs.length === 0) return units;
+  const result = units.filter((unit) => !used.has(unit));
+  for (const paragraph of paragraphs) {
+    const [first] = paragraph as [EditUnit];
+    result.push({
+      ...first,
+      bounds: unionBounds(paragraph),
+      text: paragraphText(paragraph),
+      members: paragraph.flatMap((line) => line.members),
+      lines: paragraph.map((line) => line.members),
+    });
+  }
+  return result;
+}
+
+// Text eines Absatzes zum Bearbeiten. Endet eine Zeile deutlich vor dem rechten Rand, obwohl das erste Wort der
+// nächsten noch gepasst hätte, war der Umbruch gewollt (Adresse, Aufzählung, Absatzende): Er bleibt als \n erhalten.
+// Sonst werden die Zeilen mit Leerzeichen verbunden; Trennstriche am Zeilenende (Silbentrennung) entfallen.
+export function paragraphText(lines: PageObjectInfo[]): string {
+  const right = Math.max(...lines.map((line) => line.bounds[2]));
+  let text = '';
+  lines.forEach((line, i) => {
+    const own = (line.text ?? '').trim();
+    const next = lines[i + 1];
+    if (!next) {
+      text += own;
+      return;
+    }
+    const following = (next.text ?? '').trim();
+    const firstWord = following.split(/\s/)[0] ?? '';
+    const size = sizeOf(line);
+    if (line.bounds[2] + (firstWord.length * 0.5 + 0.3) * size < right) text += `${own}\n`;
+    else if (/\p{L}-$/u.test(own) && /^\p{Ll}/u.test(following)) text += own.slice(0, -1);
+    else text += `${own} `;
+  });
+  return text;
 }
 
 export function unionBounds(pieces: PageObjectInfo[]): Rect {
