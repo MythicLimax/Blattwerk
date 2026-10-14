@@ -13,6 +13,7 @@ type Gesture =
   | { kind: 'move'; object: PageObjectInfo; origin: Point; dx: number; dy: number }
   | { kind: 'scale'; object: PageObjectInfo; fixed: Point; to: Point };
 
+const MIN_EDITOR_PX = 11;
 const pxToUnits = (px: number, scale: number) => px / (scale * (96 / 72));
 
 function corners([l, b, r, t]: Rect): Point[] {
@@ -151,7 +152,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
       index: object.index,
       bounds: object.bounds,
       text: object.text ?? '',
-      fontSize: object.fontSize ?? 12,
+      fontSize: object.visualSize ?? object.fontSize ?? 12,
       ...(object.font ? { font: object.font } : {}),
     });
   };
@@ -289,7 +290,8 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
     }
   };
 
-  const fontSize = (editing.mode === 'edit' ? editing.fontSize : style.size) * viewScale;
+  // Bei kleinem Zoom bleibt die Eingabe lesbar, auch wenn sie dann etwas größer ist als der Text auf der Seite.
+  const fontSize = Math.max(MIN_EDITOR_PX, (editing.mode === 'edit' ? editing.fontSize : style.size) * viewScale);
   const box = editing.mode === 'edit' ? geometry.rectToView(editing.bounds) : { x: editing.at.x, y: editing.at.y, w: 0, h: 0 };
   const position = {
     left: `${(box.x / geometry.width) * 100}%`,

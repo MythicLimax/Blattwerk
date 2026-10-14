@@ -14,7 +14,10 @@ export interface PageObjectInfo {
   bounds: Rect;
   // nur Text
   text?: string;
+  // Schriftgröße im Textzustand (Tf). Viele PDFs setzen 1 und skalieren über die Textmatrix.
   fontSize?: number;
+  // Größe, in der der Text auf der Seite erscheint (Punkte, Tf mal senkrechte Skalierung)
+  visualSize?: number;
   // Schlüssel in PageObjects.fonts
   font?: string;
   color?: Rgb;

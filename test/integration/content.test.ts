@@ -2,7 +2,7 @@
 // Textzeilen ändern (mit Ersatzschrift, wenn Zeichen fehlen).
 import { init } from '@embedpdf/pdfium';
 import fontkit from '@cantoo/fontkit';
-import { degrees, PDFDocument } from '@cantoo/pdf-lib';
+import { degrees, PDFDocument, PDFName, StandardFonts } from '@cantoo/pdf-lib';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -46,6 +46,19 @@ async function items(bytes: Uint8Array, pageNumber = 1): Promise<Item[]> {
 }
 
 describe('Inhalt bearbeiten', () => {
+  it('liefert die sichtbare Schriftgröße auch bei skalierter Textmatrix', async () => {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([600, 800]);
+    page.node.setFontDictionary(PDFName.of('F1'), font.ref);
+    const stream = 'BT /F1 1 Tf 12 0 0 12 50 700 Tm (Tm) Tj ET q 2 0 0 2 0 0 cm BT /F1 10 Tf 25 300 Td (cm) Tj ET Q BT /F1 14 Tf 50 500 Td (normal) Tj ET';
+    page.node.set(PDFName.of('Contents'), doc.context.register(doc.context.stream(stream)));
+    const [listing] = engine.listObjects(await doc.save(), null, [0]);
+    const sizes = Object.fromEntries((listing?.objects ?? []).map((object) => [object.text, Math.round(object.visualSize ?? 0)]));
+    expect(sizes).toEqual({ Tm: 12, cm: 20, normal: 14 });
+  });
+
+
   it('listet Textzeilen mit Schrift, Größe und Lage', () => {
     const [page] = engine.listObjects(textPdf(), null, [0]);
     const heading = page?.objects.find((o) => o.text === 'Testdokument mit Text');

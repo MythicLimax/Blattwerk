@@ -112,7 +112,10 @@ export function listPageObjects(m: Pdfium, doc: number, pageIndex: number): Page
             fonts[key] = { name: fontName(m, font), embedded: Boolean(m.FPDFFont_GetIsEmbedded(font)), chars: null, seen: new Set(), handle: font };
           }
           for (const char of text) fonts[key]?.seen.add(char);
-          Object.assign(info, { text, fontSize: size?.[0] ?? 0, font: key, color: fillColor(m, object) });
+          const fontSize = size?.[0] ?? 0;
+          const matrix = readFloats(m, 6, (ptr) => Boolean(m.FPDFPageObj_GetMatrix(object, ptr)));
+          const scale = matrix ? Math.hypot(matrix[2] ?? 0, matrix[3] ?? 0) : 1;
+          Object.assign(info, { text, fontSize, visualSize: fontSize * (scale || 1), font: key, color: fillColor(m, object) });
         }
         objects.push(info);
       }
