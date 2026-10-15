@@ -3,11 +3,25 @@
 // (pdf-lib, nachgeladener Teil des Workers) und Speichern (PDFium-Worker aus dem App-Paket) funktionieren.
 // Aufruf: node scripts/smoke-packaged.mjs <Pfad zu Blattwerk.app>
 import { chromium } from '@playwright/test';
-import { spawn } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// Zählt die Fenster eines Prozesses, die auf dem Bildschirm sind (JavaScript for Automation, ohne Oberfläche)
+const WINDOW_COUNT_SCRIPT = `
+ObjC.import('CoreGraphics');
+function run(argv) {
+  const pid = Number(argv[0]);
+  const list = ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, 0));
+  let count = 0;
+  for (let i = 0; i < list.count; i++) {
+    if (ObjC.unwrap(list.objectAtIndex(i).objectForKey('kCGWindowOwnerPID')) === pid) count++;
+  }
+  return String(count);
+}
+`;
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appPath = process.argv[2];
@@ -20,7 +34,8 @@ copyFileSync(path.join(root, 'test/fixtures/pdfs/text.pdf'), file);
 const originalSize = readFileSync(file).length;
 
 const child = spawn(binary, [`--remote-debugging-port=${port}`, file], {
-  env: { ...process.env, BLATTWERK_USER_DATA: userData },
+  // Unsichtbar: kein Fenster und kein Dock-Symbol, der Auftraggeber arbeitet nebenher weiter
+  env: { ...process.env, BLATTWERK_USER_DATA: userData, BLATTWERK_HIDDEN: '1' },
   stdio: 'ignore',
 });
 try {
@@ -39,6 +54,15 @@ try {
   }
   if (!page) throw new Error('Kein Fenster');
   await page.getByTestId('page-count').waitFor({ timeout: 15000 });
+  // Muss unsichtbar laufen: macOS fragen, ob die App ein Fenster auf dem Bildschirm hat (die Seite selbst hält sich bei
+  // ungedrosseltem Zeichnen für sichtbar)
+  if (process.platform === 'darwin') {
+    const script = path.join(userData, 'fenster.js');
+    writeFileSync(script, WINDOW_COUNT_SCRIPT);
+    const windows = Number(execFileSync('osascript', ['-l', 'JavaScript', script, String(child.pid)], { encoding: 'utf8' }).trim());
+    console.log(`Fenster unsichtbar: ${windows === 0 ? 'ok' : `FEHLER (${windows} sichtbar)`}`);
+    if (windows !== 0) process.exitCode = 1;
+  }
   const count = await page.getByTestId('page-count').textContent();
   await page.locator('.pdfViewer .page canvas').first().waitFor({ timeout: 15000 });
   const url = page.url();
@@ -79,6 +103,9 @@ try {
   if (!fieldOk) process.exitCode = 1;
   await browser.close();
 } finally {
+  // Erst nach dem Beenden aufräumen (die App schreibt sonst noch in ihr Profil)
+  const exited = new Promise((resolve) => child.once('exit', resolve));
   child.kill();
-  rmSync(userData, { recursive: true, force: true });
+  await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5000))]);
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

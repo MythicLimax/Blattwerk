@@ -19,6 +19,11 @@ import { createMainWindow, createSettingsStore, type SettingsData, type WindowSt
 
 // Testschalter wirken nur beim Entwickeln, nie in der installierten App.
 const isE2E = !app.isPackaged && Boolean(process.env.BLATTWERK_E2E);
+// Tests unsichtbar: kein Fenster, kein Dock-Symbol, kein Wegnehmen des Fokus. Wirkt auch in der fertigen App
+// (Rauchtest), weil es nur die Anzeige unterdrückt und nichts an der Sicherheit ändert.
+const runHidden = (isE2E && !process.env.BLATTWERK_E2E_SHOW) || process.env.BLATTWERK_HIDDEN === '1';
+// So früh wie möglich, damit das Symbol gar nicht erst im Dock erscheint
+if (runHidden) app.dock?.hide();
 const devServerUrl = app.isPackaged ? null : (process.env.BLATTWERK_DEV_SERVER_URL ?? null);
 const devServerOrigin = devServerUrl ? new URL(devServerUrl).origin : null;
 
@@ -99,6 +104,8 @@ app.on('open-file', (event, filePath) => {
 });
 
 function revealWindow(win: BrowserWindow): void {
+  // Unsichtbare Testläufe holen das Fenster nie nach vorn
+  if (runHidden) return;
   if (win.isMinimized()) win.restore();
   win.focus();
 }
@@ -229,7 +236,7 @@ async function createWindow(): Promise<BrowserWindow> {
     preloadPath,
     state: windowState,
     devTools: !app.isPackaged || isE2E,
-    hidden: isE2E && !process.env.BLATTWERK_E2E_SHOW,
+    hidden: runHidden,
     onStateChange: (state) => {
       windowState = state;
       saveSettings({ window: state });
@@ -305,7 +312,6 @@ app.on('activate', () => {
 
 void app.whenReady().then(async () => {
   // Oberflächentests laufen unsichtbar: kein Fenster, kein Symbol im Dock, kein Wegnehmen des Fokus
-  if (isE2E && !process.env.BLATTWERK_E2E_SHOW) app.dock?.hide();
   hardenSession(devServerOrigin);
   handleAppScheme(rendererDir);
   recent = new RecentFiles(path.join(app.getPath('userData'), 'recent-files.json'));
