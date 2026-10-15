@@ -37,9 +37,7 @@ function glassModule(): GlassModule | null {
 export function attachNativeGlass(win: BrowserWindow): boolean {
   const glass = glassModule();
   if (!glass) return false;
-  const ok = glass.attach(win.getNativeWindowHandle());
-  if (ok) win.setBackgroundColor('#00000000');
-  return ok;
+  return glass.attach(win.getNativeWindowHandle());
 }
 
 export function setNativeGlassRegions(win: BrowserWindow, regions: GlassRegion[]): void {

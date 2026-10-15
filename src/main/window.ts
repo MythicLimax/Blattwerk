@@ -64,6 +64,9 @@ export interface CreateWindowOptions {
   devTools: boolean;
   // Oberflächentests: Fenster unsichtbar lassen (zeichnet trotzdem vollständig)
   hidden?: boolean;
+  // Durchsichtiges Fenster für Apples Liquid Glass (ADR 0023); muss beim Erzeugen feststehen, sonst löscht Chromium
+  // durchsichtig gewordene Bereiche nicht und zeigt alte Bilder
+  transparent?: boolean;
   onStateChange: (state: WindowState) => void;
 }
 
@@ -75,7 +78,9 @@ export function createMainWindow(options: CreateWindowOptions): BrowserWindow {
     minHeight: 480,
     show: false,
     title: PRODUCT_NAME,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1d1a' : '#f3efe6',
+    ...(options.transparent
+      ? { transparent: true, backgroundColor: '#00000000', hasShadow: true }
+      : { backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1d1a' : '#f3efe6' }),
     // macOS: Titelleiste und Werkzeugleiste in einem (wie Vorschau); die Leiste ist Zugfläche (global.css)
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 18 } } : {}),
     webPreferences: {

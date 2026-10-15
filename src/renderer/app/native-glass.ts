@@ -7,8 +7,8 @@ import type { GlassRegion } from '../../shared/ipc';
 import { api } from '../api';
 
 // Deckkraft der Tönung: genug Papierfarbe, damit Text gut lesbar bleibt
-const TINT_BAND = 0.55;
-const TINT_PANEL = 0.5;
+const TINT_BAND = 0.72;
+const TINT_PANEL = 0.68;
 
 function cssColor(name: string): [number, number, number] {
   const probe = document.createElement('span');

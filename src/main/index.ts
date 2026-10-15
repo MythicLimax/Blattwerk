@@ -16,7 +16,7 @@ import { applyMenu } from './menu';
 import { handleAppScheme, registerAppScheme } from './protocol';
 import { hardenSession, hardenWebContents, isTrustedAppUrl } from './security';
 import { createMainWindow, createSettingsStore, type SettingsData, type WindowState } from './window';
-import { attachNativeGlass, describeNativeGlass } from './native-glass';
+import { attachNativeGlass, describeNativeGlass, nativeGlassAvailable } from './native-glass';
 
 // Testschalter wirken nur beim Entwickeln, nie in der installierten App.
 const isE2E = !app.isPackaged && Boolean(process.env.BLATTWERK_E2E);
@@ -238,6 +238,7 @@ async function createWindow(): Promise<BrowserWindow> {
     state: windowState,
     devTools: !app.isPackaged || isE2E,
     hidden: runHidden,
+    transparent: nativeGlassAvailable(),
     onStateChange: (state) => {
       windowState = state;
       saveSettings({ window: state });
