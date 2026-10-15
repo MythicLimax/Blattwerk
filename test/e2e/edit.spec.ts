@@ -683,3 +683,33 @@ test.describe('Schriften des Rechners', () => {
     await close();
   });
 });
+
+test.describe('Verschieben mit Live-Vorschau', () => {
+  test('beim Ziehen wandert das Abbild mit, die alte Stelle ist abgedeckt', async () => {
+    const dir = tempDir();
+    const file = path.join(dir, 'ziehen.pdf');
+    copyFileSync(fixture('text.pdf'), file);
+    const { page, close } = await launchApp([file], { userData: dir });
+    await waitForDocument(page, TEXT_PDF.pages);
+    await page.getByTestId('content-edit-button').click();
+    const heading = page.locator('[data-testid="content-object"][data-text="Inhaltsverzeichnis"]').first();
+    const before = await heading.boundingBox();
+    if (!before) throw new Error('Zeile fehlt');
+    await page.mouse.move(before.x + 10, before.y + before.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(before.x + 60, before.y + before.height / 2 + 20, { steps: 4 });
+    await page.mouse.move(before.x + 110, before.y + before.height / 2 + 40, { steps: 4 });
+    // Noch nicht losgelassen: das Abbild steht schon an der neuen Stelle
+    const ghost = page.getByTestId('content-ghost');
+    await expect(ghost).toHaveCount(1);
+    const moved = await ghost.boundingBox();
+    expect((moved?.x ?? 0) - before.x).toBeGreaterThan(90);
+    expect((moved?.y ?? 0) - before.y).toBeGreaterThan(30);
+    expect(await ghost.getAttribute('href')).toMatch(/^data:image\/png;base64,/);
+    if (process.env.BLATTWERK_SHOT) await page.screenshot({ path: path.resolve('.tools/shots/verschieben-live.png') });
+    await page.mouse.up();
+    // Nach dem Loslassen steht die Zeile dort, wo das Abbild war
+    await expect.poll(async () => ((await heading.boundingBox())?.x ?? 0) - before.x).toBeGreaterThan(90);
+    await close();
+  });
+});

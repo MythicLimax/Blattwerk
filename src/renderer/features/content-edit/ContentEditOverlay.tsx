@@ -39,6 +39,73 @@ export function isUprightView(geometry: PageGeometry): boolean {
 const inToolbar = (target: EventTarget | null) =>
   target instanceof Element && target.closest('[data-testid="content-edit-toolbar"], [data-testid="content-size-list"]') !== null;
 
+// Live-Vorschau beim Verschieben und Skalieren: Abbild der Einheit aus dem gezeichneten Seitenbild, dazu die Farbe
+// des Hintergrunds um sie herum (verdeckt die alte Stelle, bis die geänderte Seite geladen ist)
+interface Ghost {
+  href: string;
+  background: string;
+}
+
+// Ränder (Ansichtseinheiten) um das Objekt, damit Unter- und Oberlängen mitkommen
+const GHOST_PAD = 1.5;
+
+// Papierweiß durchsichtig machen („Farbe zu Transparenz“): Nur der Inhalt wandert, der Text darunter bleibt sichtbar
+function whiteToAlpha(canvas: HTMLCanvasElement): void {
+  const context = canvas.getContext('2d');
+  if (!context) return;
+  const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  const data = image.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i] as number;
+    const g = data[i + 1] as number;
+    const b = data[i + 2] as number;
+    const alpha = 1 - Math.min(r, g, b) / 255;
+    if (alpha <= 0.01) {
+      data[i + 3] = 0;
+      continue;
+    }
+    // Farbe so zurückrechnen, dass sie über Weiß wieder genauso aussieht
+    data[i] = Math.round((r - 255 * (1 - alpha)) / alpha);
+    data[i + 1] = Math.round((g - 255 * (1 - alpha)) / alpha);
+    data[i + 2] = Math.round((b - 255 * (1 - alpha)) / alpha);
+    data[i + 3] = Math.round(alpha * (data[i + 3] as number));
+  }
+  context.putImageData(image, 0, 0);
+}
+
+function snapshot(canvas: HTMLCanvasElement | null, geometry: PageGeometry, units: EditUnit[]): Map<number, Ghost> {
+  const ghosts = new Map<number, Ghost>();
+  const context = canvas?.getContext('2d');
+  if (!canvas || !context || canvas.width === 0) return ghosts;
+  const sx = canvas.width / geometry.width;
+  const sy = canvas.height / geometry.height;
+  const pixel = (x: number, y: number) => {
+    const px = Math.min(canvas.width - 1, Math.max(0, Math.round(x)));
+    const py = Math.min(canvas.height - 1, Math.max(0, Math.round(y)));
+    return context.getImageData(px, py, 1, 1).data;
+  };
+  for (const unit of units) {
+    const r = geometry.rectToView(unit.bounds);
+    const x = Math.max(0, (r.x - GHOST_PAD) * sx);
+    const y = Math.max(0, (r.y - GHOST_PAD) * sy);
+    const w = Math.min(canvas.width - x, (r.w + 2 * GHOST_PAD) * sx);
+    const h = Math.min(canvas.height - y, (r.h + 2 * GHOST_PAD) * sy);
+    if (w < 1 || h < 1) continue;
+    const crop = document.createElement('canvas');
+    crop.width = Math.ceil(w);
+    crop.height = Math.ceil(h);
+    crop.getContext('2d')?.drawImage(canvas, x, y, w, h, 0, 0, crop.width, crop.height);
+    // Hintergrund: häufigste Farbe knapp außerhalb der vier Ecken (meist Papierweiß)
+    const corners = [pixel(x - 2, y - 2), pixel(x + w + 2, y - 2), pixel(x - 2, y + h + 2), pixel(x + w + 2, y + h + 2)];
+    const samples = corners.map((d) => `rgb(${d[0]} ${d[1]} ${d[2]})`);
+    const background = [...samples].sort((a, b) => samples.filter((c) => c === b).length - samples.filter((c) => c === a).length)[0] ?? '#fff';
+    const light = corners.every((d) => (d[0] ?? 0) + (d[1] ?? 0) + (d[2] ?? 0) > 3 * 225);
+    if (light) whiteToAlpha(crop);
+    ghosts.set(unit.index, { href: crop.toDataURL('image/png'), background });
+  }
+  return ghosts;
+}
+
 function corners([l, b, r, t]: Rect): Point[] {
   return [
     { x: l, y: b },
@@ -89,6 +156,9 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
   // Vorschau nach dem Loslassen, bis der neu gesetzte Text geladen ist (kein kurzes Aufblitzen des alten Textes)
   const [afterglow, setAfterglow] = useState<{ unit: EditUnit; bounds: Rect; source: unknown } | null>(null);
   const [gesture, setGestureState] = useState<Gesture | null>(null);
+  // Abbilder der bewegten Einheiten (bis zum Neuladen der geänderten Seite)
+  const [ghosts, setGhosts] = useState<Map<number, Ghost> | null>(null);
+  const pageCanvas = () => svgRef.current?.closest('.page')?.querySelector<HTMLCanvasElement>('.canvasWrapper canvas') ?? null;
   const gestureRef = useRef<Gesture | null>(null);
   const tool = useContentEdit((s) => s.tool);
   const selected = useContentEdit((s) => s.selected[tabId] ?? null);
@@ -170,6 +240,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     const group = current.length > 1 && current.some((unit) => unit.index === object.index) ? current : [object];
     if (group.length === 1) selectUnits([object]);
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
+    setGhosts(snapshot(pageCanvas(), geometry, group));
     setGesture({ kind: 'move', object, group, origin: toPdf(event), dx: 0, dy: 0 });
   };
 
@@ -203,6 +274,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     event.stopPropagation();
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
     const points = corners(object.bounds);
+    setGhosts(snapshot(pageCanvas(), geometry, [object]));
     setGesture({ kind: 'scale', object, fixed: points[(corner + 2) % 4] as Point, to: toPdf(event) });
   };
 
@@ -256,13 +328,19 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
       return;
     }
     if (current.kind === 'move') {
-      if (Math.hypot(current.dx, current.dy) < 0.5) return;
+      if (Math.hypot(current.dx, current.dy) < 0.5) {
+        setGhosts(null);
+        return;
+      }
       const moved = current.group.map((unit) => ({ index: unit.index, members: unit.members, bounds: previewBounds(unit, current) }));
       void transformObjects(tabId, pageIndex, moved, translation(current.dx, current.dy));
       return;
     }
     const factor = scaleFactor(current.object, current.fixed, current.to);
-    if (Math.abs(factor - 1) < 0.01) return;
+    if (Math.abs(factor - 1) < 0.01) {
+      setGhosts(null);
+      return;
+    }
     void transformObjects(tabId, pageIndex, [{ index: current.object.index, members: current.object.members, bounds }], scalingAbout(factor, current.fixed.x, current.fixed.y));
   };
 
@@ -316,6 +394,35 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
         data-testid={`content-edit-overlay-${pageIndex}`}
         data-content-edit-overlay=""
       >
+        {ghosts && (gesture?.kind === 'move' || gesture?.kind === 'scale' || pending?.pageIndex === pageIndex) && (
+          <g className={styles.ghosts} data-testid="content-ghosts">
+            {[...ghosts].map(([index, ghost]) => {
+              const unit = objects.find((object) => object.index === index);
+              if (!unit) return null;
+              const target = gesture ? previewBounds(unit, gesture) : pending?.bounds[index];
+              if (!target) return null;
+              const from = geometry.rectToView(unit.bounds);
+              const to = geometry.rectToView(target);
+              // Rand im Verhältnis der neuen Größe (beim Skalieren wächst er mit)
+              const fx = from.w > 0 ? to.w / from.w : 1;
+              const fy = from.h > 0 ? to.h / from.h : 1;
+              return (
+                <g key={index}>
+                  <rect x={from.x - GHOST_PAD} y={from.y - GHOST_PAD} width={from.w + 2 * GHOST_PAD} height={from.h + 2 * GHOST_PAD} fill={ghost.background} />
+                  <image
+                    href={ghost.href}
+                    x={to.x - GHOST_PAD * fx}
+                    y={to.y - GHOST_PAD * fy}
+                    width={to.w + 2 * GHOST_PAD * fx}
+                    height={to.h + 2 * GHOST_PAD * fy}
+                    preserveAspectRatio="none"
+                    data-testid="content-ghost"
+                  />
+                </g>
+              );
+            })}
+          </g>
+        )}
         {objects.map((object) => {
           const moving = pending?.pageIndex === pageIndex ? pending.bounds[object.index] : undefined;
           const r = geometry.rectToView(moving ?? previewBounds(object, gesture));

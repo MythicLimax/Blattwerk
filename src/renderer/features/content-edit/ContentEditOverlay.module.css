@@ -172,3 +172,12 @@
   shape-rendering: crispEdges;
   pointer-events: none;
 }
+
+/* Live-Vorschau beim Verschieben: Abbilder folgen dem Zeiger, die alte Stelle ist abgedeckt */
+.ghosts {
+  pointer-events: none;
+}
+
+.ghosts image {
+  opacity: 0.95;
+}
