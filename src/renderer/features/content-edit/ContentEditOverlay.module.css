@@ -162,3 +162,13 @@
   min-height: 1.2em;
   overflow: hidden;
 }
+
+/* Auswahlrechteck wie in Finder oder Vorschau: leicht getönte, durchscheinende Fläche mit feinem Rand */
+.marquee {
+  fill: color-mix(in srgb, var(--tone-edit) 14%, transparent);
+  stroke: color-mix(in srgb, var(--tone-edit) 75%, transparent);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  shape-rendering: crispEdges;
+  pointer-events: none;
+}

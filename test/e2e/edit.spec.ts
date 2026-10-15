@@ -560,6 +560,12 @@ test.describe('Mehrfachauswahl', () => {
     await page.mouse.down();
     await page.mouse.move(left + 20, chapters.y, { steps: 4 });
     await expect(page.getByTestId('content-marquee')).toBeVisible();
+    // Wie in anderen Programmen: durchscheinend, nicht schwarz gefüllt
+    await expect(page.getByTestId('content-marquee')).not.toHaveCSS('fill', 'rgb(0, 0, 0)');
+    if (process.env.BLATTWERK_SHOT) {
+      await page.mouse.move(Math.max(heading.x, chapters.x) + 120, chapters.y + chapters.height / 2, { steps: 2 });
+      await page.screenshot({ path: path.resolve('.tools/shots/auswahlrechteck.png') });
+    }
     await page.mouse.move(Math.max(heading.x, chapters.x) + 20, chapters.y + chapters.height / 2, { steps: 4 });
     await page.mouse.up();
     await expect.poll(selectedCount).toBe(2);
