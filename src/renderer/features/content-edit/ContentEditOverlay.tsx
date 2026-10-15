@@ -37,7 +37,7 @@ export function isUprightView(geometry: PageGeometry): boolean {
 
 // Leiste „Inhalt bearbeiten“: Klicks dort beenden die Texteingabe nicht (Größe, Schrift, Farbe wirken auf sie)
 const inToolbar = (target: EventTarget | null) =>
-  target instanceof Element && target.closest('[data-testid="content-edit-toolbar"], [data-testid="content-size-list"]') !== null;
+  target instanceof Element && target.closest('[data-testid="content-edit-toolbar"], [data-testid="content-size-list"], [data-color-panel]') !== null;
 
 // Live-Vorschau beim Verschieben und Skalieren: Abbild der Einheit aus dem gezeichneten Seitenbild, dazu die Farbe
 // des Hintergrunds um sie herum (verdeckt die alte Stelle, bis die geänderte Seite geladen ist)

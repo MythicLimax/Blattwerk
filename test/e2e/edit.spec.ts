@@ -713,3 +713,46 @@ test.describe('Verschieben mit Live-Vorschau', () => {
     await close();
   });
 });
+
+test.describe('Farbauswahl', () => {
+  test('Palette, Farbcode, Favoriten hinzufügen und entfernen, Favoriten bleiben nach Neustart', async () => {
+    const dir = tempDir();
+    const first = await launchApp([], { userData: dir, keepUserData: true });
+    await first.page.getByTestId('start-blank').click();
+    await waitForDocument(first.page, 1);
+    const panel = first.page.getByTestId('content-color-panel');
+    await first.page.getByTestId('content-color-more').click();
+    await expect(panel).toBeVisible();
+    // 12 Graustufen + 7 · 12 Farben
+    await expect(panel.getByTestId('content-color-palette')).toHaveCount(96);
+    await panel.getByTestId('content-color-palette').nth(12 * 4 + 8).click();
+    await expect(panel.getByTestId('content-color-palette').nth(12 * 4 + 8)).toHaveAttribute('aria-checked', 'true');
+    // Farbcode eintippen
+    await panel.getByTestId('content-color-hex').fill('#1f6b4e');
+    await panel.getByTestId('content-color-hex').press('Enter');
+    await expect(panel.getByTestId('content-color-hex')).toHaveValue('#1F6B4E');
+    await panel.getByTestId('content-color-add').click();
+    await expect(panel.getByTestId('content-color-add')).toBeDisabled();
+    await first.page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    // Neuer Favorit steht in der Leiste und ist gewählt
+    const favorite = first.page.getByTestId('content-color-fav-4');
+    await expect(favorite).toHaveAttribute('aria-checked', 'true');
+    await first.close();
+
+    const second = await launchApp([], { userData: dir });
+    await second.page.getByTestId('start-blank').click();
+    await waitForDocument(second.page, 1);
+    await expect(second.page.getByTestId('content-color-fav-4')).toHaveAttribute('aria-label', '#1F6B4E');
+    // Entfernen im Feld
+    await second.page.getByTestId('content-color-more').click();
+    await second.page.getByTestId('content-color-remove').nth(4).click({ force: true });
+    await expect(second.page.getByTestId('content-color-fav-4')).toHaveCount(0);
+    if (process.env.BLATTWERK_SHOT) {
+      await second.page.getByTestId('content-color-panel').getByTestId('content-color-palette').nth(12 * 2 + 3).hover();
+      await second.page.waitForTimeout(400);
+      await second.page.screenshot({ path: path.resolve('.tools/shots/farbauswahl.png') });
+    }
+    await second.close();
+  });
+});

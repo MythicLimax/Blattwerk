@@ -376,3 +376,24 @@ test.describe('Kommentieren', () => {
     await handle.close();
   });
 });
+
+test.describe('Farbauswahl beim Kommentieren', () => {
+  test('eigene Favoriten (Markerfarben) und große Auswahl', async () => {
+    const handle = await launchApp([fixture('text.pdf')]);
+    const { page, app } = handle;
+    await waitForDocument(page, TEXT_PDF.pages);
+    await menuClick(app, 'view.toggleCommentTools');
+    await page.getByTestId('tool-ink').click();
+    // Markerfarben als Favoriten, nicht die Textfarben
+    await expect(page.getByTestId('color-yellow')).toHaveCount(1);
+    await expect(page.getByTestId('color-gray')).toHaveCount(0);
+    await page.getByTestId('color-more').click();
+    const panel = page.getByTestId('color-panel');
+    await expect(panel.getByTestId('color-palette')).toHaveCount(96);
+    await panel.getByTestId('color-palette').nth(12 * 3 + 6).click();
+    await panel.getByTestId('color-add').click();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('color-fav-7')).toHaveAttribute('aria-checked', 'true');
+    await handle.close();
+  });
+});

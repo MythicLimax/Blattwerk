@@ -14,11 +14,11 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import type { Rgb } from '../../../shared/annotations';
 import { STAMP_FONTS } from '../../../shared/stamping';
 import { systemFontKey, type TextFont } from '../../../shared/fonts';
 import { fontLabel, registerPreview, useSystemFonts } from './system-fonts';
 import { IconButton } from '../../components/IconButton';
+import { ColorPicker } from '../../components/ColorPicker';
 import { ModeBadge } from '../../components/ModeBadge';
 import { GLASS, useLiquidGlass } from '../../components/glass/liquid-glass';
 import { executeCommand } from '../../engine/session';
@@ -52,25 +52,13 @@ function applyStyle(tab: TabState, patch: ParagraphStyle): void {
     void reflowText(tab.id, selected.pageIndex, unit, unit.text ?? '', { style: patch });
 }
 
-const sameColor = (a: Rgb | undefined, b: Rgb) =>
-  a !== undefined && Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b) < 0.03;
-
 const TOOLS: Array<{ tool: ContentTool; icon: LucideIcon }> = [
   { tool: 'select', icon: MousePointer2 },
   { tool: 'text', icon: Type },
   { tool: 'flow', icon: Pilcrow },
 ];
 
-const COLORS: Array<{ id: string; color: Rgb }> = [
-  { id: 'black', color: { r: 0, g: 0, b: 0 } },
-  { id: 'blue', color: { r: 0.15, g: 0.3, b: 0.75 } },
-  { id: 'red', color: { r: 0.8, g: 0.1, b: 0.1 } },
-  { id: 'gray', color: { r: 0.5, g: 0.5, b: 0.5 } },
-];
-
 const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 24, 32, 48];
-const toCss = ({ r, g, b }: Rgb) =>
-  `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})`;
 
 // Werkzeugleiste im Modus „Inhalt bearbeiten“
 export function ContentEditToolbar({ tab }: { tab: TabState }) {
@@ -184,22 +172,14 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
         unit={t('contentEdit.points')}
         onChange={(size) => applyStyle(tab, { size })}
       />
-      <div className={styles.group} role="radiogroup" aria-label={t('contentEdit.color')}>
-        {COLORS.map(({ id, color }) => (
-          <button
-            key={id}
-            type="button"
-            role="radio"
-            aria-checked={sameColor(shown.color, color)}
-            className={styles.swatch}
-            style={{ background: toCss(color) }}
-            data-tooltip={t(`stamp.colors.${id}`)}
-            aria-label={t(`stamp.colors.${id}`)}
-            onClick={() => applyStyle(tab, { color })}
-            data-testid={`content-color-${id}`}
-          />
-        ))}
-      </div>
+      <ColorPicker
+        value={shown.color ?? null}
+        onChange={(color) => applyStyle(tab, { color })}
+        nameOf={(id) => t(`stamp.colors.${id}`)}
+        label={t('contentEdit.color')}
+        testId="content-color"
+        favoriteSet="text"
+      />
       <span className={styles.separator} />
       <IconButton
         icon={Trash}

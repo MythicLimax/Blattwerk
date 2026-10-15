@@ -426,7 +426,18 @@
     "red": "Rot",
     "purple": "Violett",
     "orange": "Orange",
-    "black": "Schwarz"
+    "black": "Schwarz",
+    "more": "Weitere Farben …",
+    "title": "Farben",
+    "palette": "Farbpalette",
+    "custom": "Eigene Farbe",
+    "system": "Farbe frei wählen (Farbfenster von macOS)",
+    "hex": "Farbcode",
+    "favorites": "Favoriten",
+    "add": "Aktuelle Farbe zu den Favoriten",
+    "already": "Diese Farbe ist schon ein Favorit",
+    "full": "Höchstens {{count}} Favoriten",
+    "remove": "Aus den Favoriten entfernen"
   },
   "stamps": {
     "approved": "GENEHMIGT",
