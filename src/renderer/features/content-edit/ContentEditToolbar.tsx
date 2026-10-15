@@ -15,7 +15,9 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { Rgb } from '../../../shared/annotations';
-import { STAMP_FONTS, type StampFont } from '../../../shared/stamping';
+import { STAMP_FONTS } from '../../../shared/stamping';
+import { systemFontKey, type TextFont } from '../../../shared/fonts';
+import { fontLabel, registerPreview, useSystemFonts } from './system-fonts';
 import { IconButton } from '../../components/IconButton';
 import { ModeBadge } from '../../components/ModeBadge';
 import { GLASS, useLiquidGlass } from '../../components/glass/liquid-glass';
@@ -88,10 +90,13 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
         }
       : unit
         ? { size: unit.visualSize ?? unit.fontSize ?? style.size, font: null, color: unit.color }
-        : { size: style.size, font: style.font as StampFont | null, color: style.color };
+        : { size: style.size, font: style.font as TextFont | null, color: style.color };
   // Eine Nachkommastelle reicht (z. B. 10,5 pt)
   const shownSize = Math.round(shown.size * 10) / 10;
   const annotations = useTabAnnotations(tab.id);
+  const systemFonts = useSystemFonts((s) => s.fonts);
+  useEffect(() => useSystemFonts.getState().load(), []);
+  const styleNames = { bold: t('contentEdit.fontStyles.bold'), italic: t('contentEdit.fontStyles.italic'), boldItalic: t('contentEdit.fontStyles.boldItalic') };
   const history = useTabHistory(tab.id);
 
   const chooseTool = (next: ContentTool) => {
@@ -143,16 +148,35 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
         aria-label={t('contentEdit.font')}
         data-tooltip={t('contentEdit.font')}
         onChange={(event) => {
-          if (event.target.value) applyStyle(tab, { font: event.target.value as StampFont });
+          const font = event.target.value as TextFont;
+          if (!font) return;
+          void registerPreview(font);
+          applyStyle(tab, { font });
         }}
         data-testid="content-font"
       >
         {shown.font === null && <option value={''}>{t('contentEdit.originalFont')}</option>}
-        {STAMP_FONTS.map((font) => (
-          <option key={font} value={font}>
-            {t(`stamp.fonts.${font}`)}
-          </option>
-        ))}
+        <optgroup label={t('contentEdit.fontsStandard')}>
+          {STAMP_FONTS.map((font) => (
+            <option key={font} value={font}>
+              {t(`stamp.fonts.${font}`)}
+            </option>
+          ))}
+        </optgroup>
+        {systemFonts.length > 0 && (
+          <optgroup label={t('contentEdit.fontsSystem')}>
+            {systemFonts.flatMap((family) =>
+              family.styles.map((variant) => {
+                const key = systemFontKey(family.id, variant);
+                return (
+                  <option key={key} value={key}>
+                    {fontLabel(key, systemFonts, styleNames)}
+                  </option>
+                );
+              }),
+            )}
+          </optgroup>
+        )}
       </select>
       <SizeField
         value={shownSize}

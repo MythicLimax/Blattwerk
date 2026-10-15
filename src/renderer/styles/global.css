@@ -172,7 +172,12 @@ input:is([type='radio'], [type='checkbox']):focus-visible {
   -webkit-app-region: drag;
 }
 
-[data-platform='mac'] [data-drag-region] :is(button, input, select, a, [role='tab'], [data-no-drag]) {
+/* Auch Knopfgruppen (Glas-Kapseln) und ihre Glanzebenen: Die Zugeigenschaft vererbt sich, und die Glanzebene liegt
+   über den Knöpfen. Ohne diese Regel fängt sie echte Mausklicks ab (Klicks aus den Oberflächentests gehen an macOS
+   vorbei und merken davon nichts). */
+[data-platform='mac'] [data-drag-region] :is(button, input, select, a, [role='tab'], [data-no-drag], .liquid),
+[data-platform='mac'] [data-drag-region] .liquid::before,
+[data-platform='mac'] [data-drag-region] .liquid::after {
   -webkit-app-region: no-drag;
 }
 

@@ -41,6 +41,8 @@ import {
 } from '../shared/validate';
 import { atomicWrite } from './files/atomic-write';
 import { createBlankDocument, isBlankDocumentPath } from './files/blank-document';
+import { listSystemFonts, readSystemFont } from './files/system-fonts';
+import { parseSystemFontKey, type SystemFont } from '../shared/fonts';
 import { DOCUMENT_EXTENSIONS } from '../shared/convert';
 import { ConvertError, MAX_DOCUMENT_BYTES, detectAndConvert } from './convert';
 import { htmlToPdf } from './convert/pdf';
@@ -292,6 +294,13 @@ export function registerIpc(ctx: IpcContext): void {
 
   // Mehrere neue Dokumente in einen gewählten Ordner (Teilen, Extrahieren als einzelne Dateien).
   // Vorhandene Dateien werden nie überschrieben; bei gleichem Namen kommt eine Nummer dazu.
+  handle(IPC.fontsList, (): SystemFont[] => listSystemFonts());
+
+  handle(IPC.fontsRead, (_event, key: unknown): Uint8Array | null => {
+    const parsed = typeof key === 'string' ? parseSystemFontKey(key) : null;
+    return parsed ? readSystemFont(parsed.id, parsed.style) : null;
+  });
+
   handle(IPC.newBlank, async (event): Promise<OpenResult> => {
     const win = windowOf(event);
     if (!win) return { ok: false, error: 'unreadable' };

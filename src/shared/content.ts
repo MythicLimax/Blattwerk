@@ -2,7 +2,7 @@
 // vorhandene Textzeilen ändern. Gemeinsam für Oberfläche und Worker. Koordinaten im PDF-Benutzerraum.
 import type { Point, Rect, Rgb } from './annotations';
 import type { ImageSource } from './pages';
-import type { StampFont } from './stamping';
+import type { TextFont } from './fonts';
 import type { OcrWord } from './ocr';
 
 export type PageObjectKind = 'text' | 'image' | 'form';
@@ -60,7 +60,7 @@ export type ContentOperation =
   // width: Breite (Punkt), in der die Zeilen umbrechen; ohne Angabe nur an harten Umbrüchen.
   // flow: Fließtext wie in einer Textverarbeitung; Zeilen unterhalb von bottom (Grundlinie, PDF-y) wandern auf neue
   // Seiten gleicher Größe direkt dahinter, dort ab der Grundlinie top. Nur auf ungedrehten Seiten.
-  | { type: 'addText'; pageIndex: number; origin: Point; lines: string[]; font: StampFont; size: number; color: Rgb; width?: number; flow?: { top: number; bottom: number } }
+  | { type: 'addText'; pageIndex: number; origin: Point; lines: string[]; font: TextFont; size: number; color: Rgb; width?: number; flow?: { top: number; bottom: number }; fontData?: ArrayBuffer }
   | { type: 'addImage'; pageIndex: number; rect: Rect; image: ImageSource }
   // Zusätzliche Abbildung (Verschieben, Skalieren) auf ein vorhandenes Objekt
   | { type: 'transform'; pageIndex: number; index: number; matrix: Matrix }
@@ -85,7 +85,9 @@ export type ContentOperation =
 // Neue Gestaltung eines Absatzes oder einer Zeile (Größe in Punkt, wie sie auf der Seite erscheint)
 export interface ParagraphStyle {
   size?: number;
-  font?: StampFont;
+  // Standardschrift oder Schrift des Rechners (dann mit fontData, siehe shared/fonts.ts)
+  font?: TextFont;
+  fontData?: ArrayBuffer;
   color?: Rgb;
 }
 

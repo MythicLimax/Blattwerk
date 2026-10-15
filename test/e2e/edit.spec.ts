@@ -1,6 +1,6 @@
 // Phase 5: Bearbeiten (Schwärzen). Arbeitet auf Kopien bzw. im Test erzeugten PDFs.
 import { expect, test, type Page } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -639,6 +639,41 @@ test.describe('Fließtext', () => {
     expect(texts[1]).toContain('Absatz 30:');
     if (process.platform === 'darwin') expect(inspectWithPdfKit(target).ok).toBe(true);
     await waitForDocument(page, 2);
+    await close();
+  });
+});
+
+test.describe('Schriften des Rechners', () => {
+  test('Arial aus der Liste wählen, schreiben, eingebettet speichern', async () => {
+    test.skip(process.platform !== 'darwin' || !existsSync('/System/Library/Fonts/Supplemental/Arial.ttf'), 'Arial fehlt');
+    const dir = tempDir();
+    const target = path.join(dir, 'Arial.pdf');
+    const { page, app, close } = await launchApp([], { userData: dir });
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showSaveDialog = (async () => ({ canceled: false, filePath: file })) as typeof dialog.showSaveDialog;
+    }, target);
+    await page.getByTestId('start-blank').click();
+    await waitForDocument(page, 1);
+    const select = page.getByTestId('content-font');
+    await expect(select.locator('option[value="sys:arial:regular"]')).toHaveCount(1);
+    await expect(select.locator('option[value="sys:times-new-roman:bold"]')).toHaveText('Times New Roman Fett');
+    await select.selectOption('sys:arial:regular');
+    await page.getByTestId('content-tool-text').click();
+    const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
+    if (!overlay) throw new Error('keine Ebene');
+    await page.mouse.click(overlay.x + overlay.width * 0.2, overlay.y + 120);
+    await expect(page.getByTestId('content-text-editor')).toHaveCSS('font-family', /Blattwerk sys:arial:regular/);
+    await page.keyboard.type('Grüße in Arial – Łódź');
+    await expect(page.getByTestId('content-font-warning')).toHaveCount(0);
+    await page.keyboard.press('Meta+Enter');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    const [text] = await pageTexts(target);
+    expect(text).toContain('Grüße in Arial – Łódź');
+    expect(readFileSync(target).toString('latin1')).toMatch(/\/BaseFont\s*\/[A-Z]*\+?Arial/);
+    if (process.platform === 'darwin') expect(inspectWithPdfKit(target).ok).toBe(true);
+    await waitForDocument(page, 1);
     await close();
   });
 });

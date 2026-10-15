@@ -15,6 +15,7 @@ import {
   type PageObjects,
 } from '../../shared/content';
 import type { StampFont } from '../../shared/stamping';
+import { isSystemFontKey, type SystemFontKey, type TextFont } from '../../shared/fonts';
 import type { OcrWord } from '../../shared/ocr';
 import { withBuffer, withFloats, withWString, type Pdfium } from './memory';
 import type { Allocations } from './pages';
@@ -170,8 +171,42 @@ function substituteFont(name: string, weight: number): StampFont {
   return bold ? 'HelveticaBold' : 'Helvetica';
 }
 
-function newTextObject(m: Pdfium, doc: number, font: StampFont, size: number, text: string, color: Rgb): number {
-  const object = m.FPDFPageObj_NewTextObj(doc, STANDARD_FONT[font], size);
+// Schriften des Rechners (ADR 0024): Daten aus der Operation, geladen einmal je Operation (eingebettet, Unicode)
+const systemFontData = new Map<string, Uint8Array>();
+const systemFontHandles = new Map<string, number>();
+
+function useSystemFonts(operation: ContentOperation): void {
+  const register = (font: TextFont | undefined, data: ArrayBuffer | undefined) => {
+    if (font && isSystemFontKey(font) && data) systemFontData.set(font, new Uint8Array(data));
+  };
+  if (operation.type === 'addText') register(operation.font, operation.fontData);
+  if (operation.type === 'editParagraph') register(operation.style?.font, operation.style?.fontData);
+}
+
+function releaseSystemFonts(m: Pdfium): void {
+  for (const handle of systemFontHandles.values()) m.FPDFFont_Close(handle);
+  systemFontHandles.clear();
+  systemFontData.clear();
+}
+
+function systemFont(m: Pdfium, doc: number, font: SystemFontKey, memory: Allocations): number {
+  const cached = systemFontHandles.get(font);
+  if (cached) return cached;
+  const data = systemFontData.get(font);
+  if (!data) throw new ContentError(`Schrift ${font} fehlt`);
+  // TrueType, als CID-Schrift (alle Zeichen der Schrift, nicht nur Westeuropa)
+  const handle = m.FPDFText_LoadFont(doc, memory.copy(data), data.length, 2, true);
+  if (!handle) throw new ContentError(`Schrift ${font} lässt sich nicht laden`);
+  systemFontHandles.set(font, handle);
+  return handle;
+}
+
+let currentMemory: Allocations | null = null;
+
+function newTextObject(m: Pdfium, doc: number, font: TextFont, size: number, text: string, color: Rgb): number {
+  const object = isSystemFontKey(font)
+    ? m.FPDFPageObj_CreateTextObj(doc, systemFont(m, doc, font, currentMemory as Allocations), size)
+    : m.FPDFPageObj_NewTextObj(doc, STANDARD_FONT[font], size);
   if (!object) throw new ContentError('Textobjekt lässt sich nicht anlegen');
   withWString(m, text, (ptr) => m.FPDFText_SetText(object, ptr));
   m.FPDFPageObj_SetFillColor(object, byte(color.r), byte(color.g), byte(color.b), 255);
@@ -187,6 +222,17 @@ function objectAt(m: Pdfium, page: number, index: number): number {
 
 // Wendet eine Inhaltsoperation an und schreibt den Inhalt der Seite neu.
 export function applyContentOperation(m: Pdfium, doc: number, operation: ContentOperation, memory: Allocations): void {
+  useSystemFonts(operation);
+  currentMemory = memory;
+  try {
+    applyOperation(m, doc, operation, memory);
+  } finally {
+    releaseSystemFonts(m);
+    currentMemory = null;
+  }
+}
+
+function applyOperation(m: Pdfium, doc: number, operation: ContentOperation, memory: Allocations): void {
   // Vorher auflisten: Ein zweites Laden derselben Seite, während sie offen ist, macht Schrift-Handles ungültig
   const listing = operation.type === 'editParagraph' ? listPageObjects(m, doc, operation.pageIndex) : null;
   withPage(m, doc, operation.pageIndex, (page) => {

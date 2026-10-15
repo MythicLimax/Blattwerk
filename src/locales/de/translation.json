@@ -837,7 +837,14 @@
     "failed": "Die Änderung konnte nicht ausgeführt werden. Das Dokument wurde nicht verändert.",
     "originalFont": "Schrift des Textes",
     "points": "pt",
-    "flowHint": "Auf die Seite klicken und losschreiben: Zeilen brechen am Seitenrand um, Eingabetaste beginnt einen neuen Absatz, Text unterhalb des Rands läuft auf eine neue Seite weiter. Klick daneben übernimmt den Text."
+    "flowHint": "Auf die Seite klicken und losschreiben: Zeilen brechen am Seitenrand um, Eingabetaste beginnt einen neuen Absatz, Text unterhalb des Rands läuft auf eine neue Seite weiter. Klick daneben übernimmt den Text.",
+    "fontsStandard": "Standardschriften",
+    "fontsSystem": "Weitere Schriften",
+    "fontStyles": {
+      "bold": "Fett",
+      "italic": "Kursiv",
+      "boldItalic": "Fett Kursiv"
+    }
   },
   "security": {
     "title": "Kennwortschutz",

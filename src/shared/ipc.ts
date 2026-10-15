@@ -26,6 +26,9 @@ export const IPC = {
   saveToFolder: 'files:save-to-folder',
   // Neues leeres Dokument (eine A4-Seite), sofort im Tab geöffnet
   newBlank: 'files:new-blank',
+  // Schriften des Rechners für neuen Text (ADR 0024): Liste, Daten einer Schrift
+  fontsList: 'fonts:list',
+  fontsRead: 'fonts:read',
   // Phase 4: gespeicherte Unterschriften
   signaturesList: 'signatures:list',
   signaturesAdd: 'signatures:add',

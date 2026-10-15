@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import type { Point, Rect, Rgb } from '../../shared/annotations';
 import type { EditUnit, ParagraphStyle } from '../../shared/content';
-import type { StampFont } from '../../shared/stamping';
+import type { TextFont } from '../../shared/fonts';
 
 // flow: Fließtext über die ganze Breite zwischen den Seitenrändern, wie in einer Textverarbeitung
 export type ContentTool = 'select' | 'text' | 'flow';
@@ -26,7 +26,7 @@ export type TextEditing =
   | { tabId: string; pageIndex: number; mode: 'edit'; index: number; merge: number[]; bounds: Rect; text: string; fontSize: number; font?: string; lines?: number[][]; color?: Rgb; style?: ParagraphStyle };
 
 export interface TextStyle {
-  font: StampFont;
+  font: TextFont;
   size: number;
   color: Rgb;
 }

@@ -42,6 +42,10 @@ const api: BlattwerkApi = {
   pickFiles: (kind) => ipcRenderer.invoke(IPC.pickFiles, kind),
   registerDroppedFile: (file: File) => ipcRenderer.invoke(IPC.registerDropped, pathOf(file)),
   newBlankDocument: () => ipcRenderer.invoke(IPC.newBlank),
+  fonts: {
+    list: () => ipcRenderer.invoke(IPC.fontsList),
+    read: (key) => ipcRenderer.invoke(IPC.fontsRead, key),
+  },
   saveNewFile: (bytes, name, referenceFileId, openAfter) =>
     ipcRenderer.invoke(IPC.saveNewFile, bytes, name, referenceFileId, openAfter === true),
   saveFilesToFolder: (files, referenceFileId) => ipcRenderer.invoke(IPC.saveToFolder, files, referenceFileId),

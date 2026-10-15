@@ -10,6 +10,7 @@ import { useContentEdit } from '../../state/content-edit-store';
 import { useDocuments, type TabState } from '../../state/documents-store';
 import { useUi } from '../../state/ui-store';
 import { toggleFormEditing } from '../form-edit/actions';
+import { withFontData } from './system-fonts';
 import { imageSource, pickSources } from '../pages/actions';
 
 export function toggleContentEditing(tab: TabState): void {
@@ -38,8 +39,10 @@ export function toggleContentEditing(tab: TabState): void {
   useDocuments.getState().updateTab(tab.id, { contentEditing: true });
 }
 
-function run(tabId: string, operation: ContentOperation | ContentOperation[]): Promise<boolean> {
-  return applyContentOperations(tabId, Array.isArray(operation) ? operation : [operation], { keepScroll: true });
+async function run(tabId: string, operation: ContentOperation | ContentOperation[]): Promise<boolean> {
+  // Schriften des Rechners: Daten mitgeben, der Worker bettet sie ein
+  const operations = await Promise.all((Array.isArray(operation) ? operation : [operation]).map(withFontData));
+  return applyContentOperations(tabId, operations, { keepScroll: true });
 }
 
 // Neuer Text: at ist die linke obere Ecke der ersten Zeile in PDF-Punkten; baseline die erste Grundlinie

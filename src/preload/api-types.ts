@@ -1,5 +1,6 @@
 // Typen der Schnittstelle, die der Preload dem Renderer als window.blattwerk bereitstellt.
 import type { CommandId } from '../shared/commands';
+import type { SystemFont } from '../shared/fonts';
 import type {
   ConvertResult,
   GlassRegion,
@@ -48,6 +49,11 @@ export interface BlattwerkApi {
   registerDroppedFile(file: File): Promise<OpenResult>;
   // Neues leeres Dokument (eine A4-Seite, unbenannt) anlegen und öffnen
   newBlankDocument(): Promise<OpenResult>;
+  // Schriften des Rechners (Aptos, Arial, Times New Roman …), nur einbettbare
+  fonts: {
+    list(): Promise<SystemFont[]>;
+    read(key: string): Promise<Uint8Array | null>;
+  };
   // Neues Dokument über den Sichern-Dialog speichern, auf Wunsch danach im Tab öffnen
   saveNewFile(bytes: Uint8Array, suggestedName: string, referenceFileId: string | null, openAfter: boolean): Promise<SaveNewResult>;
   saveFilesToFolder(files: NamedBytes[], referenceFileId: string | null): Promise<SaveToFolderResult>;

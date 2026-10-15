@@ -5,6 +5,8 @@ import { editUnits, LINE_HEIGHT, missingChars, scalingAbout, translation, type E
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
 import { useContentEdit, type TextEditing } from '../../state/content-edit-store';
+import { isSystemFontKey } from '../../../shared/fonts';
+import { previewFamily, registerPreview } from './system-fonts';
 import { addText, baselineBelowClick, baselineOffset, editParagraph, editText, flowMargins, lineHeight, reflowText, transformObjects } from './actions';
 import styles from './ContentEditOverlay.module.css';
 import { pageObjects } from './page-objects';
@@ -493,8 +495,14 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
   }, []);
 
   const font = editing.mode === 'edit' && editing.font ? listing?.fonts[editing.font] : undefined;
-  const missing = editing.mode === 'edit' ? missingChars(value, font) : missingChars(value, undefined);
-  const impossible = missingChars(value, undefined);
+  // Schrift des Rechners: wird eingebettet und hat (fast) alle Zeichen, keine Warnung
+  const chosen = editing.mode === 'new' ? style.font : restyle?.font;
+  const embedded = chosen !== undefined && isSystemFontKey(chosen);
+  const missing = embedded ? '' : editing.mode === 'edit' ? missingChars(value, font) : missingChars(value, undefined);
+  const impossible = embedded ? '' : missingChars(value, undefined);
+  useEffect(() => {
+    if (chosen && isSystemFontKey(chosen)) void registerPreview(chosen);
+  }, [chosen]);
 
   const commit = () => {
     if (done.current) return;
@@ -614,7 +622,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
         style={{
           fontSize: `${fontSize}px`,
           lineHeight: 1.2,
-          ...lookOf(family),
+          ...(isSystemFontKey(family) ? { fontFamily: `"${previewFamily(family)}", Helvetica, sans-serif`, fontWeight: 400 } : lookOf(family)),
           color: textColor ? `rgb(${textColor.r * 255} ${textColor.g * 255} ${textColor.b * 255})` : undefined,
         }}
         rows={editing.mode === 'edit' && fixedWidth === null ? 1 : Math.max(1, value.split('\n').length)}

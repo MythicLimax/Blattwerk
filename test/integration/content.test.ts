@@ -2,8 +2,8 @@
 // Textzeilen ändern (mit Ersatzschrift, wenn Zeichen fehlen).
 import { init } from '@embedpdf/pdfium';
 import fontkit from '@cantoo/fontkit';
-import { degrees, PDFDocument, PDFName, StandardFonts } from '@cantoo/pdf-lib';
-import { readFileSync } from 'node:fs';
+import { degrees, PDFDict, PDFDocument, PDFName, StandardFonts } from '@cantoo/pdf-lib';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -11,6 +11,7 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { editUnits, lineOf, lineText, paragraphText, missingChars, scalingAbout, translation, type ContentOperation } from '../../src/shared/content';
 import { PdfiumEngine } from '../../src/workers/pdfium/engine';
+import { embeddingAllowed } from '../../src/shared/fonts';
 import { fixture, imageFixture } from '../fixtures/expectations';
 
 const require = createRequire(import.meta.url);
@@ -172,6 +173,29 @@ describe('Inhalt bearbeiten', () => {
     const list = (await items(output)).filter((item) => Math.round(item.transform[4] ?? 0) === 100 && (item.transform[5] ?? 0) <= 200 && (item.transform[5] ?? 0) > 120);
     expect(list.length).toBeGreaterThan(2);
     expect(list.map((item) => item.str).join(' ')).toBe('Ein neuer Text, der in einem schmalen Feld umbrechen soll.');
+  });
+
+  const arial = '/System/Library/Fonts/Supplemental/Arial.ttf';
+  it.skipIf(!existsSync(arial))('neuer Text in einer Schrift des Rechners: eingebettet, auch Zeichen außerhalb Westeuropas', async () => {
+    const data = readFileSync(arial);
+    const output = run(textPdf(), [
+      {
+        type: 'addText',
+        pageIndex: 0,
+        origin: { x: 80, y: 120 },
+        lines: ['Łódź und Grüße in Arial'],
+        font: 'sys:arial:regular',
+        size: 14,
+        color: { r: 0, g: 0, b: 0 },
+        fontData: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+      },
+    ]);
+    const list = await items(output);
+    expect(list.map((item) => item.str).join('')).toContain('Łódź und Grüße in Arial');
+    const doc = await PDFDocument.load(output);
+    const embedded = doc.context.enumerateIndirectObjects().some(([, object]) => object instanceof PDFDict && object.has(PDFName.of('FontFile2')));
+    expect(embedded).toBe(true);
+    expect(embeddingAllowed(new Uint8Array(data))).toBe(true);
   });
 
   it('Fließtext läuft auf neue Seiten über, wie in einer Textverarbeitung', async () => {
