@@ -239,6 +239,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
   const toolsMenu: MenuItemConstructorOptions = {
     label: t('menu.tools.title'),
     submenu: [
+      cmd('tools.ocr', t('menu.tools.ocr'), { enabled: viewing }),
       cmd('tools.compare', t('menu.tools.compare'), { enabled: viewing }),
       cmd('tools.compress', t('menu.tools.compress'), { enabled: viewing }),
       cmd('tools.security', t('menu.tools.security'), { enabled: viewing }),

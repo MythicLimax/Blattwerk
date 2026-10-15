@@ -784,6 +784,13 @@ export function executeCommand(command: CommandId): void {
     else void exportText(active);
     return;
   }
+  if (command === 'tools.ocr') {
+    const active = getActiveTab();
+    if (active?.status !== 'ready' || active.working || isProgressRunning()) return;
+    if (!active.canModify) ui.notify(t('contentEdit.notAllowed'));
+    else ui.setOcrOpen(true);
+    return;
+  }
   if (command === 'tools.compare') {
     const active = getActiveTab();
     if (active?.status === 'ready' && !active.working) void compareWithFile(active);

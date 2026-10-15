@@ -1,5 +1,6 @@
 // Kopiert die Laufzeit-Ressourcen von pdf.js (CMaps, Standardschriften, WASM-Decoder, Farbprofile,
-// Symbolbilder) und die deutschen Texte der pdf.js-Anzeigebausteine in den public-Ordner des Renderers.
+// Symbolbilder) und die deutschen Texte der pdf.js-Anzeigebausteine in den public-Ordner des Renderers. Dazu die
+// Texterkennung (tesseract.js: Worker, WASM-Kern, Sprachdaten Deutsch und Englisch), damit sie ohne Netz läuft.
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +25,24 @@ export async function copyPdfjsAssets() {
   await mkdir(l10nDir, { recursive: true });
   await cp(path.join(root, 'src', 'locales', 'de', 'pdfjs-viewer.ftl'), path.join(l10nDir, 'de.ftl'));
   await writeFile(path.join(l10nDir, 'locale.json'), JSON.stringify({ de: 'de.ftl' }, null, 2));
+  await copyOcrAssets();
+}
+
+// Texterkennung: nur der LSTM-Kern (mit und ohne SIMD) und die beiden Sprachen
+async function copyOcrAssets() {
+  const ocrDir = path.join(publicDir, 'ocr');
+  await rm(ocrDir, { recursive: true, force: true });
+  await mkdir(path.join(ocrDir, 'core'), { recursive: true });
+  await mkdir(path.join(ocrDir, 'lang'), { recursive: true });
+  await cp(path.join(root, 'node_modules', 'tesseract.js', 'dist', 'worker.min.js'), path.join(ocrDir, 'worker.min.js'));
+  for (const variant of ['lstm', 'simd-lstm', 'relaxedsimd-lstm']) {
+    const file = `tesseract-core-${variant}.wasm.js`;
+    await cp(path.join(root, 'node_modules', 'tesseract.js-core', file), path.join(ocrDir, 'core', file));
+  }
+  for (const lang of ['deu', 'eng']) {
+    const file = `${lang}.traineddata.gz`;
+    await cp(path.join(root, 'node_modules', '@tesseract.js-data', lang, '4.0.0_best_int', file), path.join(ocrDir, 'lang', file));
+  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

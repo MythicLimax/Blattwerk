@@ -3,6 +3,7 @@
 import type { Point, Rect, Rgb } from './annotations';
 import type { ImageSource } from './pages';
 import type { StampFont } from './stamping';
+import type { OcrWord } from './ocr';
 
 export type PageObjectKind = 'text' | 'image' | 'form';
 
@@ -67,6 +68,8 @@ export type ContentOperation =
   | { type: 'editText'; pageIndex: number; index: number; text: string; merge?: number[] }
   // Absatz neu setzen: lines = Stücke je bisheriger Zeile (Anker zuerst), text mit harten Zeilenumbrüchen (\n). Der
   // Worker bricht mit den echten Zeichenbreiten in der Breite des Absatzes um.
+  // Erkannter Text als unsichtbare Textebene (Texterkennung); Lage in einem Bild der Seite (width × height Bildpunkte)
+  | { type: 'ocrText'; pageIndex: number; width: number; height: number; words: OcrWord[] }
   | {
       type: 'editParagraph';
       pageIndex: number;

@@ -111,7 +111,8 @@
       "title": "Werkzeuge",
       "security": "Kennwortschutz …",
       "compress": "Komprimieren …",
-      "compare": "Mit Datei vergleichen …"
+      "compare": "Mit Datei vergleichen …",
+      "ocr": "Text erkennen (OCR) …"
     }
   },
   "dialog": {
@@ -901,5 +902,26 @@
       "pagesRemoved": "Seite {{page}} fehlt in der neuen Fassung",
       "legend": "Rot markiert: in der neuen Fassung entfernt. Grün markiert: neu. Verglichen wird der Text, Seite für Seite in der Reihenfolge."
     }
+  },
+  "ocr": {
+    "title": "Text erkennen",
+    "message": "Gescannte Seiten bekommen eine unsichtbare Textebene. Danach lässt sich der Text suchen, markieren und kopieren; das Bild der Seite bleibt unverändert.",
+    "languages": "Sprachen des Dokuments:",
+    "language": {
+      "deu": "Deutsch",
+      "eng": "Englisch"
+    },
+    "hint": "Seiten, die schon Text enthalten, werden übersprungen. Die Erkennung läuft auf diesem Mac, ohne Internet; je Seite dauert sie einige Sekunden.",
+    "cancel": "Abbrechen",
+    "start": "Erkennen",
+    "progress": "Text wird erkannt",
+    "loading": "Erkennung wird vorbereitet …",
+    "pageStep": "Seite {{page}} von {{count}}",
+    "applying": "Textebene wird eingefügt …",
+    "done_one": "Text auf {{count}} Seite erkannt. Zum Übernehmen speichern.",
+    "done_other": "Text auf {{count}} Seiten erkannt. Zum Übernehmen speichern.",
+    "allHaveText": "Alle gewählten Seiten enthalten bereits Text; es gibt nichts zu erkennen.",
+    "nothingFound": "Auf den gewählten Seiten wurde kein Text erkannt.",
+    "failed": "Die Texterkennung ist fehlgeschlagen."
   }
 }

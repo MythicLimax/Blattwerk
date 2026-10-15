@@ -50,6 +50,7 @@ export const COMMANDS = [
   'tools.security',
   'tools.compress',
   'tools.compare',
+  'tools.ocr',
   'file.exportImages',
   'file.exportText',
   'file.combine',

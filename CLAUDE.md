@@ -16,8 +16,8 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | 3 | Seiten organisieren | erledigt ([Bericht](docs/phasen/phase-3.md)) |
 | 4 | Formulare und Unterschrift | erledigt ([Bericht](docs/phasen/phase-4.md)) |
 | 5 | Bearbeiten (inkl. Schwärzen) | erledigt ([Bericht](docs/phasen/phase-5.md)) |
-| 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | in Arbeit: Kennwortschutz, Export, Komprimieren, Vergleich fertig; OCR offen |
-| 7 | Profi (PAdES, PDF/A, Tags) | offen |
+| 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | erledigt ([Bericht](docs/phasen/phase-6.md)) |
+| 7 | Profi (PAdES, PDF/A, Tags) | als Nächstes |
 
 Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig.
 
@@ -73,6 +73,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Export** ([ADR 0012](docs/entscheidungen/0012-export.md)): PDFium-Sitzungen im Worker (`render.ts`, `openSession`/`renderPage`/`pageText` im Client), Bilder Seite für Seite über `export:write-image` in einen gewählten Ordner, Text über `export:save-text`. Kein Word-Export (begründet im ADR).
 - **Komprimieren** ([ADR 0013](docs/entscheidungen/0013-komprimieren.md)): PDFium schreibt vollständig, pdf-lib verkleinert Bilder (JPEG über `ImageCodec`, im Worker der Browser, in Tests `jpeg-js`), packt Ströme, verwirft Unerreichbares (`compress.ts`).
 - **Vergleichen** ([ADR 0014](docs/entscheidungen/0014-vergleichen.md)): Wörter mit Lage aus PDFium-Sitzungen, Myers-Vergleich je Seite (`src/shared/compare.ts`), Bericht als neues PDF mit pdf-lib (`workers/pdfium/compare.ts`).
+- **Texterkennung** ([ADR 0015](docs/entscheidungen/0015-texterkennung.md)): tesseract.js im Renderer (`engine/ocr-client.ts`), Worker, Kern und Sprachdaten aus `public/ocr` (beim Build kopiert, kein Netz). Seiten mit 300 dpi als PGM, Wörter als unsichtbare Textobjekte (`ocrText`, `FPDF_DeviceToPage`). Unsichtbarer Text erscheint nicht beim Bearbeiten des Inhalts.
 - Es ist immer höchstens ein Bearbeitungsmodus aktiv (Kommentieren, Schwärzen, Formular bearbeiten, Inhalt bearbeiten, Seiten organisieren).
 - Dieses Verfahren (Snapshot der Dokumentbytes) gilt für Seiten-, Feld-, Wasserzeichen- und Inhaltsänderungen sowie für das Schwärzen. Nach dem Speichern beginnt der Verlauf neu.
 
@@ -108,7 +109,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0014)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0015)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
@@ -123,13 +124,13 @@ src/
                             pages (Seitenraster, Seiten-Dialoge, Abläufe für Seiten und neue Dokumente),
                             forms (Ausfüllen), form-edit (Formular bearbeiten), signatures (Unterschrift),
                             redaction (Schwärzen), stamping (Wasserzeichen, Kopf-/Fußzeilen), content-edit (Inhalt bearbeiten),
-                            security (Kennwortschutz), export (Bilder, Text), compress, compare, progress (Fortschritt mit Abbrechen)
+                            security (Kennwortschutz), export (Bilder, Text), compress, compare, ocr, progress (Fortschritt mit Abbrechen)
     components/             generische UI-Bausteine (IconButton, Dialog)
     state/                  zustand-Stores (documents, ui, annotations, history, forms, form-edit, content-edit), dirty.ts
     engine/                 pdf.js-Einrichtung, Laden, Range-Transport, Laufzeit je Dokument, Befehle (session.ts),
                             coords.ts, pdfium-client.ts
     styles/                 Design-Tokens, hell/dunkel
-    public/                 beim Build kopierte pdf.js-Ressourcen (nicht eingecheckt)
+    public/                 beim Build kopierte pdf.js- und OCR-Ressourcen (nicht eingecheckt)
   workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, pages, forms, redact, text-search, content, render, memory,
                             protocol, worker), mit pdf-lib: fields, imported, sanitize + redaction, stamping, protection, compress, compare
 resources/icon.svg          eigenes App-Symbol (Quelle)
@@ -159,6 +160,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 | Formularstruktur, Schwärzen, Wasserzeichen, Test-PDFs | @cantoo/pdf-lib | 2.11.1 | MIT |
 | Tests (Teilschriften) | @cantoo/fontkit | 2.0.12 (nur Entwicklung) | MIT |
 | Tests (JPEG) | jpeg-js | 0.4.4 (nur Entwicklung) | BSD-3-Clause |
+| Texterkennung | tesseract.js (+ tesseract.js-core 7.0.0), @tesseract.js-data/deu, /eng | 7.0.0, 1.0.0 | Apache-2.0, MIT |
 | Zustand | zustand | 5.0.15 | MIT |
 | Virtualisierung | @tanstack/react-virtual | 3.14.15 | MIT |
 | i18n | i18next, react-i18next | 26.4.4, 17.0.16 | MIT |
@@ -169,7 +171,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 
 - **TypeScript 6 statt 7:** typescript-eslint 8.71 unterstützt nur TypeScript unter 6.1. Umstieg auf 7, sobald typescript-eslint so weit ist.
 - **Kein electron-vite:** Version 5.0.0 unterstützt Vite 8 nicht und hatte seit 12/2025 kein Release. Stattdessen drei schlanke Vite-Konfigurationen (main, preload, renderer) und ein kleines Dev-Skript.
-- Später: `tesseract.js` 7.0.0 (Phase 6; nur ein Release in 12 Monaten, vor Phase 6 neu prüfen), `@libpdf/core` als Kandidat für PAdES (Phase 7).
+- Später: `@libpdf/core` als Kandidat für PAdES (Phase 7).
 - **Lizenzen:** nur MIT, Apache-2.0, BSD-2/3, ISC und 0BSD. CI prüft das automatisch. AGPL (MuPDF, iText) und GPL nur nach Rücksprache.
 
 ## Konventionen

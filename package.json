@@ -1,7 +1,7 @@
 {
   "name": "blattwerk",
   "productName": "Blattwerk",
-  "version": "0.5.13",
+  "version": "0.6.0",
   "description": "PDF-Editor für macOS und Windows",
   "author": "Linus",
   "license": "UNLICENSED",
@@ -29,12 +29,15 @@
     "@cantoo/pdf-lib": "2.11.1",
     "@embedpdf/pdfium": "2.15.1",
     "@tanstack/react-virtual": "3.14.15",
+    "@tesseract.js-data/deu": "1.0.0",
+    "@tesseract.js-data/eng": "1.0.0",
     "i18next": "26.4.4",
     "lucide-react": "1.55.0",
     "pdfjs-dist": "6.4.299",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-i18next": "17.0.16",
+    "tesseract.js": "7.0.0",
     "zustand": "5.0.15"
   },
   "devDependencies": {

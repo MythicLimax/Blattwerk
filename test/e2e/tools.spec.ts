@@ -242,3 +242,30 @@ test.describe('Vergleichen', () => {
     await handle.close();
   });
 });
+
+test.describe('Texterkennung', () => {
+  test('gescannte Seite erkennen, speichern: der Text ist durchsuchbar', async () => {
+    const { dir, file } = copyOf('scan.pdf');
+    const handle = await launchApp([file], { userData: dir });
+    await waitForDocument(handle.page, 1);
+    await menuClick(handle.app, 'tools.ocr');
+    await handle.page.getByTestId('ocr-confirm').click();
+    await expect(handle.page.getByTestId('progress-dialog')).toBeVisible();
+    await expect(handle.page.getByTestId('notices')).toContainText('Text auf 1 Seite erkannt', { timeout: 60_000 });
+    await waitForDocument(handle.page, 1);
+    await menuClick(handle.app, 'file.save');
+    await expect(handle.page.getByTestId('tab-dirty')).toHaveCount(0);
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const task = pdfjs.getDocument({ data: new Uint8Array(readFileSync(file)), verbosity: 0 });
+    const content = await (await (await task.promise).getPage(1)).getTextContent();
+    const text = content.items.map((item) => ('str' in item ? item.str : '')).join(' ');
+    expect(text).toContain('Testdokument');
+    await task.destroy();
+    // Noch einmal: Seite hat jetzt Text und wird übersprungen
+    await waitForDocument(handle.page, 1);
+    await menuClick(handle.app, 'tools.ocr');
+    await handle.page.getByTestId('ocr-confirm').click();
+    await expect(handle.page.getByTestId('notices')).toContainText('bereits Text');
+    await handle.close();
+  });
+});

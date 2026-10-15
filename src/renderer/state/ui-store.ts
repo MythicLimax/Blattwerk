@@ -67,6 +67,8 @@ interface UiState {
   exportImagesOpen: boolean;
   // Komprimieren (Phase 6)
   compressOpen: boolean;
+  // Texterkennung (Phase 6)
+  ocrOpen: boolean;
   settingsOpen: boolean;
   // Offene Rückfrage (ungespeicherte Änderungen, von außen geänderte Datei)
   prompt: Prompt | null;
@@ -101,6 +103,7 @@ interface UiState {
   setSecurityDialogOpen: (open: boolean) => void;
   setExportImagesOpen: (open: boolean) => void;
   setCompressOpen: (open: boolean) => void;
+  setOcrOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setPrompt: (prompt: Prompt | null) => void;
   setPageDialog: (dialog: PageDialog | null) => void;
@@ -141,6 +144,7 @@ export const useUi = create<UiState>((set) => ({
   securityDialogOpen: false,
   exportImagesOpen: false,
   compressOpen: false,
+  ocrOpen: false,
   settingsOpen: false,
   prompt: null,
   pageDialog: null,
@@ -173,6 +177,7 @@ export const useUi = create<UiState>((set) => ({
   setSecurityDialogOpen: (securityDialogOpen) => set({ securityDialogOpen }),
   setExportImagesOpen: (exportImagesOpen) => set({ exportImagesOpen }),
   setCompressOpen: (compressOpen) => set({ compressOpen }),
+  setOcrOpen: (ocrOpen) => set({ ocrOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPrompt: (prompt) => set({ prompt }),
   setPageDialog: (pageDialog) => set({ pageDialog }),

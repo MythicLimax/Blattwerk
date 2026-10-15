@@ -15,6 +15,7 @@ import {
   type PageObjects,
 } from '../../shared/content';
 import type { StampFont } from '../../shared/stamping';
+import type { OcrWord } from '../../shared/ocr';
 import { withBuffer, withFloats, withWString, type Pdfium } from './memory';
 import type { Allocations } from './pages';
 
@@ -96,6 +97,8 @@ export function listPageObjects(m: Pdfium, doc: number, pageIndex: number): Page
         const type = m.FPDFPageObj_GetType(object);
         const kind = type === OBJECT.text ? 'text' : type === OBJECT.image ? 'image' : type === OBJECT.form ? 'form' : null;
         if (!kind) continue;
+        // Unsichtbarer Text (z. B. aus der Texterkennung) ist nicht zum Bearbeiten gedacht
+        if (kind === 'text' && m.FPDFTextObj_GetTextRenderMode(object) === TEXT_INVISIBLE) continue;
         if (objects.length >= MAX_PAGE_OBJECTS) {
           truncated = true;
           break;
@@ -259,6 +262,9 @@ export function applyContentOperation(m: Pdfium, doc: number, operation: Content
         }
         break;
       }
+      case 'ocrText':
+        addOcrText(m, doc, page, operation.width, operation.height, operation.words);
+        break;
       case 'editParagraph':
         if (listing) setParagraph(m, doc, page, listing, operation.lines, operation.text, operation.box, operation.style);
         break;
@@ -496,4 +502,40 @@ function setParagraph(
     place(object, matrixFor(i));
     m.FPDFPage_InsertObject(page, object);
   });
+}
+
+const TEXT_INVISIBLE = 3;
+
+// Erkannte Wörter als unsichtbaren Text über das Seitenbild legen: Jedes Wort wird so gedehnt, dass es genau über dem
+// Wort im Bild liegt (Suchen und Markieren treffen die richtige Stelle). Die Umrechnung von Bildpunkten in
+// Seitenkoordinaten übernimmt PDFium, auch für gedrehte Seiten.
+function addOcrText(m: Pdfium, doc: number, page: number, width: number, height: number, words: OcrWord[]): void {
+  const toPage = (x: number, y: number) =>
+    withBuffer(m, 16, (ptr) => {
+      m.FPDF_DeviceToPage(page, 0, 0, width, height, 0, x, y, ptr, ptr + 8);
+      return { x: m.pdfium.getValue(ptr, 'double') as number, y: m.pdfium.getValue(ptr + 8, 'double') as number };
+    });
+  for (const word of words) {
+    const [x0, , x1] = word.box;
+    const origin = toPage(x0, word.baseline);
+    const end = toPage(x1, word.baseline);
+    const top = toPage(x0, word.baseline - word.size);
+    const length = Math.hypot(end.x - origin.x, end.y - origin.y);
+    const size = Math.hypot(top.x - origin.x, top.y - origin.y);
+    if (length < 0.1 || size < 0.5) continue;
+    const object = newTextObject(m, doc, 'Helvetica', size, word.text, { r: 0, g: 0, b: 0 });
+    const natural = readFloats(m, 4, (ptr) => Boolean(m.FPDFPageObj_GetBounds(object, ptr, ptr + 4, ptr + 8, ptr + 12)));
+    const naturalWidth = natural ? (natural[2] ?? 0) - (natural[0] ?? 0) : 0;
+    if (naturalWidth <= 0) {
+      m.FPDFPageObj_Destroy(object);
+      continue;
+    }
+    // Leserichtung d und Richtung nach oben n (beide Länge 1) in Seitenkoordinaten
+    const d = { x: (end.x - origin.x) / length, y: (end.y - origin.y) / length };
+    const n = { x: (top.x - origin.x) / size, y: (top.y - origin.y) / size };
+    const stretch = length / naturalWidth;
+    m.FPDFTextObj_SetTextRenderMode(object, TEXT_INVISIBLE);
+    withFloats(m, [d.x * stretch, d.y * stretch, n.x, n.y, origin.x, origin.y], (ptr) => m.FPDFPageObj_SetMatrix(object, ptr));
+    m.FPDFPage_InsertObject(page, object);
+  }
 }

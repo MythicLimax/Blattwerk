@@ -12,6 +12,7 @@ import { TooltipHost } from '../components/Tooltip';
 import { SecurityDialog } from '../features/security/SecurityDialog';
 import { ExportImagesDialog } from '../features/export/ExportImagesDialog';
 import { CompressDialog } from '../features/compress/CompressDialog';
+import { OcrDialog } from '../features/ocr/OcrDialog';
 import { ProgressDialog } from '../features/progress/ProgressDialog';
 import { BusyOverlay } from '../features/pages/BusyOverlay';
 import { ChooseSignatureDialog, CreateSignatureDialog } from '../features/signatures/SignatureDialogs';
@@ -55,6 +56,7 @@ export function App() {
   const securityDialogOpen = useUi((s) => s.securityDialogOpen);
   const exportImagesOpen = useUi((s) => s.exportImagesOpen);
   const compressOpen = useUi((s) => s.compressOpen);
+  const ocrOpen = useUi((s) => s.ocrOpen);
   const pageDialog = useUi((s) => s.pageDialog);
   const combine = useUi((s) => s.combine);
   const signatureDialog = useUi((s) => s.signatureDialog);
@@ -130,6 +132,7 @@ export function App() {
       {securityDialogOpen && active?.status === 'ready' && <SecurityDialog tab={active} />}
       {exportImagesOpen && active?.status === 'ready' && <ExportImagesDialog tab={active} />}
       {compressOpen && active?.status === 'ready' && <CompressDialog tab={active} />}
+      {ocrOpen && active?.status === 'ready' && <OcrDialog tab={active} />}
       <ProgressDialog />
       <SourcePasswordDialog />
       <BusyOverlay />
