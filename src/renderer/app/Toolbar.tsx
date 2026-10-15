@@ -246,6 +246,7 @@ export function Toolbar() {
         <div className={styles.group}>
           <IconButton
             icon={Signature}
+            tone="sign"
             label={t('toolbar.sign')}
             disabled={!viewing || !tab.canAnnotate || tab.formEditing}
             onClick={() => executeCommand('tools.sign')}
@@ -253,6 +254,7 @@ export function Toolbar() {
           />
           <IconButton
             icon={EyeOff}
+            tone="redact"
             label={t('toolbar.redact')}
             pressed={redactToolsVisible && viewing && !tab.formEditing && !tab.contentEditing}
             disabled={!viewing}
@@ -261,6 +263,7 @@ export function Toolbar() {
           />
           <IconButton
             icon={FilePenLine}
+            tone="edit"
             label={t('toolbar.editContent')}
             pressed={viewing && tab.contentEditing}
             disabled={!viewing || !tab.canModify}
@@ -269,6 +272,7 @@ export function Toolbar() {
           />
           <IconButton
             icon={ClipboardPen}
+            tone="forms"
             label={t('toolbar.editForm')}
             pressed={viewing && tab.formEditing}
             disabled={!viewing || !tab.canEditForms}
@@ -277,6 +281,7 @@ export function Toolbar() {
           />
           <IconButton
             icon={LayoutGrid}
+            tone="pages"
             label={t('toolbar.organize')}
             pressed={tab.mode === 'organize'}
             onClick={() => executeCommand('pages.organize')}
@@ -284,6 +289,7 @@ export function Toolbar() {
           />
           <IconButton
             icon={MessageSquare}
+            tone="comment"
             label={t('toolbar.comment')}
             pressed={commentToolsVisible && viewing && !tab.formEditing && !tab.contentEditing}
             disabled={!viewing}

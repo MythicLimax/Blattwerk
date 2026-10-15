@@ -77,6 +77,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Digitale Signaturen** ([ADR 0016](docs/entscheidungen/0016-digitale-signaturen.md)): `signing.ts` (eigener Platzhalter, CMS mit pkijs, PAdES B-B), `signatures.ts` (prüfen), `identity.ts` (eigene ID); Oberfläche `features/certify/`. Nach dem Unterschreiben wird sofort gespeichert.
 - **PDF/A** ([ADR 0017](docs/entscheidungen/0017-pdfa.md)): `pdfa.ts` (umwandeln, prüfen), `cff.ts` (Breiten aus CFF), `icc.ts` (sRGB-Profil), `font-tables.ts`; Standardschriften aus PDFium (`standardFontProgram`). Immer neue Datei. Oberfläche `features/pdfa/`.
 - **Barrierefreiheit** ([ADR 0018](docs/entscheidungen/0018-barrierefreiheit.md)): `accessibility.ts` (Tags lesen, prüfen, Sprache/Titel/Tab-Reihenfolge setzen); Seitenleiste „Tags“ und Prüfdialog in `features/accessibility/`, Ergebnis je Stand in `report.ts`.
+- **Textdokumente → PDF** ([ADR 0019](docs/entscheidungen/0019-textdokumente-umwandeln.md)): im Hauptprozess, `src/main/convert/` (eigene Leser für DOCX, ODT, RTF, Text, Markdown → `model.ts` → `html.ts`; `pdf.ts` setzt mit `printToPDF` in einem unsichtbaren Fenster mit eigener Sitzung ohne Netz und ohne JavaScript). IPC `convert:pick`, `convert:dropped`; abgelegte Textdokumente erkennt `isDocumentFileName` (`src/shared/convert.ts`).
 - Es ist immer höchstens ein Bearbeitungsmodus aktiv (Kommentieren, Schwärzen, Formular bearbeiten, Inhalt bearbeiten, Seiten organisieren).
 - Dieses Verfahren (Snapshot der Dokumentbytes) gilt für Seiten-, Feld-, Wasserzeichen- und Inhaltsänderungen sowie für das Schwärzen. Nach dem Speichern beginnt der Verlauf neu.
 
@@ -112,7 +113,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0018)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0020)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
@@ -184,6 +185,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 - Dateinamen: React-Komponenten `PascalCase.tsx`, alles andere `kebab-case.ts`.
 - **Keine UI-Texte im Code:** immer `t('bereich.schluessel')`. Neue Schlüssel zuerst in `src/locales/de/`. ESLint erzwingt das.
 - Icons nur aus `lucide-react`. Styling mit CSS Modules und Design-Tokens (CSS-Variablen) für hell und dunkel nach `prefers-color-scheme`.
+- **Gestaltung** ([ADR 0020](docs/entscheidungen/0020-gestaltung.md)): Papierton, Flaschengrün (`--color-brand`), je Arbeitsbereich ein Ton (`data-tone`, `IconButton tone`, `ModeBadge`). Neue Modi bekommen einen Ton und ein Namensschild. Keine Verläufe, kein Glas, keine violetten Akzente.
 - Tastenkürzel nur über die zentrale Tabelle in `src/shared/shortcuts.ts` (`CmdOrCtrl`). Menü und Renderer lesen dieselbe Tabelle.
 - Fehler aus Engines als typisierte Ergebnisse, nicht als nackte Exceptions über Prozessgrenzen. Meldungen an Nutzer immer übersetzt.
 - Commits: `typ(bereich): Beschreibung auf Deutsch`, z. B. `feat(viewer): Miniaturen erst bei Sichtbarkeit rendern`. Am Phasenende ein Commit `Phase N abgeschlossen`.

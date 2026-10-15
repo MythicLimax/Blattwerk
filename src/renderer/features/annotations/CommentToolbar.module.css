@@ -10,6 +10,12 @@
   overflow-x: auto;
 }
 
+/* Leiste eines Arbeitsbereichs: Farbkante oben, leicht getönte Fläche */
+.bar[data-tone] {
+  border-top: 3px solid var(--tone);
+  background: color-mix(in srgb, var(--tone-soft) 45%, var(--color-surface));
+}
+
 .group {
   display: flex;
   align-items: center;

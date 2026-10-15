@@ -15,11 +15,13 @@ import {
   Underline,
   Undo2,
   type LucideIcon,
+  MessageSquare as MessageSquareIcon,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Annotation, Rgb, StampId } from '../../../shared/annotations';
 import { rgbEquals, STAMP_IDS } from '../../../shared/annotations';
 import { IconButton } from '../../components/IconButton';
+import { ModeBadge } from '../../components/ModeBadge';
 import { executeCommand } from '../../engine/session';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { MARKUP_TOOLS, useAnnotations, useTabAnnotations, type Tool } from '../../state/annotations-store';
@@ -119,11 +121,13 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
       role="toolbar"
       aria-label={t('comments.toolbar')}
       data-testid="comment-toolbar"
+      data-tone="comment"
       onMouseDown={(event) => {
         // Die Textauswahl im Dokument bleibt erhalten, damit Markieren per Klick funktioniert.
         if ((event.target as HTMLElement).closest('button')) event.preventDefault();
       }}
     >
+      <ModeBadge tone="comment" icon={MessageSquareIcon} label={t('toolbar.comment')} />
       <div className={styles.group}>
         {TOOLS.map(({ tool: id, icon }) => (
           <IconButton

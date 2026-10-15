@@ -11,9 +11,11 @@ import {
   Trash,
   Undo2,
   type LucideIcon,
+  ClipboardPen as ClipboardPenIcon,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '../../components/IconButton';
+import { ModeBadge } from '../../components/ModeBadge';
 import { executeCommand } from '../../engine/session';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { useTabAnnotations } from '../../state/annotations-store';
@@ -53,10 +55,12 @@ export function FormEditToolbar({ tab }: { tab: TabState }) {
       role="toolbar"
       aria-label={t('formEdit.toolbar')}
       data-testid="form-edit-toolbar"
+      data-tone="forms"
       onMouseDown={(event) => {
         if ((event.target as HTMLElement).closest('button')) event.preventDefault();
       }}
     >
+      <ModeBadge tone="forms" icon={ClipboardPenIcon} label={t('toolbar.editForm')} />
       <div className={styles.group}>
         {TOOLS.map(({ tool: id, icon }) => (
           <IconButton

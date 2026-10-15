@@ -8,6 +8,7 @@ import {
   Type,
   Undo2,
   type LucideIcon,
+  FilePenLine as FilePenLineIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -15,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import type { Rgb } from '../../../shared/annotations';
 import { STAMP_FONTS, type StampFont } from '../../../shared/stamping';
 import { IconButton } from '../../components/IconButton';
+import { ModeBadge } from '../../components/ModeBadge';
 import { executeCommand } from '../../engine/session';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { useTabAnnotations } from '../../state/annotations-store';
@@ -102,10 +104,12 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
       role="toolbar"
       aria-label={t('contentEdit.toolbar')}
       data-testid="content-edit-toolbar"
+      data-tone="edit"
       onMouseDown={(event) => {
         if ((event.target as HTMLElement).closest('button')) event.preventDefault();
       }}
     >
+      <ModeBadge tone="edit" icon={FilePenLineIcon} label={t('toolbar.editContent')} />
       <div className={styles.group}>
         {TOOLS.map(({ tool: id, icon }) => (
           <IconButton

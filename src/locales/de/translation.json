@@ -215,13 +215,38 @@
     }
   },
   "start": {
-    "title": "Willkommen bei {{appName}}",
+    "title": "{{appName}}",
     "open": "PDF öffnen",
-    "dropHint": "oder eine PDF-Datei hierher ziehen",
+    "dropHint": "oder Dateien ins Fenster ziehen – PDF, Word, OpenDocument, RTF",
     "recent": "Zuletzt geöffnet",
     "noRecent": "Noch keine Dateien geöffnet.",
     "remove": "Aus der Liste entfernen",
-    "clear": "Liste leeren"
+    "clear": "Liste leeren",
+    "tagline": "PDFs lesen, kommentieren, bearbeiten und unterschreiben – alles auf diesem Mac, ohne Internet.",
+    "create": "Neu erstellen",
+    "tiles": {
+      "combine": {
+        "title": "Dateien zusammenführen",
+        "detail": "Mehrere PDFs und Bilder zu einem Dokument"
+      },
+      "fromImages": {
+        "title": "PDF aus Bildern",
+        "detail": "Fotos oder Scans (JPEG, PNG) als Seiten"
+      },
+      "fromDocument": {
+        "title": "PDF aus Textdokument",
+        "detail": "Word, OpenDocument, RTF, Text, Markdown"
+      }
+    },
+    "legend": "Jede Farbe steht für einen Arbeitsbereich",
+    "tones": {
+      "comment": "Kommentieren",
+      "edit": "Text und Bilder bearbeiten",
+      "forms": "Formulare",
+      "pages": "Seiten organisieren",
+      "redact": "Schwärzen",
+      "sign": "Unterschreiben"
+    }
   },
   "toolbar": {
     "open": "Öffnen",

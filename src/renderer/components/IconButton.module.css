@@ -25,11 +25,30 @@
   opacity: 0.35;
 }
 
-.pressed {
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+.pressed,
+.pressed:hover:not(:disabled) {
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
 }
 
-.pressed:hover:not(:disabled) {
-  background: var(--color-accent-soft);
+/* Arbeitsbereich: Symbol in seiner Farbe, Fläche beim Überfahren in der hellen Variante */
+.toned {
+  color: var(--tone);
+}
+
+.toned:hover:not(:disabled) {
+  background: var(--tone-soft);
+}
+
+.toned.pressed,
+.toned.pressed:hover:not(:disabled) {
+  background: var(--tone);
+  color: var(--color-surface);
+}
+
+/* In der Leiste eines Arbeitsbereichs übernehmen gedrückte Werkzeuge dessen Farbe */
+:global([data-tone]) .pressed:not(.toned),
+:global([data-tone]) .pressed:not(.toned):hover:not(:disabled) {
+  background: var(--tone-soft);
+  color: var(--tone);
 }

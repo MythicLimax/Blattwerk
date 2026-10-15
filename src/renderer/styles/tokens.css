@@ -1,8 +1,12 @@
-/* Design-Tokens. Hell ist Standard, Dunkel folgt der Systemeinstellung. */
+/* Design-Tokens (ADR 0020). Papier und Druckfarben: warmer Papierton, Flaschengrün als Markenfarbe, je Arbeitsbereich
+   eine eigene Farbe („Töne“), überall gleich verwendet (Werkzeugleiste, Modusleiste, Startseite). Hell ist Standard,
+   Dunkel folgt der Systemeinstellung. */
 :root {
   color-scheme: light dark;
 
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  /* Für Wortmarke, Überschriften der Startseite und Dialogtitel: New York (macOS), sonst eine Buchschrift */
+  --font-display: 'New York', ui-serif, 'Iowan Old Style', 'Charter', Georgia, 'Times New Roman', serif;
   --font-size-xs: 11px;
   --font-size-sm: 12px;
   --font-size-md: 13px;
@@ -16,62 +20,132 @@
   --space-6: 24px;
   --space-8: 32px;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
 
   --toolbar-height: 44px;
   --tabbar-height: 34px;
   --sidebar-width: 208px;
   --rightpanel-width: 300px;
 
-  --color-bg: #f3f3f4;
-  --color-surface: #ffffff;
+  /* Papier */
+  --color-bg: #f3efe6;
+  --color-surface: #fdfbf6;
   --color-surface-raised: #ffffff;
-  --color-surface-sunken: #e9e9eb;
-  --color-viewer-bg: #dcdcdf;
-  --color-border: #d3d3d7;
-  --color-border-strong: #b9b9bf;
-  --color-text: #1d1d1f;
-  --color-text-muted: #66666e;
+  --color-surface-sunken: #e9e3d6;
+  --color-viewer-bg: #d8d1c2;
+  --color-border: #ddd5c4;
+  --color-border-strong: #bfb5a1;
+  --color-text: #22201b;
+  --color-text-muted: #6d675b;
   --color-text-inverse: #ffffff;
-  --color-accent: #2f6fde;
-  --color-accent-hover: #255cc0;
-  --color-accent-soft: #dbe7fb;
-  --color-hover: rgba(0, 0, 0, 0.06);
-  --color-active: rgba(0, 0, 0, 0.1);
-  --color-danger: #c62828;
-  --color-danger-soft: #fdecea;
-  --color-success: #2e7d32;
-  --color-focus: #2f6fde;
-  --color-match: rgba(255, 196, 0, 0.45);
-  --color-match-selected: rgba(255, 120, 0, 0.6);
-  --shadow-popover: 0 8px 28px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.12);
-  --shadow-page: 0 1px 4px rgba(0, 0, 0, 0.25);
+
+  /* Marke: Flaschengrün */
+  --color-brand: #17694e;
+  --color-brand-hover: #115540;
+  --color-brand-soft: #dcebe2;
+  --color-accent: var(--color-brand);
+  --color-accent-hover: var(--color-brand-hover);
+  --color-accent-soft: var(--color-brand-soft);
+
+  --color-hover: rgba(60, 45, 20, 0.07);
+  --color-active: rgba(60, 45, 20, 0.12);
+  --color-danger: #b8321c;
+  --color-danger-soft: #f8e2dc;
+  --color-success: #2f7a32;
+  --color-focus: #17694e;
+  --color-match: rgba(240, 180, 0, 0.45);
+  --color-match-selected: rgba(230, 110, 0, 0.6);
+  --shadow-popover: 0 10px 30px rgba(40, 30, 10, 0.18), 0 1px 3px rgba(40, 30, 10, 0.14);
+  --shadow-page: 0 1px 3px rgba(40, 30, 10, 0.28), 0 0 0 1px rgba(40, 30, 10, 0.06);
+
+  /* Töne der Arbeitsbereiche (Druckfarben); -soft für Flächen */
+  --tone-comment: #b97a06;
+  --tone-comment-soft: #f8ecc9;
+  --tone-edit: #2550c4;
+  --tone-edit-soft: #e0e7fa;
+  --tone-forms: #0e7470;
+  --tone-forms-soft: #d6ecea;
+  --tone-pages: #4f7d18;
+  --tone-pages-soft: #e5efd5;
+  --tone-redact: #b8321c;
+  --tone-redact-soft: #f8e2dc;
+  --tone-sign: #94561b;
+  --tone-sign-soft: #f3e4d3;
+  --tone-tools: #4d5866;
+  --tone-tools-soft: #e3e6ea;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #232326;
-    --color-surface: #2b2b2f;
-    --color-surface-raised: #333338;
-    --color-surface-sunken: #1c1c1e;
-    --color-viewer-bg: #3a3a3e;
-    --color-border: #3d3d42;
-    --color-border-strong: #55555c;
-    --color-text: #ececee;
-    --color-text-muted: #a1a1a8;
-    --color-text-inverse: #ffffff;
-    --color-accent: #5b8ff0;
-    --color-accent-hover: #7aa5f3;
-    --color-accent-soft: #2a3a58;
-    --color-hover: rgba(255, 255, 255, 0.07);
-    --color-active: rgba(255, 255, 255, 0.12);
-    --color-danger: #ef5350;
-    --color-danger-soft: #3b2324;
-    --color-success: #66bb6a;
-    --color-focus: #7aa5f3;
-    --shadow-popover: 0 8px 28px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+    --color-bg: #1c1d1a;
+    --color-surface: #24261f;
+    --color-surface-raised: #2c2e27;
+    --color-surface-sunken: #161714;
+    --color-viewer-bg: #33352e;
+    --color-border: #3a3c34;
+    --color-border-strong: #545649;
+    --color-text: #ece8dd;
+    --color-text-muted: #a6a192;
+    --color-text-inverse: #10110e;
+
+    --color-brand: #5cbf93;
+    --color-brand-hover: #79d1aa;
+    --color-brand-soft: #22392e;
+
+    --color-hover: rgba(255, 250, 235, 0.07);
+    --color-active: rgba(255, 250, 235, 0.12);
+    --color-danger: #f07a62;
+    --color-danger-soft: #42261f;
+    --color-success: #74c27a;
+    --color-focus: #79d1aa;
+    --shadow-popover: 0 10px 30px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-page: 0 1px 6px rgba(0, 0, 0, 0.6);
+
+    --tone-comment: #e7b33f;
+    --tone-comment-soft: #3d331b;
+    --tone-edit: #7d9ef2;
+    --tone-edit-soft: #232d48;
+    --tone-forms: #4fc2bb;
+    --tone-forms-soft: #183634;
+    --tone-pages: #9fcd5c;
+    --tone-pages-soft: #2b3620;
+    --tone-redact: #f07a62;
+    --tone-redact-soft: #42261f;
+    --tone-sign: #dc9a5c;
+    --tone-sign-soft: #3c2d1f;
+    --tone-tools: #a9b3c0;
+    --tone-tools-soft: #2c3036;
   }
+}
+
+/* Ein Element mit data-tone stellt --tone und --tone-soft für sich und seine Kinder bereit */
+[data-tone='comment'] {
+  --tone: var(--tone-comment);
+  --tone-soft: var(--tone-comment-soft);
+}
+[data-tone='edit'] {
+  --tone: var(--tone-edit);
+  --tone-soft: var(--tone-edit-soft);
+}
+[data-tone='forms'] {
+  --tone: var(--tone-forms);
+  --tone-soft: var(--tone-forms-soft);
+}
+[data-tone='pages'] {
+  --tone: var(--tone-pages);
+  --tone-soft: var(--tone-pages-soft);
+}
+[data-tone='redact'] {
+  --tone: var(--tone-redact);
+  --tone-soft: var(--tone-redact-soft);
+}
+[data-tone='sign'] {
+  --tone: var(--tone-sign);
+  --tone-soft: var(--tone-sign-soft);
+}
+[data-tone='tools'] {
+  --tone: var(--tone-tools);
+  --tone-soft: var(--tone-tools-soft);
 }

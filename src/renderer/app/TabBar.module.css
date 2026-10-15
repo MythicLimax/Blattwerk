@@ -19,7 +19,7 @@
   max-width: 240px;
   height: 28px;
   padding: 0 var(--space-1) 0 var(--space-2);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   color: var(--color-text-muted);
   cursor: default;
   flex: 0 1 auto;
@@ -33,7 +33,8 @@
 .active:hover {
   background: var(--color-surface);
   color: var(--color-text);
-  box-shadow: 0 -1px 0 var(--color-border) inset;
+  box-shadow: inset 0 2px 0 var(--color-brand), inset 1px 0 0 var(--color-border), inset -1px 0 0 var(--color-border);
+  font-weight: 500;
 }
 
 .name {

@@ -1,6 +1,7 @@
-import { Check, MousePointer2, Redo2, ScanSearch, SquareDashed, TextCursor, Trash, Undo2, X, type LucideIcon } from 'lucide-react';
+import { Check, MousePointer2, Redo2, ScanSearch, SquareDashed, TextCursor, Trash, Undo2, X, type LucideIcon, EyeOff as EyeOffIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '../../components/IconButton';
+import { ModeBadge } from '../../components/ModeBadge';
 import { executeCommand } from '../../engine/session';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { useAnnotations, useTabAnnotations, type Tool } from '../../state/annotations-store';
@@ -42,10 +43,12 @@ export function RedactToolbar({ tab }: { tab: TabState }) {
       role="toolbar"
       aria-label={t('redaction.toolbar')}
       data-testid="redact-toolbar"
+      data-tone="redact"
       onMouseDown={(event) => {
         if ((event.target as HTMLElement).closest('button')) event.preventDefault();
       }}
     >
+      <ModeBadge tone="redact" icon={EyeOffIcon} label={t('toolbar.redact')} />
       <div className={styles.group}>
         {TOOLS.map(({ tool: id, icon }) => (
           <IconButton
