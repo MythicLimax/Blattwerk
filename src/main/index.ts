@@ -229,6 +229,7 @@ async function createWindow(): Promise<BrowserWindow> {
     preloadPath,
     state: windowState,
     devTools: !app.isPackaged || isE2E,
+    hidden: isE2E && !process.env.BLATTWERK_E2E_SHOW,
     onStateChange: (state) => {
       windowState = state;
       saveSettings({ window: state });
@@ -303,6 +304,8 @@ app.on('activate', () => {
 });
 
 void app.whenReady().then(async () => {
+  // Oberflächentests laufen unsichtbar: kein Fenster, kein Symbol im Dock, kein Wegnehmen des Fokus
+  if (isE2E && !process.env.BLATTWERK_E2E_SHOW) app.dock?.hide();
   hardenSession(devServerOrigin);
   handleAppScheme(rendererDir);
   recent = new RecentFiles(path.join(app.getPath('userData'), 'recent-files.json'));

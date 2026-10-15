@@ -59,6 +59,8 @@ export interface CreateWindowOptions {
   preloadPath: string;
   state: WindowState;
   devTools: boolean;
+  // Oberflächentests: Fenster unsichtbar lassen (zeichnet trotzdem vollständig)
+  hidden?: boolean;
   onStateChange: (state: WindowState) => void;
 }
 
@@ -83,13 +85,15 @@ export function createMainWindow(options: CreateWindowOptions): BrowserWindow {
       navigateOnDragDrop: false,
       spellcheck: false,
       devTools: options.devTools,
+      // Unsichtbare Fenster würden sonst gedrosselt (Zeichnen, Zeitgeber)
+      backgroundThrottling: !options.hidden,
     },
   });
 
   if (options.state.maximized) win.maximize();
   // Pinch-Zoom des Browsers aus: Zoomen übernimmt der Viewer selbst.
   void win.webContents.setVisualZoomLevelLimits(1, 1);
-  win.once('ready-to-show', () => win.show());
+  if (!options.hidden) win.once('ready-to-show', () => win.show());
 
   let saveTimer: NodeJS.Timeout | null = null;
   const scheduleSave = () => {
