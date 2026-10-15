@@ -84,6 +84,7 @@ const loadCompare = () => import('./compare');
 const loadSigning = () => import('./signing');
 const loadSignatures = () => import('./signatures');
 const loadIdentity = () => import('./identity');
+const loadPdfA = () => import('./pdfa');
 
 const NO_CHANGES = { upserts: [], deletions: [] };
 
@@ -129,6 +130,7 @@ function errorCode(error: unknown): WorkerErrorCode {
   if (isFieldError(error)) return error.code;
   if (error instanceof Error && error.name === 'SanitizeError') return 'redact-encrypted';
   if (error instanceof Error && error.name === 'CompressError') return 'compress-encrypted';
+  if (error instanceof Error && error.name === 'PdfAError') return (error as Error & { code: WorkerErrorCode }).code;
   if (error instanceof Error && error.name === 'SignError') return (error as Error & { code: WorkerErrorCode }).code;
   if (error instanceof Error && (error.name === 'StampError' || error.name === 'ContentError')) return (error as Error & { code: WorkerErrorCode }).code;
   if (error instanceof PageOperationError) return error.code;
@@ -256,6 +258,23 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
           const { createIdentity } = await loadIdentity();
           const bytes = ownBuffer(await createIdentity(request));
           reply({ id: request.id, ok: true, kind: 'raw', bytes }, [bytes]);
+          return;
+        }
+        case 'pdfa': {
+          const full = pdfium.process(new Uint8Array(request.bytes), request.password, request.changes, [], { incremental: false, removeSecurity: true }, request.formValues);
+          const { convertToPdfA } = await loadPdfA();
+          const result = await convertToPdfA(
+            full,
+            { standardFont: (name) => pdfium.standardFontProgram(name), cmykProfile: request.cmykProfile ? new Uint8Array(request.cmykProfile) : null },
+            new Date(),
+            request.producer,
+          );
+          replyBytes(request.id, result.bytes, pdfium, null);
+          return;
+        }
+        case 'checkPdfA': {
+          const { checkPdfA } = await loadPdfA();
+          reply({ id: request.id, ok: true, kind: 'pdfa', report: await checkPdfA(new Uint8Array(request.bytes)) });
           return;
         }
         case 'inspect':

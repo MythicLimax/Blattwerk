@@ -6,6 +6,7 @@ import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
 import type { CompressionLevel } from '../../shared/compress';
 import type { CompareLabels } from '../../shared/compare';
 import type { SignatureCheck, SignRequestInput } from '../../shared/signing';
+import type { PdfAReport } from '../../shared/pdfa';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
@@ -287,4 +288,22 @@ export async function createIdentity(input: { name: string; organization: string
   const response = await send({ type: 'createIdentity', ...input }, []);
   if (response.kind !== 'raw') throw new PdfiumClientError('failed', 'unerwartete Antwort');
   return new Uint8Array(response.bytes);
+}
+
+// Als PDF/A-2b umwandeln; liefert das neue Dokument. Die Bytes gehen an den Worker.
+export function convertToPdfA(
+  bytes: Uint8Array,
+  password: string | null,
+  input: { changes: AnnotationChanges; formValues: FormFieldValue[]; cmykProfile: ArrayBuffer | null; producer: string },
+): Promise<Uint8Array> {
+  const buffer = ownBuffer(bytes);
+  return bytesOf(send({ type: 'pdfa', bytes: buffer, password, ...input }, input.cmykProfile ? [buffer, input.cmykProfile] : [buffer]));
+}
+
+// Auf PDF/A prüfen. Die Bytes bleiben beim Aufrufer nutzbar.
+export async function checkPdfA(bytes: Uint8Array): Promise<PdfAReport> {
+  const buffer = bytes.slice().buffer as ArrayBuffer;
+  const response = await send({ type: 'checkPdfA', bytes: buffer }, [buffer]);
+  if (response.kind !== 'pdfa') throw new PdfiumClientError('failed', 'unerwartete Antwort');
+  return response.report;
 }

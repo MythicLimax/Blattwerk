@@ -9,6 +9,7 @@ import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
 import type { CompressionLevel } from '../../shared/compress';
 import type { CompareLabels } from '../../shared/compare';
 import type { SignatureCheck, SignRequestInput } from '../../shared/signing';
+import type { PdfAReport } from '../../shared/pdfa';
 
 // Kommentaränderungen, Formularwerte und (optional) Seiten- oder Feldoperationen anwenden, neue Bytes liefern
 export interface ProcessRequest {
@@ -145,6 +146,26 @@ export interface CreateIdentityRequest {
   years: number;
 }
 
+// Als PDF/A-2b speichern: ungespeicherte Änderungen übernehmen, Schutz entfernen, dann umwandeln (pdfa.ts)
+export interface PdfARequest {
+  id: number;
+  type: 'pdfa';
+  bytes: ArrayBuffer;
+  password: string | null;
+  changes: AnnotationChanges;
+  formValues: FormFieldValue[];
+  // CMYK-Profil für DefaultCMYK (aus den Ressourcen von pdf.js)
+  cmykProfile: ArrayBuffer | null;
+  producer: string;
+}
+
+// Auf PDF/A prüfen
+export interface CheckPdfARequest {
+  id: number;
+  type: 'checkPdfA';
+  bytes: ArrayBuffer;
+}
+
 // Sitzung: Dokument für mehrere Seiten geöffnet halten (Export, Texterkennung, Vergleich)
 export interface OpenSessionRequest {
   id: number;
@@ -199,7 +220,9 @@ export type WorkerRequest =
   | CompareRequest
   | SignRequest
   | VerifySignaturesRequest
-  | CreateIdentityRequest;
+  | CreateIdentityRequest
+  | PdfARequest
+  | CheckPdfARequest;
 
 export type InspectResult = { ok: true; pageCount: number } | { ok: false; reason: 'password' | 'invalid' };
 
@@ -227,6 +250,8 @@ export type WorkerErrorCode =
   | 'sign-certificate'
   | 'sign-encrypted'
   | 'verify'
+  | 'pdfa-fonts'
+  | 'pdfa-cmyk'
   | 'failed';
 
 export type WorkerResponse =
@@ -240,6 +265,7 @@ export type WorkerResponse =
   | { id: number; ok: true; kind: 'text'; text: string }
   | { id: number; ok: true; kind: 'done' }
   | { id: number; ok: true; kind: 'signatures'; checks: SignatureCheck[] }
+  | { id: number; ok: true; kind: 'pdfa'; report: PdfAReport }
   // Bytes, die kein PDF sind (z. B. eine .p12-Datei)
   | { id: number; ok: true; kind: 'raw'; bytes: ArrayBuffer }
   | { id: number; ok: false; code: WorkerErrorCode; error: string };

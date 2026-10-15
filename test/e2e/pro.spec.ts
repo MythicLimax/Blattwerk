@@ -1,6 +1,6 @@
 // Phase 7: Profi-Funktionen. Arbeitet auf Kopien der Test-PDFs; Systemdialoge werden ersetzt.
 import { expect, test, type ElectronApplication } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fixture, TEXT_PDF } from '../fixtures/expectations';
@@ -93,6 +93,38 @@ test.describe('Digitale Signaturen', () => {
     await expect(items.nth(0)).toContainText('Danach wurde das Dokument geändert');
     await expect(items.nth(1)).toContainText('seitdem nicht geändert');
     await expect(items.nth(1)).toContainText('Selbst ausgestelltes Zertifikat');
+    await handle.close();
+  });
+});
+
+test.describe('PDF/A', () => {
+  test('prüfen, als PDF/A-2b speichern, neue Datei besteht die Prüfung', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+    tempDirs.push(dir);
+    const file = path.join(dir, 'bericht.pdf');
+    copyFileSync(fixture('text.pdf'), file);
+    const archived = path.join(dir, 'bericht-archiv.pdf');
+    const handle = await launchApp([file], { userData: dir });
+    const { page, app } = handle;
+    await waitForDocument(page, TEXT_PDF.pages);
+    await stubDialogs(app, [], [archived]);
+
+    await menuClick(app, 'tools.pdfa');
+    const dialog = page.getByTestId('pdfa-dialog');
+    await expect(dialog.getByTestId('pdfa-verdict')).toHaveAttribute('data-compliant', 'false');
+    await expect(dialog.getByTestId('pdfa-issues')).toContainText('Helvetica');
+    await dialog.getByTestId('pdfa-convert').click();
+    await expect(dialog).toBeHidden();
+    // Die neue Datei öffnet sich in einem eigenen Tab
+    await expect.poll(() => existsSync(archived), { timeout: 15_000 }).toBe(true);
+    await waitForDocument(page, TEXT_PDF.pages);
+    const text = readFileSync(archived).toString('latin1');
+    expect(text).toContain('pdfaid:part>2<');
+    if (process.platform === 'darwin') expect(inspectWithPdfKit(archived).ok).toBe(true);
+
+    await menuClick(app, 'tools.pdfa');
+    await expect(page.getByTestId('pdfa-verdict')).toHaveAttribute('data-compliant', 'true');
+    await expect(page.getByTestId('pdfa-issues')).toHaveCount(0);
     await handle.close();
   });
 });

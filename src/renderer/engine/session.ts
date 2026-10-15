@@ -25,6 +25,7 @@ import { historyDirty, tabHistory, useHistory, type DocState, type Leaving } fro
 import type { AnnotationChanges } from '../../shared/annotations';
 import { exportText } from '../features/export/actions';
 import { compareWithFile } from '../features/compare/actions';
+import { openPdfACheck } from '../features/pdfa/actions';
 import { useCertify } from '../features/certify/certify-store';
 import { isRunning as isProgressRunning } from '../features/progress/progress';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
@@ -856,6 +857,11 @@ export function executeCommand(command: CommandId): void {
     if (active?.status !== 'ready' || active.working || isProgressRunning()) return;
     if (!active.canModify) ui.notify(t('contentEdit.notAllowed'));
     else ui.setOcrOpen(true);
+    return;
+  }
+  if (command === 'tools.pdfa') {
+    const active = getActiveTab();
+    if (active?.status === 'ready' && !active.working) void openPdfACheck(active);
     return;
   }
   if (command === 'tools.compare') {

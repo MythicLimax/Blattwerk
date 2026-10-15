@@ -53,6 +53,7 @@ export const COMMANDS = [
   'tools.ocr',
   'tools.certify',
   'tools.signatures',
+  'tools.pdfa',
   'file.exportImages',
   'file.exportText',
   'file.combine',

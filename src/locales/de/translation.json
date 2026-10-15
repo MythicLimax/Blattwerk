@@ -114,7 +114,8 @@
       "compare": "Mit Datei vergleichen …",
       "ocr": "Text erkennen (OCR) …",
       "certify": "Mit Zertifikat unterschreiben …",
-      "signatures": "Signaturen prüfen …"
+      "signatures": "Signaturen prüfen …",
+      "pdfa": "PDF/A (Archivformat) …"
     }
   },
   "dialog": {
@@ -204,7 +205,9 @@
       "compress-encrypted": "Verschlüsselte Dokumente lassen sich nicht komprimieren. Entfernen Sie zuerst den Kennwortschutz (Werkzeuge → Kennwortschutz).",
       "sign-password": "Das Kennwort der digitalen ID ist falsch.",
       "sign-certificate": "Die digitale ID lässt sich nicht verwenden: {{detail}}",
-      "sign-encrypted": "Verschlüsselte Dokumente lassen sich nicht mit Zertifikat unterschreiben. Entfernen Sie zuerst den Kennwortschutz (Werkzeuge → Kennwortschutz)."
+      "sign-encrypted": "Verschlüsselte Dokumente lassen sich nicht mit Zertifikat unterschreiben. Entfernen Sie zuerst den Kennwortschutz (Werkzeuge → Kennwortschutz).",
+      "pdfa-fonts": "Diese Schriften sind nicht im Dokument eingebettet und lassen sich nicht ersetzen.",
+      "pdfa-cmyk": "Das Dokument nutzt Druckfarben (CMYK), für die kein Farbprofil vorhanden ist."
     }
   },
   "start": {
@@ -1002,5 +1005,41 @@
       "saveFailed": "Die ID ließ sich nicht speichern.",
       "done": "Digitale ID „{{name}}“ gespeichert."
     }
+  },
+  "pdfa": {
+    "title": "PDF/A (Archivformat)",
+    "intro": "PDF/A ist ein Format für die Langzeitarchivierung: Schriften und Farben stecken in der Datei, es gibt keine Skripte und keine Inhalte von außen. Behörden und Archive verlangen es oft.",
+    "checking": "Dokument wird geprüft …",
+    "notDeclared": "Dieses Dokument ist kein PDF/A.",
+    "declaredOk": "Das Dokument ist als PDF/A-{{part}}{{conformance}} gekennzeichnet; die Prüfung fand keine Abweichungen.",
+    "declaredIssues": "Das Dokument ist als PDF/A-{{part}}{{conformance}} gekennzeichnet, weicht aber ab:",
+    "issue": {
+      "encrypted": "Es ist mit einem Kennwort geschützt (in PDF/A nicht erlaubt).",
+      "output-intent": "Es fehlt das Farbprofil für die Ausgabe.",
+      "fonts": "Nicht eingebettete Schriften: {{detail}}",
+      "javascript": "Es enthält JavaScript.",
+      "actions_one": "Eine Aktion ist in PDF/A nicht erlaubt (z. B. Programme starten, Ton abspielen).",
+      "actions_other": "{{count}} Aktionen sind in PDF/A nicht erlaubt (z. B. Programme starten, Ton abspielen).",
+      "embedded-files": "Es enthält angehängte Dateien.",
+      "annotations_one": "Ein Kommentar ist nicht druckbar, versteckt oder ohne Darstellung.",
+      "annotations_other": "{{count}} Kommentare sind nicht druckbar, versteckt oder ohne Darstellung.",
+      "xfa": "Es enthält ein XFA-Formular.",
+      "need-appearances": "Formularfelder werden erst beim Anzeigen gezeichnet.",
+      "lzw": "Es nutzt die veraltete LZW-Komprimierung.",
+      "interpolate": "Bilder werden geglättet dargestellt (Interpolation).",
+      "transfer": "Es enthält Transferfunktionen für den Druck.",
+      "cmyk": "Es nutzt Druckfarben (CMYK) ohne passendes Farbprofil.",
+      "id": "Es fehlt die Dokumentkennung."
+    },
+    "signedHint": "Hinweis: Das Dokument ist digital unterschrieben. In der PDF/A-Fassung gelten die Signaturen nicht mehr, weil die Datei neu geschrieben wird. Das Original bleibt unverändert.",
+    "hint": "„Als PDF/A speichern“ legt eine neue Datei (PDF/A-2b) an und bettet fehlende Standardschriften ein. Die Prüfung deckt die wichtigsten Regeln ab, aber nicht alle; für eine amtliche Bestätigung eignet sich ein Prüfprogramm wie veraPDF.",
+    "convert": "Als PDF/A speichern …",
+    "close": "Schließen",
+    "busy": "PDF/A wird erstellt …",
+    "fileName": "{{name}} (PDF-A)",
+    "failed": "Das Dokument ließ sich nicht in PDF/A umwandeln.",
+    "fontsFailed": "Diese Schriften sind nicht eingebettet und lassen sich nicht ersetzen, deshalb ist kein PDF/A möglich:",
+    "cmykFailed": "Für die Druckfarben (CMYK) fehlt ein Farbprofil, deshalb ist kein PDF/A möglich.",
+    "checkFailed": "Das Dokument ließ sich nicht prüfen."
   }
 }

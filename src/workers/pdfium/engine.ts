@@ -254,6 +254,33 @@ export class PdfiumEngine {
     });
   }
 
+  // Eingebautes Schriftprogramm (CFF) einer der 14 Standardschriften, zum Einbetten für PDF/A
+  standardFontProgram(name: string): Uint8Array {
+    const m = this.#m;
+    const doc = m.FPDF_CreateNewDocument();
+    try {
+      const font = m.FPDFText_LoadStandardFont(doc, name);
+      if (!font) throw new Error(`PDFium: Schrift ${name} fehlt`);
+      try {
+        const size = withBuffer(m, 4, (out) => {
+          m.FPDFFont_GetFontData(font, 0, 0, out);
+          return m.pdfium.getValue(out, 'i32') >>> 0;
+        });
+        if (size === 0) throw new Error(`PDFium: Schrift ${name} leer`);
+        return withBuffer(m, size, (data) =>
+          withBuffer(m, 4, (out) => {
+            if (!m.FPDFFont_GetFontData(font, data, size, out)) throw new Error(`PDFium: Schrift ${name} nicht lesbar`);
+            return copyOut(m, data, size);
+          }),
+        );
+      } finally {
+        m.FPDFFont_Close(font);
+      }
+    } finally {
+      m.FPDF_CloseDocument(doc);
+    }
+  }
+
   // Prüft, ob sich Bytes als PDF öffnen lassen (Kontrolle vor dem Schreiben auf die Platte).
   canOpen(bytes: Uint8Array, password: string | null): boolean {
     const m = this.#m;

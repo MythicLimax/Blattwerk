@@ -19,7 +19,9 @@ export async function copyPdfjsAssets() {
     ['iccs', 'iccs'],
     ['web/images', 'images'],
   ]) {
-    await cp(path.join(pdfjsDir, from), path.join(publicDir, 'pdfjs', to), { recursive: true });
+    // Ohne die Liberation-Schriften (GPL mit Schriftausnahme): pdf.js lädt sie nur bei useSystemFonts: false,
+    // die App nutzt die Systemschriften. Gebraucht werden nur Symbol und Dingbats (Foxit, BSD).
+    await cp(path.join(pdfjsDir, from), path.join(publicDir, 'pdfjs', to), { recursive: true, filter: (file) => !/Liberation/i.test(path.basename(file)) });
   }
   const l10nDir = path.join(publicDir, 'pdfjs-l10n');
   await mkdir(l10nDir, { recursive: true });
