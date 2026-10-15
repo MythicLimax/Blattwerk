@@ -252,6 +252,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLTextAreaElement>(null);
   const done = useRef(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const viewScale = scale * (96 / 72);
 
   useEffect(() => {
@@ -279,6 +280,21 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
       void addText(editing.tabId, editing.pageIndex, baseline, value);
     }
   };
+
+  // Ein Klick irgendwo außerhalb der Eingabe übernimmt den Text, auch auf ein anderes Objekt (dessen Ziehen sonst
+  // den Fokus in der Eingabe hält) oder in die Werkzeugleiste. Der Klick wirkt danach wie gewohnt weiter.
+  const commitRef = useRef(commit);
+  useEffect(() => {
+    commitRef.current = commit;
+  });
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && wrapRef.current?.contains(event.target)) return;
+      commitRef.current();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, []);
 
   const cancel = () => {
     done.current = true;
@@ -315,7 +331,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
   };
 
   return (
-    <div className={styles.editorWrap} style={position}>
+    <div ref={wrapRef} className={styles.editorWrap} style={position}>
       <textarea
         ref={ref}
         className={[styles.editor, paragraph ? styles.paragraph : ''].join(' ')}

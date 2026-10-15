@@ -228,3 +228,35 @@ test('Neuer Text beginnt an der Klickstelle, die erste Zeile liegt mittig darauf
   }
   await close();
 });
+
+test('Neuer Text: ein Klick außerhalb der Eingabe übernimmt ihn, auch auf ein anderes Objekt', async () => {
+  const { page, app, close } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, TEXT_PDF.pages);
+  await page.getByTestId('content-edit-button').click();
+  await menuClick(app, 'view.fitPage');
+  const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
+  if (!overlay) throw new Error('keine Ebene');
+  const editor = page.getByTestId('content-text-editor');
+  const outside: Array<[string, () => Promise<void>]> = [
+    [
+      'Objekt',
+      async () => {
+        const target = await page.locator('[data-testid="content-object"][data-text="Inhaltsverzeichnis"]').boundingBox();
+        await page.mouse.click((target?.x ?? 0) + 5, (target?.y ?? 0) + 3);
+      },
+    ],
+    ['leere Stelle', () => page.mouse.click(overlay.x + 30, overlay.y + overlay.height * 0.95)],
+    ['neben der Seite', () => page.mouse.click(overlay.x - 40, overlay.y + 200)],
+    ['Seitenleiste', () => page.getByTestId('sidebar-bookmarks').click()],
+  ];
+  for (const [label, click] of outside) {
+    await page.getByTestId('content-tool-text').click();
+    await page.mouse.click(overlay.x + overlay.width * 0.5, overlay.y + overlay.height * (0.6 + outside.findIndex(([l]) => l === label) * 0.05));
+    await page.keyboard.type(`Text ${label}`);
+    await click();
+    await expect(editor).toHaveCount(0);
+    await expect(page.locator(`[data-testid="content-object"][data-text="Text ${label}"]`)).toBeVisible();
+    await page.getByTestId('sidebar-pages').click();
+  }
+  await close();
+});
