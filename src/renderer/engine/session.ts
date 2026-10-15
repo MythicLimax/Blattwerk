@@ -20,7 +20,10 @@ import { useFormEdit } from '../state/form-edit-store';
 import { useForms } from '../state/forms-store';
 import type { SecuritySettings } from '../../shared/security';
 import { historyDirty, tabHistory, useHistory, type DocState, type Leaving } from '../state/history-store';
-import type { FieldOperation } from '../../shared/forms';
+import type { AnnotationChanges } from '../../shared/annotations';
+import { exportText } from '../features/export/actions';
+import { isRunning as isProgressRunning } from '../features/progress/progress';
+import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { RedactionOptions } from '../../shared/redaction';
 import type { StampOperation } from '../../shared/stamping';
 import type { ContentOperation } from '../../shared/content';
@@ -507,6 +510,13 @@ async function runRedaction(tabId: string, options: RedactionOptions): Promise<b
   }
 }
 
+// Ungespeicherte Kommentare und Formularwerte eines Tabs (für Aufgaben, die den aktuellen Stand brauchen)
+export async function pendingChanges(tabId: string): Promise<{ changes: AnnotationChanges; formValues: FormFieldValue[] }> {
+  const annotations = tabAnnotations(tabId);
+  const changes = annotations ? computeChanges(annotations.items, annotations.originals) : { upserts: [], deletions: [] };
+  return { changes, formValues: await currentFormChanges(tabId) };
+}
+
 // Kennwortschutz setzen, ändern oder entfernen (Phase 6, ADR 0011). ownerPassword: Berechtigungskennwort, falls das
 // Dokument nur mit dem Kennwort zum Öffnen geöffnet wurde. Das Ergebnis ist ein neuer, vollständig neu geschriebener
 // Stand; die Datei ändert sich erst beim Speichern.
@@ -720,6 +730,13 @@ export function executeCommand(command: CommandId): void {
   if (command === 'window.nextTab') return switchTab(1);
   if (command === 'window.previousTab') return switchTab(-1);
   if (runPageCommand(command, getActiveTab())) return;
+  if (command === 'file.exportImages' || command === 'file.exportText') {
+    const active = getActiveTab();
+    if (active?.status !== 'ready' || active.working || isProgressRunning()) return;
+    if (command === 'file.exportImages') ui.setExportImagesOpen(true);
+    else void exportText(active);
+    return;
+  }
   if (command === 'tools.security') {
     const active = getActiveTab();
     if (active?.status === 'ready' && !active.working) ui.setSecurityDialogOpen(true);

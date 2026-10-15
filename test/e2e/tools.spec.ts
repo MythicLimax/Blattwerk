@@ -1,6 +1,6 @@
 // Phase 6: Werkzeuge. Arbeitet auf Kopien der Test-PDFs.
-import { expect, test } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { expect, test, type ElectronApplication } from '@playwright/test';
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fixture, PASSWORDS, TEXT_PDF } from '../fixtures/expectations';
@@ -100,6 +100,70 @@ test.describe('Kennwortschutz', () => {
     await menuClick(handle.app, 'file.save');
     await expect(handle.page.getByTestId('tab-dirty')).toHaveCount(0);
     expect(readFileSync(file).toString('latin1')).not.toMatch(/\/Encrypt/);
+    await handle.close();
+  });
+});
+
+// Ordner- und Sichern-Dialog des Systems ersetzen
+async function stubDialogs(app: ElectronApplication, folder: string, saveAs: string): Promise<void> {
+  await app.evaluate(
+    ({ dialog }, answers) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [answers.folder] })) as typeof dialog.showOpenDialog;
+      dialog.showSaveDialog = (async () => ({ canceled: false, filePath: answers.saveAs })) as typeof dialog.showSaveDialog;
+    },
+    { folder, saveAs },
+  );
+}
+
+test.describe('Exportieren', () => {
+  test('als Bilder (PNG und JPEG, Seitenbereich) und als Text', async () => {
+    const { dir, file } = copyOf('text.pdf');
+    const handle = await launchApp([file], { userData: dir });
+    await waitForDocument(handle.page, TEXT_PDF.pages);
+    const out = mkdtempSync(path.join(tmpdir(), 'blattwerk-export-'));
+    tempDirs.push(out);
+    await stubDialogs(handle.app, out, path.join(out, 'auszug'));
+
+    await menuClick(handle.app, 'file.exportImages');
+    const dialog = handle.page.getByTestId('export-images-dialog');
+    await dialog.getByTestId('export-dpi').selectOption('72');
+    await dialog.getByTestId('stamp-pages-range').check();
+    await dialog.getByTestId('stamp-pages').fill('2-3');
+    await dialog.getByTestId('export-images-confirm').click();
+    await expect(handle.page.getByTestId('notices')).toContainText('2 Bilder');
+    const pngs = readdirSync(out).filter((name) => name.endsWith('.png')).sort();
+    expect(pngs).toEqual(['text – Seite 02.png', 'text – Seite 03.png']);
+    const png = readFileSync(path.join(out, pngs[0] ?? ''));
+    // Breite und Höhe im PNG-Kopf: A4 bei 72 dpi
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([595, 842]);
+
+    // Noch einmal: vorhandene Dateien bleiben, JPEG für alle Seiten
+    await menuClick(handle.app, 'file.exportImages');
+    await dialog.getByTestId('export-format').selectOption('jpeg');
+    await dialog.getByTestId('export-dpi').selectOption('72');
+    await dialog.getByTestId('export-images-confirm').click();
+    await expect(handle.page.getByTestId('notices')).toContainText('12 Bilder');
+    const jpgs = readdirSync(out).filter((name) => name.endsWith('.jpg'));
+    expect(jpgs).toHaveLength(12);
+    expect([...readFileSync(path.join(out, 'text – Seite 01.jpg')).subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
+
+    await menuClick(handle.app, 'file.exportText');
+    await expect(handle.page.getByTestId('notices')).toContainText('auszug.txt');
+    const text = readFileSync(path.join(out, 'auszug.txt'), 'utf8');
+    expect(text).toContain('Testdokument mit Text');
+    expect(text).toContain('Die Umlaute ä, ö und ü sowie das ß');
+    expect(text).toContain('Hier steht die Suchprobe Nummer 2');
+    await handle.close();
+  });
+
+  test('verboten, wenn das Dokument das Kopieren nicht erlaubt', async () => {
+    const { dir, file } = copyOf('verschluesselt.pdf');
+    const handle = await launchApp([file], { userData: dir });
+    await handle.page.getByTestId('password-input').fill(PASSWORDS.user);
+    await handle.page.keyboard.press('Enter');
+    await waitForDocument(handle.page, TEXT_PDF.pages);
+    await menuClick(handle.app, 'file.exportText');
+    await expect(handle.page.getByTestId('notices')).toContainText('verbieten das Kopieren');
     await handle.close();
   });
 });

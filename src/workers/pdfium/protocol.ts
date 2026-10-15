@@ -90,6 +90,43 @@ export interface ProtectRequest {
   settings: SecuritySettings | null;
 }
 
+// Sitzung: Dokument für mehrere Seiten geöffnet halten (Export, Texterkennung, Vergleich)
+export interface OpenSessionRequest {
+  id: number;
+  type: 'openSession';
+  bytes: ArrayBuffer;
+  password: string | null;
+  changes: AnnotationChanges;
+  formValues: FormFieldValue[];
+}
+
+export type ImageFormat = 'png' | 'jpeg';
+
+// Seite als Bild (PNG/JPEG kodiert) oder als rohe RGBA-Bildpunkte
+export interface RenderPageRequest {
+  id: number;
+  type: 'renderPage';
+  session: number;
+  pageIndex: number;
+  dpi: number;
+  format: ImageFormat | 'rgba';
+  // JPEG-Qualität 0 bis 1
+  quality: number;
+}
+
+export interface PageTextRequest {
+  id: number;
+  type: 'pageText';
+  session: number;
+  pageIndex: number;
+}
+
+export interface CloseSessionRequest {
+  id: number;
+  type: 'closeSession';
+  session: number;
+}
+
 export type WorkerRequest =
   | ProcessRequest
   | ComposeRequest
@@ -98,7 +135,11 @@ export type WorkerRequest =
   | FindTextRequest
   | ListObjectsRequest
   | SecurityRequest
-  | ProtectRequest;
+  | ProtectRequest
+  | OpenSessionRequest
+  | RenderPageRequest
+  | PageTextRequest
+  | CloseSessionRequest;
 
 export type InspectResult = { ok: true; pageCount: number } | { ok: false; reason: 'password' | 'invalid' };
 
@@ -130,4 +171,8 @@ export type WorkerResponse =
   | { id: number; ok: true; kind: 'matches'; matches: TextMatch[]; truncated: boolean }
   | { id: number; ok: true; kind: 'objects'; pages: PageObjects[] }
   | { id: number; ok: true; kind: 'security'; security: DocumentSecurity }
+  | { id: number; ok: true; kind: 'session'; session: number; pageCount: number }
+  | { id: number; ok: true; kind: 'image'; bytes: ArrayBuffer; width: number; height: number; dpi: number }
+  | { id: number; ok: true; kind: 'text'; text: string }
+  | { id: number; ok: true; kind: 'done' }
   | { id: number; ok: false; code: WorkerErrorCode; error: string };

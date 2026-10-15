@@ -28,6 +28,11 @@ export const IPC = {
   signaturesList: 'signatures:list',
   signaturesAdd: 'signatures:add',
   signaturesRemove: 'signatures:remove',
+  // Phase 6: Export (Bilder in einen gewählten Ordner, Text in eine Datei)
+  exportChooseFolder: 'export:choose-folder',
+  exportWriteImage: 'export:write-image',
+  exportEnd: 'export:end',
+  exportSaveText: 'export:save-text',
   // Renderer → Hauptprozess (send)
   menuState: 'app:menu-state',
   rendererReady: 'app:renderer-ready',
@@ -176,3 +181,13 @@ export interface MenuCommandMessage {
 
 // Obergrenze für einen einzelnen Lesezugriff über IPC. Größere Bereiche teilt der Renderer auf.
 export const MAX_READ_CHUNK = 16 * 1024 * 1024;
+
+// Phase 6: Export
+export type ExportImageKind = 'png' | 'jpeg';
+
+// Gewählter Ordner für einen Export; token gilt nur für diesen Export und dieses Fenster
+export type ExportFolderResult = { ok: true; token: string; folder: string } | { ok: false; error: 'cancelled' };
+
+export type ExportWriteResult = { ok: true; name: string } | { ok: false; error: 'invalid-data' | 'unknown-folder' | 'write-failed'; detail?: string };
+
+export type ExportTextResult = { ok: true; name: string } | { ok: false; error: SaveNewErrorCode; detail?: string };

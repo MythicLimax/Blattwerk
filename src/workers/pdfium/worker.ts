@@ -6,7 +6,8 @@ import type { FieldOperationError } from './fields';
 import { FormValueError } from './forms';
 import { PageOperationError } from './pages';
 import type { PageOperation } from '../../shared/pages';
-import type { ProcessRequest, WorkerErrorCode, WorkerRequest, WorkerResponse } from './protocol';
+import type { ImageFormat, ProcessRequest, WorkerErrorCode, WorkerRequest, WorkerResponse } from './protocol';
+import type { RenderedPage } from './render';
 
 let enginePromise: Promise<PdfiumEngine> | null = null;
 
@@ -25,6 +26,19 @@ function reply(response: WorkerResponse, transfer: Transferable[] = []): void {
 }
 
 class VerifyError extends Error {}
+
+// Größte Seite beim Zeichnen (Bildpunkte); darüber wird verkleinert. Etwa A3 mit 600 dpi.
+const MAX_RENDER_PIXELS = 70_000_000;
+
+// PNG oder JPEG über die Bildkodierung des Browsers (OffscreenCanvas)
+async function encodeImage(page: RenderedPage, format: ImageFormat, quality: number): Promise<ArrayBuffer> {
+  const canvas = new OffscreenCanvas(page.width, page.height);
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Kein Zeichenbereich');
+  context.putImageData(new ImageData(new Uint8ClampedArray(page.rgba.buffer as ArrayBuffer, page.rgba.byteOffset, page.rgba.byteLength), page.width, page.height), 0, 0);
+  const blob = await canvas.convertToBlob(format === 'png' ? { type: 'image/png' } : { type: 'image/jpeg', quality });
+  return blob.arrayBuffer();
+}
 
 // copyOut liefert ein eigenes Array; sein Puffer kann ohne Kopie zurückgegeben werden.
 function ownBuffer(output: Uint8Array): ArrayBuffer {
@@ -155,6 +169,24 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
           replyBytes(request.id, output, pdfium, protectedOutput ? (settings.openPassword ?? settings.permissionsPassword) : null);
           return;
         }
+        case 'openSession': {
+          const opened = pdfium.openSession(new Uint8Array(request.bytes), request.password, request.changes, request.formValues);
+          reply({ id: request.id, ok: true, kind: 'session', session: opened.id, pageCount: opened.pageCount });
+          return;
+        }
+        case 'renderPage': {
+          const page = pdfium.sessions.render(request.session, request.pageIndex, request.dpi, MAX_RENDER_PIXELS);
+          const bytes = request.format === 'rgba' ? (page.rgba.buffer as ArrayBuffer) : await encodeImage(page, request.format, request.quality);
+          reply({ id: request.id, ok: true, kind: 'image', bytes, width: page.width, height: page.height, dpi: page.dpi }, [bytes]);
+          return;
+        }
+        case 'pageText':
+          reply({ id: request.id, ok: true, kind: 'text', text: pdfium.sessions.text(request.session, request.pageIndex) });
+          return;
+        case 'closeSession':
+          pdfium.sessions.close(request.session);
+          reply({ id: request.id, ok: true, kind: 'done' });
+          return;
         case 'inspect':
           reply({ id: request.id, ok: true, kind: 'inspect', result: pdfium.inspect(new Uint8Array(request.bytes), request.password) });
           return;

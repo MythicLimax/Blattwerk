@@ -79,7 +79,7 @@ function FontSelect({ value, onChange }: { value: StampFont; onChange: (font: St
 }
 
 // Alle Seiten oder ein Bereich („1-3, 5“); liefert null = alle, sonst 0-basierte Seiten oder einen Fehler
-function usePages(pageCount: number) {
+export function usePages(pageCount: number) {
   const { t } = useTranslation();
   const [all, setAll] = useState(true);
   const [text, setText] = useState(`1-${pageCount}`);

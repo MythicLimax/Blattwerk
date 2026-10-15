@@ -16,7 +16,7 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | 3 | Seiten organisieren | erledigt ([Bericht](docs/phasen/phase-3.md)) |
 | 4 | Formulare und Unterschrift | erledigt ([Bericht](docs/phasen/phase-4.md)) |
 | 5 | Bearbeiten (inkl. Schwärzen) | erledigt ([Bericht](docs/phasen/phase-5.md)) |
-| 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | als Nächstes |
+| 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | in Arbeit: Kennwortschutz und Export fertig; Komprimieren, OCR, Vergleich offen |
 | 7 | Profi (PAdES, PDF/A, Tags) | offen |
 
 Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig.
@@ -69,6 +69,8 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Schwärzen** ([ADR 0008](docs/entscheidungen/0008-schwaerzen.md)): Markierungen sind Kommentare der Art `redact` (Leiste `features/redaction/`, `ui.redactToolsVisible`). Anwenden (`applyRedactionMarks` in `session.ts`, `planRedaction`) ruft im Worker `redactDocument` auf: geteilte Bilder trennen (`sanitize.ts`), Inhalte entfernen (`redact.ts`, PDFium), Reste und ältere Stände verwerfen, vollständig neu schreiben. Suchen und schwärzen nutzt die PDFium-Textsuche (`text-search.ts`).
 - **Wasserzeichen, Kopf-/Fußzeilen, Seitenzahlen** ([ADR 0009](docs/entscheidungen/0009-wasserzeichen.md)): `StampOperation` (`src/shared/stamping.ts`), Dialoge in `features/stamping/`, eigene Inhaltsströme mit Kennung `/BlattwerkArtifact`.
 - **Inhalt bearbeiten** ([ADR 0010](docs/entscheidungen/0010-inhalt-bearbeiten.md)): `TabState.contentEditing`, Ebene `features/content-edit/ContentEditOverlay.tsx`, Zustand `content-edit-store`. Objekte listet PDFium je Seite (`listObjects`, Index gilt nur für einen Stand); Textstücke einer Zeile und Zeilen eines Absatzes fasst `editUnits` zu einer Einheit zusammen (Absätze setzt der Worker mit `editParagraph` neu um); Änderungen sind `ContentOperation` (`content.ts`, PDFium schreibt den Seiteninhalt neu).
+- **Kennwortschutz** ([ADR 0011](docs/entscheidungen/0011-kennwortschutz.md)): PDFium entfernt den Schutz (`FPDF_REMOVE_SECURITY`), pdf-lib verschlüsselt neu (AES-256, `protection.ts`). Neuer Dokumentstand; jeder Stand merkt sich sein Kennwort (`DocState.password`). `TabState.ownerAccess` (PDFium erkennt das Berechtigungskennwort) hebt Einschränkungen auf. Nur ASCII-Kennwörter (Apple Vorschau).
+- **Export** ([ADR 0012](docs/entscheidungen/0012-export.md)): PDFium-Sitzungen im Worker (`render.ts`, `openSession`/`renderPage`/`pageText` im Client), Bilder Seite für Seite über `export:write-image` in einen gewählten Ordner, Text über `export:save-text`. Kein Word-Export (begründet im ADR).
 - Es ist immer höchstens ein Bearbeitungsmodus aktiv (Kommentieren, Schwärzen, Formular bearbeiten, Inhalt bearbeiten, Seiten organisieren).
 - Dieses Verfahren (Snapshot der Dokumentbytes) gilt für Seiten-, Feld-, Wasserzeichen- und Inhaltsänderungen sowie für das Schwärzen. Nach dem Speichern beginnt der Verlauf neu.
 
@@ -104,7 +106,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0010)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0012)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
@@ -118,15 +120,16 @@ src/
                             annotations (Kommentare), prompt (Rückfragen), settings,
                             pages (Seitenraster, Seiten-Dialoge, Abläufe für Seiten und neue Dokumente),
                             forms (Ausfüllen), form-edit (Formular bearbeiten), signatures (Unterschrift),
-                            redaction (Schwärzen), stamping (Wasserzeichen, Kopf-/Fußzeilen), content-edit (Inhalt bearbeiten)
+                            redaction (Schwärzen), stamping (Wasserzeichen, Kopf-/Fußzeilen), content-edit (Inhalt bearbeiten),
+                            security (Kennwortschutz), export (Bilder, Text), progress (Fortschritt mit Abbrechen)
     components/             generische UI-Bausteine (IconButton, Dialog)
     state/                  zustand-Stores (documents, ui, annotations, history, forms, form-edit, content-edit), dirty.ts
     engine/                 pdf.js-Einrichtung, Laden, Range-Transport, Laufzeit je Dokument, Befehle (session.ts),
                             coords.ts, pdfium-client.ts
     styles/                 Design-Tokens, hell/dunkel
     public/                 beim Build kopierte pdf.js-Ressourcen (nicht eingecheckt)
-  workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, pages, forms, redact, text-search, content, memory,
-                            protocol, worker), mit pdf-lib: fields, imported, sanitize + redaction, stamping
+  workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, pages, forms, redact, text-search, content, render, memory,
+                            protocol, worker), mit pdf-lib: fields, imported, sanitize + redaction, stamping, protection
 resources/icon.svg          eigenes App-Symbol (Quelle)
 build/                      icon.png (aus resources/icon.svg erzeugt), after-pack.cjs
 scripts/                    build, dev, generate-fixtures, check-licenses, dist-mac-local, smoke-packaged, make-icon, dev-env.sh
@@ -179,7 +182,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 ## Tests
 
 - **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js; PDFium-WASM und pdf-lib laufen ebenfalls in Node (`test/integration/pdfium-*.test.ts`, `fields.test.ts`, `redaction.test.ts`, `stamping.test.ts`, `content.test.ts`). Das Test-PDF zum Schwärzen erzeugt `test/fixtures/redaction.ts` im Test (Geheimnisse an allen bekannten Verstecken).
-- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt), `test/e2e/forms.spec.ts` (Phase 4), `test/e2e/edit.spec.ts` (Phase 5) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
+- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt), `test/e2e/forms.spec.ts` (Phase 4), `test/e2e/edit.spec.ts` (Phase 5), `test/e2e/tools.spec.ts` (Phase 6) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
 - **Fertige App:** `node scripts/smoke-packaged.mjs <Pfad zur .app>` startet das Paket, prüft die Anzeige und speichert einen Kommentar (PDFium aus dem Paket).
 - **Ausgabeprüfung für jede gespeicherte Datei:** `qpdf --check` (in CI installiert, lokal übersprungen, wenn nicht vorhanden), Öffnen mit pdf.js, PDFium und `@cantoo/pdf-lib`, Annotationen haben /AP. Unter macOS zusätzlich mit PDFKit (die Engine von Apple Vorschau): `test/e2e/pdfkit.ts` (JavaScript for Automation). Acrobat Reader: manuelle Checkliste im Phasenbericht.
 - **Test-PDFs** (`test/fixtures/pdfs/`): Text, Scan (nur Bild), Formular (AcroForm), verschlüsselt (Benutzer- und Besitzerpasswort), eingeschränkt, beschädigt (kaputte xref, abgeschnitten), mit Links und Lesezeichen, mit Kommentaren (`kommentare.pdf`: Antwort, Prüfstatus). Signiert folgt mit PAdES in Phase 7. „Sehr groß“ (600 Seiten, mehr als 100 MB) erzeugt `scripts/generate-fixtures.ts` nach `test/fixtures/generated/`.

@@ -20,6 +20,7 @@ import type { RedactionArea, TextSearchOptions } from '../../shared/redaction';
 import type { ContentOperation, PageObjects } from '../../shared/content';
 import { ALL_PERMISSIONS, PERMISSION_BIT, permissionsFromBits, type DocumentSecurity } from '../../shared/security';
 import { applyContentOperation, listPageObjects } from './content';
+import { DocumentSessions } from './render';
 import { applyFormValues } from './forms';
 import { applyRedactions } from './redact';
 import { findText } from './text-search';
@@ -93,9 +94,19 @@ const byte = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
 
 export class PdfiumEngine {
   readonly #m: Pdfium;
+  // Geöffnete Dokumente zum Zeichnen und Auslesen einzelner Seiten (Export, Texterkennung, Vergleich)
+  readonly sessions: DocumentSessions;
 
   constructor(module: Pdfium) {
     this.#m = module;
+    this.sessions = new DocumentSessions(module);
+  }
+
+  // Öffnet eine Sitzung mit dem aktuellen Stand: ungespeicherte Kommentare und Formularwerte werden vorher übernommen.
+  openSession(bytes: Uint8Array, password: string | null, changes: AnnotationChanges, formValues: FormFieldValue[]): { id: number; pageCount: number } {
+    const pending = changes.upserts.length > 0 || changes.deletions.length > 0 || formValues.length > 0;
+    const current = pending ? this.process(bytes, password, changes, [], { incremental: true }, formValues) : bytes;
+    return this.sessions.open(current, password);
   }
 
   // Öffnet die Datei, wendet die Änderungen an und liefert die neuen Bytes.

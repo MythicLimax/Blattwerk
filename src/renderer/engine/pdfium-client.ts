@@ -8,7 +8,7 @@ import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
 import type { StampOperation } from '../../shared/stamping';
 import type { ContentOperation, PageObjects } from '../../shared/content';
-import type { InspectResult, WorkerErrorCode, WorkerRequest, WorkerResponse } from '../../workers/pdfium/protocol';
+import type { ImageFormat, InspectResult, WorkerErrorCode, WorkerRequest, WorkerResponse } from '../../workers/pdfium/protocol';
 
 // Fehler aus dem Worker mit Art (für eine übersetzte Meldung) und technischem Text (für Details)
 export class PdfiumClientError extends Error {
@@ -29,12 +29,14 @@ let nextId = 1;
 const pending = new Map<number, Pending>();
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 const IDLE_MS = 2000;
+// Offene Sitzungen (Export, Texterkennung, Vergleich): Solange eine offen ist, bleibt der Worker bestehen.
+let openSessions = 0;
 
 function scheduleShutdown(): void {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = setTimeout(() => {
     idleTimer = null;
-    if (pending.size > 0) return;
+    if (pending.size > 0 || openSessions > 0) return;
     worker?.terminate();
     worker = null;
   }, IDLE_MS);
@@ -63,6 +65,8 @@ function getWorker(): Worker {
   worker.addEventListener('error', (event) => {
     for (const entry of pending.values()) entry.reject(new PdfiumClientError('failed', event.message || 'pdfium-worker-error'));
     pending.clear();
+    // Sitzungen des abgestürzten Workers gibt es nicht mehr; ihre nächsten Aufträge schlagen fehl.
+    openSessions = 0;
     worker?.terminate();
     worker = null;
   });
@@ -188,4 +192,47 @@ export function protectDocument(
 ): Promise<Uint8Array> {
   const buffer = ownBuffer(bytes);
   return bytesOf(send({ type: 'protect', bytes: buffer, password, ...input }, [buffer]));
+}
+
+// Dokument für mehrere Seiten geöffnet halten (Export, Texterkennung, Vergleich). Die Bytes gehen an den Worker.
+// Ungespeicherte Kommentare und Formularwerte werden übernommen. Immer mit closeSession beenden.
+export async function openSession(
+  bytes: Uint8Array,
+  password: string | null,
+  input: { changes?: AnnotationChanges; formValues?: FormFieldValue[] } = {},
+): Promise<{ session: number; pageCount: number }> {
+  const buffer = ownBuffer(bytes);
+  const response = await send(
+    { type: 'openSession', bytes: buffer, password, changes: input.changes ?? { upserts: [], deletions: [] }, formValues: input.formValues ?? [] },
+    [buffer],
+  );
+  if (response.kind !== 'session') throw new PdfiumClientError('failed', 'unerwartete Antwort');
+  openSessions++;
+  return { session: response.session, pageCount: response.pageCount };
+}
+
+export interface PageImage {
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+  dpi: number;
+}
+
+// Seite als PNG/JPEG oder als rohe RGBA-Bildpunkte
+export async function renderPage(session: number, pageIndex: number, dpi: number, format: ImageFormat | 'rgba', quality = 0.9): Promise<PageImage> {
+  const response = await send({ type: 'renderPage', session, pageIndex, dpi, format, quality }, []);
+  if (response.kind !== 'image') throw new PdfiumClientError('failed', 'unerwartete Antwort');
+  return { bytes: new Uint8Array(response.bytes), width: response.width, height: response.height, dpi: response.dpi };
+}
+
+export async function pageText(session: number, pageIndex: number): Promise<string> {
+  const response = await send({ type: 'pageText', session, pageIndex }, []);
+  if (response.kind !== 'text') throw new PdfiumClientError('failed', 'unerwartete Antwort');
+  return response.text;
+}
+
+export async function closeSession(session: number): Promise<void> {
+  openSessions = Math.max(0, openSessions - 1);
+  if (!worker) return;
+  await send({ type: 'closeSession', session }, []).catch(() => undefined);
 }

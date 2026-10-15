@@ -25,7 +25,10 @@
       "save": "Speichern",
       "saveAs": "Speichern unter …",
       "combine": "Dateien zusammenführen …",
-      "fromImages": "PDF aus Bildern erstellen …"
+      "fromImages": "PDF aus Bildern erstellen …",
+      "export": "Exportieren",
+      "exportImages": "Als Bilder …",
+      "exportText": "Als Text …"
     },
     "edit": {
       "title": "Bearbeiten",
@@ -143,7 +146,10 @@
     },
     "saveNewTitle": "Neues Dokument speichern",
     "chooseFolderTitle": "Ordner für die neuen Dateien wählen",
-    "chooseFolderButton": "Hier speichern"
+    "chooseFolderButton": "Hier speichern",
+    "exportFolderTitle": "Ordner für die Bilder wählen",
+    "exportTextTitle": "Text exportieren",
+    "filterText": "Textdatei"
   },
   "errors": {
     "open": {
@@ -822,5 +828,38 @@
     "applied": "Der Kennwortschutz ist eingerichtet. Speichern Sie das Dokument, damit er in der Datei gilt.",
     "removed": "Der Kennwortschutz ist entfernt. Speichern Sie das Dokument, damit das in der Datei gilt.",
     "failed": "Der Kennwortschutz ließ sich nicht ändern."
+  },
+  "progress": {
+    "cancel": "Abbrechen",
+    "cancelling": "Wird abgebrochen …"
+  },
+  "export": {
+    "imagesTitle": "Als Bilder exportieren",
+    "format": "Format:",
+    "formats": {
+      "png": "PNG (verlustfrei)",
+      "jpeg": "JPEG (kleiner)"
+    },
+    "resolution": "Auflösung:",
+    "dpi": "{{value}} dpi",
+    "quality": "Qualität:",
+    "qualities": {
+      "high": "hoch",
+      "medium": "mittel",
+      "low": "niedrig"
+    },
+    "imagesHint": "Jede Seite wird eine eigene Bilddatei, mit Kommentaren. Vorhandene Dateien im Ordner bleiben unverändert.",
+    "chooseFolder": "Ordner wählen …",
+    "cancel": "Abbrechen",
+    "pageName": "Seite",
+    "pageStep": "Seite {{page}} von {{count}}",
+    "imagesProgress": "Seiten werden als Bilder exportiert",
+    "textProgress": "Text wird ausgelesen",
+    "imagesDone_one": "{{count}} Bild im Ordner „{{folder}}“ gespeichert.",
+    "imagesDone_other": "{{count}} Bilder im Ordner „{{folder}}“ gespeichert.",
+    "textDone": "Text als „{{name}}“ gespeichert.",
+    "noText": "Das Dokument enthält keinen auslesbaren Text, vermutlich gescannte Seiten.",
+    "notAllowed": "Die Berechtigungen dieses Dokuments verbieten das Kopieren von Inhalten und damit auch den Export.",
+    "failed": "Der Export ist fehlgeschlagen."
   }
 }

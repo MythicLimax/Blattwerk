@@ -44,6 +44,12 @@ const api: BlattwerkApi = {
   saveNewFile: (bytes, name, referenceFileId, openAfter) =>
     ipcRenderer.invoke(IPC.saveNewFile, bytes, name, referenceFileId, openAfter === true),
   saveFilesToFolder: (files, referenceFileId) => ipcRenderer.invoke(IPC.saveToFolder, files, referenceFileId),
+  exportImages: {
+    chooseFolder: (referenceFileId) => ipcRenderer.invoke(IPC.exportChooseFolder, referenceFileId),
+    write: (token, name, kind, bytes) => ipcRenderer.invoke(IPC.exportWriteImage, token, name, kind, bytes),
+    end: (token) => ipcRenderer.invoke(IPC.exportEnd, token),
+  },
+  exportText: (text, suggestedName, referenceFileId) => ipcRenderer.invoke(IPC.exportSaveText, text, suggestedName, referenceFileId),
   signatures: {
     list: () => ipcRenderer.invoke(IPC.signaturesList),
     add: (input) => ipcRenderer.invoke(IPC.signaturesAdd, input),

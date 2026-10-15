@@ -85,6 +85,14 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
         ? [{ role: 'close' as const, label: t('menu.file.closeWindow'), accelerator: SHORTCUTS['file.close']?.accelerator }]
         : [cmd('file.close', t('menu.file.close'), { enabled: state.tabCount > 0 })]),
       { type: 'separator' },
+      {
+        label: t('menu.file.export'),
+        enabled: viewing,
+        submenu: [
+          cmd('file.exportImages', t('menu.file.exportImages'), { enabled: viewing }),
+          cmd('file.exportText', t('menu.file.exportText'), { enabled: viewing }),
+        ],
+      },
       cmd('file.properties', t('menu.file.properties'), { enabled: doc }),
       cmd('file.print', t('menu.file.print'), { enabled: doc && state.canPrint }),
       { type: 'separator' },

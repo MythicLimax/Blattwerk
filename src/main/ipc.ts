@@ -1,10 +1,14 @@
 import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import {
   IPC,
   type AppInfo,
   type AppSettings,
+  type ExportFolderResult,
+  type ExportTextResult,
+  type ExportWriteResult,
   type MenuState,
   type OpenResult,
   type PickKind,
@@ -17,7 +21,9 @@ import {
 } from '../shared/ipc';
 import { PRODUCT_NAME } from '../shared/product';
 import {
+  isExportText,
   isFileId,
+  isImageBytes,
   isPdfBytes,
   isPickKind,
   isSignatureInput,
@@ -85,9 +91,10 @@ async function exists(filePath: string): Promise<boolean> {
 
 // Freier Dateiname im Ordner: „Name.pdf“, sonst „Name (2).pdf“, „Name (3).pdf“ …
 async function uniquePath(dir: string, fileName: string): Promise<string> {
-  const base = fileName.replace(/\.pdf$/i, '');
+  const extension = path.extname(fileName);
+  const base = fileName.slice(0, fileName.length - extension.length);
   for (let n = 1; n < 10000; n++) {
-    const candidate = path.join(dir, n === 1 ? fileName : `${base} (${n}).pdf`);
+    const candidate = path.join(dir, n === 1 ? fileName : `${base} (${n})${extension}`);
     if (!(await exists(candidate))) return candidate;
   }
   throw new Error('no-free-name');
@@ -295,6 +302,68 @@ export function registerIpc(ctx: IpcContext): void {
       return { ok: false, error: 'write-failed', detail: `${names.length}/${valid.length}: ${String(error)}` };
     }
     return { ok: true, folder: path.basename(folder), names };
+  });
+
+  // Export als Bilder (Phase 6): Ordner einmal wählen, dann Seite für Seite schreiben. Der Renderer kennt nur ein
+  // Kennzeichen für den Ordner; geschrieben wird nur dorthin, mit sicherem Namen, nie über vorhandene Dateien.
+  const exportFolders = new Map<string, { dir: string; senderId: number }>();
+
+  handle(IPC.exportChooseFolder, async (event, referenceFileId: unknown): Promise<ExportFolderResult> => {
+    const win = windowOf(event);
+    if (!win) return { ok: false, error: 'cancelled' };
+    const reference = isFileId(referenceFileId) ? ctx.files.pathOf(referenceFileId, event.sender.id) : null;
+    const result = await dialog.showOpenDialog(win, {
+      title: t('dialog.exportFolderTitle'),
+      buttonLabel: t('dialog.chooseFolderButton'),
+      defaultPath: reference ? path.dirname(reference) : app.getPath('documents'),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    const folder = result.filePaths[0];
+    if (result.canceled || !folder) return { ok: false, error: 'cancelled' };
+    const token = randomUUID();
+    exportFolders.set(token, { dir: folder, senderId: event.sender.id });
+    return { ok: true, token, folder: path.basename(folder) };
+  });
+
+  handle(IPC.exportWriteImage, async (event, token: unknown, name: unknown, kind: unknown, bytes: unknown): Promise<ExportWriteResult> => {
+    const folder = typeof token === 'string' ? exportFolders.get(token) : undefined;
+    if (!folder || folder.senderId !== event.sender.id) return { ok: false, error: 'unknown-folder' };
+    if (!isImageBytes(bytes, kind) || typeof name !== 'string' || name.length > 1000) return { ok: false, error: 'invalid-data' };
+    try {
+      const target = await uniquePath(folder.dir, sanitizeFileName(name, 'Seite', kind === 'png' ? '.png' : '.jpg'));
+      await atomicWrite(target, bytes);
+      return { ok: true, name: path.basename(target) };
+    } catch (error) {
+      return { ok: false, error: 'write-failed', detail: String(error) };
+    }
+  });
+
+  handle(IPC.exportEnd, (_event, token: unknown) => {
+    if (typeof token === 'string') exportFolders.delete(token);
+  });
+
+  // Export als Text: Sichern-Dialog, UTF-8
+  handle(IPC.exportSaveText, async (event, text: unknown, suggestedName: unknown, referenceFileId: unknown): Promise<ExportTextResult> => {
+    const win = windowOf(event);
+    if (!win) return { ok: false, error: 'cancelled' };
+    if (!isExportText(text)) return { ok: false, error: 'invalid-data' };
+    const reference = isFileId(referenceFileId) ? ctx.files.pathOf(referenceFileId, event.sender.id) : null;
+    const dir = reference ? path.dirname(reference) : app.getPath('documents');
+    const result = await dialog.showSaveDialog(win, {
+      title: t('dialog.exportTextTitle'),
+      defaultPath: path.join(dir, sanitizeFileName(suggestedName, 'Dokument', '.txt')),
+      filters: [{ name: t('dialog.filterText'), extensions: ['txt'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+    if (result.canceled || !result.filePath) return { ok: false, error: 'cancelled' };
+    const target = path.extname(result.filePath).toLowerCase() === '.txt' ? result.filePath : `${result.filePath}.txt`;
+    if (ctx.files.isOpenPath(target)) return { ok: false, error: 'target-open' };
+    try {
+      await atomicWrite(target, new TextEncoder().encode(text));
+    } catch (error) {
+      return { ok: false, error: 'write-failed', detail: String(error) };
+    }
+    return { ok: true, name: path.basename(target) };
   });
 
   handle(IPC.signaturesList, () => ctx.signatures.list());

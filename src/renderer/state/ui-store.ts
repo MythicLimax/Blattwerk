@@ -63,6 +63,8 @@ interface UiState {
   stampDialog: 'watermark' | 'headerFooter' | 'pageNumbers' | null;
   // Kennwortschutz (Phase 6)
   securityDialogOpen: boolean;
+  // Export als Bilder (Phase 6)
+  exportImagesOpen: boolean;
   settingsOpen: boolean;
   // Offene Rückfrage (ungespeicherte Änderungen, von außen geänderte Datei)
   prompt: Prompt | null;
@@ -95,6 +97,7 @@ interface UiState {
   setRedactDialog: (dialog: 'apply' | 'find' | null) => void;
   setStampDialog: (dialog: 'watermark' | 'headerFooter' | 'pageNumbers' | null) => void;
   setSecurityDialogOpen: (open: boolean) => void;
+  setExportImagesOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setPrompt: (prompt: Prompt | null) => void;
   setPageDialog: (dialog: PageDialog | null) => void;
@@ -133,6 +136,7 @@ export const useUi = create<UiState>((set) => ({
   redactDialog: null,
   stampDialog: null,
   securityDialogOpen: false,
+  exportImagesOpen: false,
   settingsOpen: false,
   prompt: null,
   pageDialog: null,
@@ -163,6 +167,7 @@ export const useUi = create<UiState>((set) => ({
   setRedactDialog: (redactDialog) => set({ redactDialog }),
   setStampDialog: (stampDialog) => set({ stampDialog }),
   setSecurityDialogOpen: (securityDialogOpen) => set({ securityDialogOpen }),
+  setExportImagesOpen: (exportImagesOpen) => set({ exportImagesOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPrompt: (prompt) => set({ prompt }),
   setPageDialog: (pageDialog) => set({ pageDialog }),

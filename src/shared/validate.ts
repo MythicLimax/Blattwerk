@@ -70,12 +70,12 @@ export function isPdfBytes(value: unknown): value is Uint8Array {
   return value instanceof Uint8Array && value.length > 0 && value.length < 2 ** 31 && looksLikePdf(value.subarray(0, 1024));
 }
 
-// Macht aus einem vorgeschlagenen Namen einen sicheren Dateinamen ohne Pfadanteile, mit Endung .pdf.
+// Macht aus einem vorgeschlagenen Namen einen sicheren Dateinamen ohne Pfadanteile, mit Endung (Standard .pdf).
 // Entfernt Trennzeichen und in Windows verbotene Zeichen, vermeidet reservierte Gerätenamen (CON, NUL, COM1 …).
-export function sanitizeFileName(value: unknown, fallback = 'Dokument'): string {
+export function sanitizeFileName(value: unknown, fallback = 'Dokument', extension = '.pdf'): string {
   const raw = typeof value === 'string' ? value : '';
   let base = raw
-    .replace(/\.pdf$/i, '')
+    .replace(new RegExp(`\\${extension}$`, 'i'), '')
     // eslint-disable-next-line no-control-regex -- Steuerzeichen sind in Dateinamen nicht erlaubt
     .replace(/[\u0000-\u001f\u007f/\\:*?"<>|]/g, '-')
     .replace(/\s+/g, ' ')
@@ -83,9 +83,9 @@ export function sanitizeFileName(value: unknown, fallback = 'Dokument'): string 
     .replace(/^[.\s]+|[.\s]+$/g, '');
   if (!base) base = fallback;
   if (/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i.test(base)) base = `_${base}`;
-  const max = MAX_FILE_NAME - '.pdf'.length;
+  const max = MAX_FILE_NAME - extension.length;
   if (base.length > max) base = base.slice(0, max).trim();
-  return `${base}.pdf`;
+  return `${base}${extension}`;
 }
 
 export function isPickKind(value: unknown): value is PickKind {
@@ -169,4 +169,17 @@ export function looksLikePdf(head: Uint8Array): boolean {
     if (match) return true;
   }
   return false;
+}
+
+// Exportiertes Bild: PNG oder JPEG (am Inhalt erkannt), höchstens 1 GB
+export function isImageBytes(value: unknown, kind: unknown): value is Uint8Array {
+  if (!(value instanceof Uint8Array) || value.length < 8 || value.length > 2 ** 30) return false;
+  if (kind === 'png') return [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((b, i) => value[i] === b);
+  if (kind === 'jpeg') return value[0] === 0xff && value[1] === 0xd8 && value[2] === 0xff;
+  return false;
+}
+
+// Exportierter Text: höchstens 256 Mio. Zeichen
+export function isExportText(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 256 * 1024 * 1024;
 }

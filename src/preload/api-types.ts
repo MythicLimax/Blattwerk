@@ -3,6 +3,10 @@ import type { CommandId } from '../shared/commands';
 import type {
   AppInfo,
   AppSettings,
+  ExportFolderResult,
+  ExportImageKind,
+  ExportTextResult,
+  ExportWriteResult,
   MenuState,
   NamedBytes,
   OpenResult,
@@ -41,6 +45,14 @@ export interface BlattwerkApi {
   // Neues Dokument über den Sichern-Dialog speichern, auf Wunsch danach im Tab öffnen
   saveNewFile(bytes: Uint8Array, suggestedName: string, referenceFileId: string | null, openAfter: boolean): Promise<SaveNewResult>;
   saveFilesToFolder(files: NamedBytes[], referenceFileId: string | null): Promise<SaveToFolderResult>;
+  // Export als Bilder (Phase 6): Ordner wählen, Seite für Seite schreiben, beenden
+  exportImages: {
+    chooseFolder(referenceFileId: string | null): Promise<ExportFolderResult>;
+    write(token: string, name: string, kind: ExportImageKind, bytes: Uint8Array): Promise<ExportWriteResult>;
+    end(token: string): Promise<void>;
+  };
+  // Export als Text über den Sichern-Dialog (UTF-8)
+  exportText(text: string, suggestedName: string, referenceFileId: string | null): Promise<ExportTextResult>;
   signatures: {
     list(): Promise<SavedSignature[]>;
     add(input: SignatureInput): Promise<SavedSignature[]>;
