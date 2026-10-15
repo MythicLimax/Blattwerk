@@ -25,7 +25,8 @@ const child = spawn(binary, [`--remote-debugging-port=${port}`, file], {
 });
 try {
   let browser;
-  for (let i = 0; i < 40 && !browser; i++) {
+  // Beim ersten Start nach dem Bauen prüft macOS die neu signierte App; das kann einige Sekunden dauern.
+  for (let i = 0; i < 120 && !browser; i++) {
     await new Promise((r) => setTimeout(r, 250));
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`).catch(() => undefined);
   }
