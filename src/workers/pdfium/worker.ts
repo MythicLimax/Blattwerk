@@ -85,6 +85,7 @@ const loadSigning = () => import('./signing');
 const loadSignatures = () => import('./signatures');
 const loadIdentity = () => import('./identity');
 const loadPdfA = () => import('./pdfa');
+const loadAccessibility = () => import('./accessibility');
 
 const NO_CHANGES = { upserts: [], deletions: [] };
 
@@ -275,6 +276,24 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
         case 'checkPdfA': {
           const { checkPdfA } = await loadPdfA();
           reply({ id: request.id, ok: true, kind: 'pdfa', report: await checkPdfA(new Uint8Array(request.bytes)) });
+          return;
+        }
+        case 'accessibility': {
+          const input = new Uint8Array(request.bytes);
+          const plain = request.encrypted ? pdfium.process(input, request.password, NO_CHANGES, [], { incremental: false, removeSecurity: true }) : input;
+          const { checkAccessibility } = await loadAccessibility();
+          const report = await checkAccessibility(plain);
+          // Beheben schreibt in die Datei; bei Verschlüsselung nicht möglich
+          if (request.encrypted) for (const check of report.checks) check.fixable = false;
+          reply({ id: request.id, ok: true, kind: 'accessibility', report });
+          return;
+        }
+        case 'accessibilityFix': {
+          const pending = request.changes.upserts.length > 0 || request.changes.deletions.length > 0 || request.formValues.length > 0;
+          const input = new Uint8Array(request.bytes);
+          const current = pending ? pdfium.process(input, request.password, request.changes, [], { incremental: true }, request.formValues) : input;
+          const { fixAccessibility } = await loadAccessibility();
+          replyBytes(request.id, await fixAccessibility(current, request.fix), pdfium, request.password);
           return;
         }
         case 'inspect':

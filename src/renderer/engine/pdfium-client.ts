@@ -7,6 +7,7 @@ import type { CompressionLevel } from '../../shared/compress';
 import type { CompareLabels } from '../../shared/compare';
 import type { SignatureCheck, SignRequestInput } from '../../shared/signing';
 import type { PdfAReport } from '../../shared/pdfa';
+import type { AccessibilityFix, AccessibilityReport } from '../../shared/accessibility';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
@@ -306,4 +307,22 @@ export async function checkPdfA(bytes: Uint8Array): Promise<PdfAReport> {
   const response = await send({ type: 'checkPdfA', bytes: buffer }, [buffer]);
   if (response.kind !== 'pdfa') throw new PdfiumClientError('failed', 'unerwartete Antwort');
   return response.report;
+}
+
+// Barrierefreiheit prüfen und Tags auslesen. Die Bytes bleiben beim Aufrufer nutzbar.
+export async function checkAccessibility(bytes: Uint8Array, password: string | null, encrypted: boolean): Promise<AccessibilityReport> {
+  const buffer = bytes.slice().buffer as ArrayBuffer;
+  const response = await send({ type: 'accessibility', bytes: buffer, password, encrypted }, [buffer]);
+  if (response.kind !== 'accessibility') throw new PdfiumClientError('failed', 'unerwartete Antwort');
+  return response.report;
+}
+
+// Sprache, Titel und Tab-Reihenfolge setzen; liefert den neuen Stand. Die Bytes gehen an den Worker.
+export function fixAccessibility(
+  bytes: Uint8Array,
+  password: string | null,
+  input: { changes: AnnotationChanges; formValues: FormFieldValue[]; fix: AccessibilityFix },
+): Promise<Uint8Array> {
+  const buffer = ownBuffer(bytes);
+  return bytesOf(send({ type: 'accessibilityFix', bytes: buffer, password, ...input }, [buffer]));
 }

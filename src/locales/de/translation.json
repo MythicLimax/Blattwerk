@@ -115,7 +115,8 @@
       "ocr": "Text erkennen (OCR) …",
       "certify": "Mit Zertifikat unterschreiben …",
       "signatures": "Signaturen prüfen …",
-      "pdfa": "PDF/A (Archivformat) …"
+      "pdfa": "PDF/A (Archivformat) …",
+      "accessibility": "Barrierefreiheit prüfen …"
     }
   },
   "dialog": {
@@ -271,7 +272,8 @@
     "loadingOutline": "Lesezeichen werden geladen …",
     "expand": "Aufklappen",
     "collapse": "Zuklappen",
-    "comments": "Kommentare"
+    "comments": "Kommentare",
+    "tags": "Tags"
   },
   "search": {
     "title": "Suchen",
@@ -1041,5 +1043,94 @@
     "fontsFailed": "Diese Schriften sind nicht eingebettet und lassen sich nicht ersetzen, deshalb ist kein PDF/A möglich:",
     "cmykFailed": "Für die Druckfarben (CMYK) fehlt ein Farbprofil, deshalb ist kein PDF/A möglich.",
     "checkFailed": "Das Dokument ließ sich nicht prüfen."
+  },
+  "accessibility": {
+    "title": "Barrierefreiheit prüfen",
+    "checking": "Dokument wird geprüft …",
+    "failed": "Das Dokument ließ sich nicht prüfen.",
+    "allPassed": "Die Prüfung fand keine Probleme.",
+    "someFailed_one": "Die Prüfung fand ein Problem.",
+    "someFailed_other": "Die Prüfung fand {{count}} Probleme.",
+    "status": {
+      "passed": "Erfüllt",
+      "failed": "Nicht erfüllt",
+      "skipped": "Nicht geprüft"
+    },
+    "skipped": "Nicht prüfbar, weil das Dokument keine Tags hat.",
+    "check": {
+      "tagged": {
+        "title": "Dokument hat Tags (Struktur für Bildschirmleser)",
+        "failed": "Ohne Tags können Bildschirmleser Überschriften, Listen und Tabellen nicht erkennen. Tags entstehen beim Erstellen der PDF (z. B. in Word mit „Barrierefreiheit“ beim Export)."
+      },
+      "language": {
+        "title": "Dokumentsprache angegeben",
+        "failed": "Ohne Sprache liest ein Bildschirmleser den Text womöglich mit falscher Aussprache vor."
+      },
+      "title": {
+        "title": "Dokumenttitel vorhanden",
+        "failed": "Das Dokument hat keinen Titel."
+      },
+      "display-title": {
+        "title": "Titel wird statt des Dateinamens angezeigt",
+        "failed": "Programme zeigen den Dateinamen statt des Titels an."
+      },
+      "tab-order": {
+        "title": "Tab-Reihenfolge folgt der Struktur",
+        "failed_one": "Auf einer Seite mit Links, Feldern oder Kommentaren folgt die Tab-Taste nicht der Struktur.",
+        "failed_other": "Auf {{count}} Seiten mit Links, Feldern oder Kommentaren folgt die Tab-Taste nicht der Struktur."
+      },
+      "figure-alt": {
+        "title": "Abbildungen haben Alternativtext",
+        "failed_one": "Eine Abbildung hat keinen Alternativtext.",
+        "failed_other": "{{count}} Abbildungen haben keinen Alternativtext."
+      },
+      "heading-order": {
+        "title": "Überschriften in sinnvoller Reihenfolge",
+        "failed_one": "Einmal wird eine Überschriftenebene übersprungen (z. B. von H1 direkt zu H3).",
+        "failed_other": "{{count}}-mal wird eine Überschriftenebene übersprungen (z. B. von H1 direkt zu H3)."
+      },
+      "table-headers": {
+        "title": "Tabellen haben Kopfzellen",
+        "failed_one": "Eine Tabelle hat keine Kopfzellen (TH).",
+        "failed_other": "{{count}} Tabellen haben keine Kopfzellen (TH)."
+      },
+      "annotations-tagged": {
+        "title": "Links und Kommentare sind in der Struktur",
+        "failed_one": "Ein Link, Feld oder Kommentar fehlt in der Struktur.",
+        "failed_other": "{{count}} Links, Felder oder Kommentare fehlen in der Struktur."
+      },
+      "field-tooltip": {
+        "title": "Formularfelder haben eine Beschreibung (QuickInfo)",
+        "failed_one": "Ein Formularfeld hat keine QuickInfo. Ergänzen unter „Formular bearbeiten“.",
+        "failed_other": "{{count}} Formularfelder haben keine QuickInfo. Ergänzen unter „Formular bearbeiten“."
+      },
+      "image-only": {
+        "title": "Seiten enthalten Text (nicht nur Bilder)",
+        "failed_one": "Eine Seite besteht nur aus Bildern. „Werkzeuge → Text erkennen (OCR)“ macht den Text lesbar.",
+        "failed_other": "{{count}} Seiten bestehen nur aus Bildern. „Werkzeuge → Text erkennen (OCR)“ macht den Text lesbar."
+      },
+      "bookmarks": {
+        "title": "Lesezeichen bei langen Dokumenten",
+        "failed": "Das Dokument hat mehr als 20 Seiten, aber keine Lesezeichen."
+      }
+    },
+    "language": "Sprache",
+    "documentTitle": "Titel",
+    "fix": "Beheben",
+    "fixHint": "„Beheben“ setzt Sprache und Titel, lässt Programme den Titel anzeigen und stellt die Tab-Reihenfolge auf die Struktur um. Speichern nicht vergessen.",
+    "hint": "Die Prüfung deckt wichtige Regeln ab (angelehnt an PDF/UA), ersetzt aber keine vollständige Prüfung. Tags selbst lassen sich hier nicht anlegen.",
+    "close": "Schließen",
+    "busy": "Barrierefreiheit wird verbessert …",
+    "fixFailed": "Die Änderungen ließen sich nicht übernehmen.",
+    "tags": {
+      "loading": "Tags werden gelesen …",
+      "failed": "Die Tags ließen sich nicht lesen.",
+      "none": "Dieses Dokument hat keine Tags. Bildschirmleser können seine Struktur nicht erkennen.",
+      "check": "Barrierefreiheit prüfen …",
+      "truncated": "Sehr viele Tags: Die Liste ist gekürzt.",
+      "noAlt": "(ohne Alternativtext)",
+      "customRole": "Eigene Rolle „{{role}}“",
+      "page": "Seite {{page}}"
+    }
   }
 }

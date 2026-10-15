@@ -54,6 +54,7 @@ export const COMMANDS = [
   'tools.certify',
   'tools.signatures',
   'tools.pdfa',
+  'tools.accessibility',
   'file.exportImages',
   'file.exportText',
   'file.combine',

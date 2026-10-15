@@ -1,11 +1,12 @@
 // Phase 7: Profi-Funktionen. Arbeitet auf Kopien der Test-PDFs; Systemdialoge werden ersetzt.
 import { expect, test, type ElectronApplication } from '@playwright/test';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fixture, TEXT_PDF } from '../fixtures/expectations';
 import { launchApp, menuClick, waitForDocument } from './app';
 import { inspectWithPdfKit } from './pdfkit';
+import { taggedPdf } from '../fixtures/tagged';
 
 const tempDirs: string[] = [];
 test.afterAll(() => {
@@ -125,6 +126,53 @@ test.describe('PDF/A', () => {
     await menuClick(app, 'tools.pdfa');
     await expect(page.getByTestId('pdfa-verdict')).toHaveAttribute('data-compliant', 'true');
     await expect(page.getByTestId('pdfa-issues')).toHaveCount(0);
+    await handle.close();
+  });
+});
+
+test.describe('Barrierefreiheit', () => {
+  test('Tags anzeigen, prüfen, Sprache und Titel beheben', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+    tempDirs.push(dir);
+    const file = path.join(dir, 'getaggt.pdf');
+    writeFileSync(file, await taggedPdf());
+    const handle = await launchApp([file], { userData: dir });
+    const { page, app } = handle;
+    await waitForDocument(page, 1);
+
+    await page.getByTestId('sidebar-tags').click();
+    const tags = page.getByTestId('tags');
+    await expect(tags.getByTestId('tag-item').first()).toHaveAttribute('data-role', 'Document');
+    await expect(tags.locator('[data-role="H1"]')).toBeVisible();
+    await expect(tags.locator('[data-role="Figure"]')).toHaveCount(2);
+    await expect(tags).toContainText('Diagramm der Umsätze');
+
+    await menuClick(app, 'tools.accessibility');
+    const dialog = page.getByTestId('accessibility-dialog');
+    const check = (code: string) => dialog.locator(`[data-code="${code}"]`);
+    await expect(check('tagged')).toHaveAttribute('data-status', 'passed');
+    await expect(check('language')).toHaveAttribute('data-status', 'failed');
+    await expect(check('figure-alt')).toHaveAttribute('data-status', 'failed');
+    await expect(dialog.getByTestId('accessibility-lang')).toHaveValue('de-DE');
+    await dialog.getByTestId('accessibility-title').fill('Jahresbericht');
+    await dialog.getByTestId('accessibility-fix').click();
+    // Neuer Stand: Prüfung läuft erneut
+    await expect(check('language')).toHaveAttribute('data-status', 'passed', { timeout: 15_000 });
+    await expect(check('title')).toHaveAttribute('data-status', 'passed');
+    await expect(check('tab-order')).toHaveAttribute('data-status', 'passed');
+    await expect(check('figure-alt')).toHaveAttribute('data-status', 'failed');
+    await expect(dialog.getByTestId('accessibility-fix')).toHaveCount(0);
+    await handle.close();
+  });
+
+  test('Dokument ohne Tags: Hinweis in der Seitenleiste', async () => {
+    const handle = await launchApp([fixture('text.pdf')]);
+    const { page } = handle;
+    await waitForDocument(page, TEXT_PDF.pages);
+    await page.getByTestId('sidebar-tags').click();
+    await expect(page.getByTestId('tags-empty')).toBeVisible();
+    await page.getByTestId('tags-check').click();
+    await expect(page.locator('[data-code="tagged"]')).toHaveAttribute('data-status', 'failed');
     await handle.close();
   });
 });

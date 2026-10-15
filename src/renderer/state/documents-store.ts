@@ -3,7 +3,7 @@ import type { SignatureCheck } from '../../shared/signing';
 import type { ViewMode } from '../../shared/ipc';
 
 export type TabStatus = 'loading' | 'password' | 'ready' | 'error';
-export type SidebarTab = 'pages' | 'bookmarks' | 'comments';
+export type SidebarTab = 'pages' | 'bookmarks' | 'comments' | 'tags';
 export type SearchStatus = 'idle' | 'pending' | 'found' | 'not-found' | 'wrapped-top' | 'wrapped-bottom';
 
 export interface SearchState {

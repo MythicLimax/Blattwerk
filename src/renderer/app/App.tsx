@@ -18,6 +18,8 @@ import { useCertify } from '../features/certify/certify-store';
 import { SignaturesDialog } from '../features/certify/Signatures';
 import { PdfADialog } from '../features/pdfa/PdfADialog';
 import { usePdfA } from '../features/pdfa/pdfa-store';
+import { AccessibilityDialog } from '../features/accessibility/AccessibilityDialog';
+import { useAccessibility } from '../features/accessibility/accessibility-store';
 import { ProgressDialog } from '../features/progress/ProgressDialog';
 import { BusyOverlay } from '../features/pages/BusyOverlay';
 import { ChooseSignatureDialog, CreateSignatureDialog } from '../features/signatures/SignatureDialogs';
@@ -66,6 +68,7 @@ export function App() {
   const createIdOpen = useCertify((s) => s.createOpen);
   const signaturesOpen = useCertify((s) => s.detailsOpen);
   const pdfaOpen = usePdfA((s) => s.open);
+  const accessibilityOpen = useAccessibility((s) => s.open);
   const pageDialog = useUi((s) => s.pageDialog);
   const combine = useUi((s) => s.combine);
   const signatureDialog = useUi((s) => s.signatureDialog);
@@ -146,6 +149,7 @@ export function App() {
       {createIdOpen && <CreateIdDialog />}
       {signaturesOpen && active?.status === 'ready' && <SignaturesDialog tab={active} />}
       {pdfaOpen && active?.status === 'ready' && <PdfADialog tab={active} />}
+      {accessibilityOpen && active?.status === 'ready' && <AccessibilityDialog tab={active} />}
       <ProgressDialog />
       <SourcePasswordDialog />
       <BusyOverlay />

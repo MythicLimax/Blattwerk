@@ -17,7 +17,7 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | 4 | Formulare und Unterschrift | erledigt ([Bericht](docs/phasen/phase-4.md)) |
 | 5 | Bearbeiten (inkl. Schwärzen) | erledigt ([Bericht](docs/phasen/phase-5.md)) |
 | 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | erledigt ([Bericht](docs/phasen/phase-6.md)) |
-| 7 | Profi (PAdES, PDF/A, Tags) | als Nächstes |
+| 7 | Profi (PAdES, PDF/A, Tags) | erledigt ([Bericht](docs/phasen/phase-7.md)) |
 
 Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig.
 
@@ -74,6 +74,9 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Komprimieren** ([ADR 0013](docs/entscheidungen/0013-komprimieren.md)): PDFium schreibt vollständig, pdf-lib verkleinert Bilder (JPEG über `ImageCodec`, im Worker der Browser, in Tests `jpeg-js`), packt Ströme, verwirft Unerreichbares (`compress.ts`).
 - **Vergleichen** ([ADR 0014](docs/entscheidungen/0014-vergleichen.md)): Wörter mit Lage aus PDFium-Sitzungen, Myers-Vergleich je Seite (`src/shared/compare.ts`), Bericht als neues PDF mit pdf-lib (`workers/pdfium/compare.ts`).
 - **Texterkennung** ([ADR 0015](docs/entscheidungen/0015-texterkennung.md)): tesseract.js im Renderer (`engine/ocr-client.ts`), Worker, Kern und Sprachdaten aus `public/ocr` (beim Build kopiert, kein Netz). Seiten mit 300 dpi als PGM, Wörter als unsichtbare Textobjekte (`ocrText`, `FPDF_DeviceToPage`). Unsichtbarer Text erscheint nicht beim Bearbeiten des Inhalts.
+- **Digitale Signaturen** ([ADR 0016](docs/entscheidungen/0016-digitale-signaturen.md)): `signing.ts` (eigener Platzhalter, CMS mit pkijs, PAdES B-B), `signatures.ts` (prüfen), `identity.ts` (eigene ID); Oberfläche `features/certify/`. Nach dem Unterschreiben wird sofort gespeichert.
+- **PDF/A** ([ADR 0017](docs/entscheidungen/0017-pdfa.md)): `pdfa.ts` (umwandeln, prüfen), `cff.ts` (Breiten aus CFF), `icc.ts` (sRGB-Profil), `font-tables.ts`; Standardschriften aus PDFium (`standardFontProgram`). Immer neue Datei. Oberfläche `features/pdfa/`.
+- **Barrierefreiheit** ([ADR 0018](docs/entscheidungen/0018-barrierefreiheit.md)): `accessibility.ts` (Tags lesen, prüfen, Sprache/Titel/Tab-Reihenfolge setzen); Seitenleiste „Tags“ und Prüfdialog in `features/accessibility/`, Ergebnis je Stand in `report.ts`.
 - Es ist immer höchstens ein Bearbeitungsmodus aktiv (Kommentieren, Schwärzen, Formular bearbeiten, Inhalt bearbeiten, Seiten organisieren).
 - Dieses Verfahren (Snapshot der Dokumentbytes) gilt für Seiten-, Feld-, Wasserzeichen- und Inhaltsänderungen sowie für das Schwärzen. Nach dem Speichern beginnt der Verlauf neu.
 
@@ -109,7 +112,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0015)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0018)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
@@ -161,6 +164,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 | Tests (Teilschriften) | @cantoo/fontkit | 2.0.12 (nur Entwicklung) | MIT |
 | Tests (JPEG) | jpeg-js | 0.4.4 (nur Entwicklung) | BSD-3-Clause |
 | Texterkennung | tesseract.js (+ tesseract.js-core 7.0.0), @tesseract.js-data/deu, /eng | 7.0.0, 1.0.0 | Apache-2.0, MIT |
+| Signaturen | pkijs, asn1js, @libpdf/core (nur Schlüssel aus .p12) | 3.4.1, 3.0.10, 0.5.2 | BSD-3-Clause, BSD-3-Clause, MIT |
 | Zustand | zustand | 5.0.15 | MIT |
 | Virtualisierung | @tanstack/react-virtual | 3.14.15 | MIT |
 | i18n | i18next, react-i18next | 26.4.4, 17.0.16 | MIT |
@@ -171,7 +175,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 
 - **TypeScript 6 statt 7:** typescript-eslint 8.71 unterstützt nur TypeScript unter 6.1. Umstieg auf 7, sobald typescript-eslint so weit ist.
 - **Kein electron-vite:** Version 5.0.0 unterstützt Vite 8 nicht und hatte seit 12/2025 kein Release. Stattdessen drei schlanke Vite-Konfigurationen (main, preload, renderer) und ein kleines Dev-Skript.
-- Später: `@libpdf/core` als Kandidat für PAdES (Phase 7).
+- pdf.js-Schriften: Die Liberation-Schriften (GPL) werden nicht mitkopiert (`copy-pdfjs-assets.mjs`); die App nutzt Systemschriften, pdf.js lädt sie nur ohne diese.
 - **Lizenzen:** nur MIT, Apache-2.0, BSD-2/3, ISC und 0BSD. CI prüft das automatisch. AGPL (MuPDF, iText) und GPL nur nach Rücksprache.
 
 ## Konventionen
@@ -187,7 +191,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 ## Tests
 
 - **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js; PDFium-WASM und pdf-lib laufen ebenfalls in Node (`test/integration/pdfium-*.test.ts`, `fields.test.ts`, `redaction.test.ts`, `stamping.test.ts`, `content.test.ts`). Das Test-PDF zum Schwärzen erzeugt `test/fixtures/redaction.ts` im Test (Geheimnisse an allen bekannten Verstecken).
-- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt), `test/e2e/forms.spec.ts` (Phase 4), `test/e2e/edit.spec.ts` (Phase 5), `test/e2e/tools.spec.ts` (Phase 6) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. **Unsichtbar:** Im Testmodus bleibt das Fenster verborgen (ohne Drosselung) und die App ohne Dock-Symbol, damit die Tests den Auftraggeber nicht stören; `BLATTWERK_E2E_SHOW=1` zeigt das Fenster zum Zuschauen. **Verbindlich (Auftraggeber, 2026-10-15): Alle Tests laufen unsichtbar, auch der Rauchtest der fertigen App. Nichts darf ein Fenster öffnen oder den Fokus nehmen; der Auftraggeber arbeitet nebenher am Mac.** Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
+- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt), `test/e2e/forms.spec.ts` (Phase 4), `test/e2e/edit.spec.ts` (Phase 5), `test/e2e/tools.spec.ts` (Phase 6), `test/e2e/pro.spec.ts` (Phase 7; getaggtes Test-PDF aus `test/fixtures/tagged.ts`) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. **Unsichtbar:** Im Testmodus bleibt das Fenster verborgen (ohne Drosselung) und die App ohne Dock-Symbol, damit die Tests den Auftraggeber nicht stören; `BLATTWERK_E2E_SHOW=1` zeigt das Fenster zum Zuschauen. **Verbindlich (Auftraggeber, 2026-10-15): Alle Tests laufen unsichtbar, auch der Rauchtest der fertigen App. Nichts darf ein Fenster öffnen oder den Fokus nehmen; der Auftraggeber arbeitet nebenher am Mac.** Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
 - **Fertige App:** `node scripts/smoke-packaged.mjs <Pfad zur .app>` startet das Paket, prüft die Anzeige und speichert einen Kommentar (PDFium aus dem Paket).
 - **Ausgabeprüfung für jede gespeicherte Datei:** `qpdf --check` (in CI installiert, lokal übersprungen, wenn nicht vorhanden), Öffnen mit pdf.js, PDFium und `@cantoo/pdf-lib`, Annotationen haben /AP. Unter macOS zusätzlich mit PDFKit (die Engine von Apple Vorschau): `test/e2e/pdfkit.ts` (JavaScript for Automation). Acrobat Reader: manuelle Checkliste im Phasenbericht.
 - **Test-PDFs** (`test/fixtures/pdfs/`): Text, Scan (nur Bild), Formular (AcroForm), verschlüsselt (Benutzer- und Besitzerpasswort), eingeschränkt, beschädigt (kaputte xref, abgeschnitten), mit Links und Lesezeichen, mit Kommentaren (`kommentare.pdf`: Antwort, Prüfstatus). Signiert folgt mit PAdES in Phase 7. „Sehr groß“ (600 Seiten, mehr als 100 MB) erzeugt `scripts/generate-fixtures.ts` nach `test/fixtures/generated/`.

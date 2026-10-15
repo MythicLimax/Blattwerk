@@ -20,12 +20,14 @@ import { useFormEdit } from '../state/form-edit-store';
 import { useForms } from '../state/forms-store';
 import type { SecuritySettings } from '../../shared/security';
 import type { SignRequestInput } from '../../shared/signing';
+import type { AccessibilityFix } from '../../shared/accessibility';
 import type { CompressionLevel } from '../../shared/compress';
 import { historyDirty, tabHistory, useHistory, type DocState, type Leaving } from '../state/history-store';
 import type { AnnotationChanges } from '../../shared/annotations';
 import { exportText } from '../features/export/actions';
 import { compareWithFile } from '../features/compare/actions';
 import { openPdfACheck } from '../features/pdfa/actions';
+import { useAccessibility } from '../features/accessibility/accessibility-store';
 import { useCertify } from '../features/certify/certify-store';
 import { isRunning as isProgressRunning } from '../features/progress/progress';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
@@ -37,7 +39,7 @@ import type { PageOperation } from '../../shared/pages';
 import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
 import { useUi, type PromptAnswer } from '../state/ui-store';
 import { openTemporary, startLoading } from './document-loader';
-import { checkSignatures, compressDocument, PdfiumClientError, processDocument, protectDocument, readSecurity, redactDocument, signWithCertificate } from './pdfium-client';
+import { checkSignatures, compressDocument, fixAccessibility, PdfiumClientError, processDocument, protectDocument, readSecurity, redactDocument, signWithCertificate } from './pdfium-client';
 import { pdfjs } from './pdfjs';
 import { createRuntime, destroyRuntime, dispatchFind, getRuntime, rememberScroll, setRuntimeDocument } from './runtime';
 
@@ -574,6 +576,37 @@ async function runCompression(tabId: string, level: CompressionLevel): Promise<b
   }
 }
 
+// Barrierefreiheit (Phase 7, ADR 0018): Sprache, Titel und Tab-Reihenfolge setzen, als neuer Stand
+export function applyAccessibilityFix(tabId: string, fix: AccessibilityFix): Promise<boolean> {
+  commitPendingEdits();
+  if (findTab(tabId)?.working) return Promise.resolve(false);
+  return enqueue(tabId, () => runAccessibilityFix(tabId, fix));
+}
+
+async function runAccessibilityFix(tabId: string, fix: AccessibilityFix): Promise<boolean> {
+  const tab = findTab(tabId);
+  const runtime = getRuntime(tabId);
+  if (!tab || tab.status !== 'ready' || tab.saving || tab.encrypted || !runtime?.pdf) return false;
+  const pdf = runtime.pdf;
+  const ui = useUi.getState();
+  ui.setBusy('accessibility.busy');
+  try {
+    const pending = await pendingChanges(tabId);
+    const bytes = await fixAccessibility(await pdf.getData(), runtime.password, { ...pending, fix });
+    if (getRuntime(tabId)?.pdf !== pdf) return false;
+    const next = { bytes, annotations: null, page: tab.currentPage, selection: [], password: runtime.password };
+    useHistory.getState().push(tabId, leavingState(tabId, tab, false), next);
+    rememberScroll(tabId);
+    await showState(tabId, next);
+    return true;
+  } catch (error) {
+    ui.notify(operationErrorMessage(error, 'accessibility.fixFailed'), errorMessage(error));
+    return false;
+  } finally {
+    ui.setBusy(null);
+  }
+}
+
 const formatSize = (bytes: number) =>
   bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
@@ -857,6 +890,11 @@ export function executeCommand(command: CommandId): void {
     if (active?.status !== 'ready' || active.working || isProgressRunning()) return;
     if (!active.canModify) ui.notify(t('contentEdit.notAllowed'));
     else ui.setOcrOpen(true);
+    return;
+  }
+  if (command === 'tools.accessibility') {
+    const active = getActiveTab();
+    if (active?.status === 'ready') useAccessibility.getState().setOpen(true);
     return;
   }
   if (command === 'tools.pdfa') {

@@ -10,6 +10,7 @@ import type { CompressionLevel } from '../../shared/compress';
 import type { CompareLabels } from '../../shared/compare';
 import type { SignatureCheck, SignRequestInput } from '../../shared/signing';
 import type { PdfAReport } from '../../shared/pdfa';
+import type { AccessibilityFix, AccessibilityReport } from '../../shared/accessibility';
 
 // Kommentaränderungen, Formularwerte und (optional) Seiten- oder Feldoperationen anwenden, neue Bytes liefern
 export interface ProcessRequest {
@@ -166,6 +167,26 @@ export interface CheckPdfARequest {
   bytes: ArrayBuffer;
 }
 
+// Barrierefreiheit prüfen (Tags auslesen); verschlüsselte Dokumente entschlüsselt PDFium vorher
+export interface AccessibilityRequest {
+  id: number;
+  type: 'accessibility';
+  bytes: ArrayBuffer;
+  password: string | null;
+  encrypted: boolean;
+}
+
+// Sprache, Titel und Tab-Reihenfolge setzen: ungespeicherte Änderungen zuerst, dann inkrementell
+export interface AccessibilityFixRequest {
+  id: number;
+  type: 'accessibilityFix';
+  bytes: ArrayBuffer;
+  password: string | null;
+  changes: AnnotationChanges;
+  formValues: FormFieldValue[];
+  fix: AccessibilityFix;
+}
+
 // Sitzung: Dokument für mehrere Seiten geöffnet halten (Export, Texterkennung, Vergleich)
 export interface OpenSessionRequest {
   id: number;
@@ -222,7 +243,9 @@ export type WorkerRequest =
   | VerifySignaturesRequest
   | CreateIdentityRequest
   | PdfARequest
-  | CheckPdfARequest;
+  | CheckPdfARequest
+  | AccessibilityRequest
+  | AccessibilityFixRequest;
 
 export type InspectResult = { ok: true; pageCount: number } | { ok: false; reason: 'password' | 'invalid' };
 
@@ -266,6 +289,7 @@ export type WorkerResponse =
   | { id: number; ok: true; kind: 'done' }
   | { id: number; ok: true; kind: 'signatures'; checks: SignatureCheck[] }
   | { id: number; ok: true; kind: 'pdfa'; report: PdfAReport }
+  | { id: number; ok: true; kind: 'accessibility'; report: AccessibilityReport }
   // Bytes, die kein PDF sind (z. B. eine .p12-Datei)
   | { id: number; ok: true; kind: 'raw'; bytes: ArrayBuffer }
   | { id: number; ok: false; code: WorkerErrorCode; error: string };

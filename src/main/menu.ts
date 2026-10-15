@@ -246,6 +246,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       cmd('tools.compare', t('menu.tools.compare'), { enabled: viewing }),
       cmd('tools.compress', t('menu.tools.compress'), { enabled: viewing }),
       cmd('tools.pdfa', t('menu.tools.pdfa'), { enabled: viewing }),
+      cmd('tools.accessibility', t('menu.tools.accessibility'), { enabled: viewing }),
       cmd('tools.security', t('menu.tools.security'), { enabled: viewing }),
     ],
   };
