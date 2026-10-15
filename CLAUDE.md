@@ -113,7 +113,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0021)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0022)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
@@ -129,7 +129,7 @@ src/
                             forms (Ausfüllen), form-edit (Formular bearbeiten), signatures (Unterschrift),
                             redaction (Schwärzen), stamping (Wasserzeichen, Kopf-/Fußzeilen), content-edit (Inhalt bearbeiten),
                             security (Kennwortschutz), export (Bilder, Text), compress, compare, ocr, progress (Fortschritt mit Abbrechen)
-    components/             generische UI-Bausteine (IconButton, Dialog)
+    components/             generische UI-Bausteine (IconButton, Dialog, ModeBadge, Tooltip, glass/liquid-glass)
     state/                  zustand-Stores (documents, ui, annotations, history, forms, form-edit, content-edit), dirty.ts
     engine/                 pdf.js-Einrichtung, Laden, Range-Transport, Laufzeit je Dokument, Befehle (session.ts),
                             coords.ts, pdfium-client.ts
@@ -185,7 +185,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 - Dateinamen: React-Komponenten `PascalCase.tsx`, alles andere `kebab-case.ts`.
 - **Keine UI-Texte im Code:** immer `t('bereich.schluessel')`. Neue Schlüssel zuerst in `src/locales/de/`. ESLint erzwingt das.
 - Icons nur aus `lucide-react`. Styling mit CSS Modules und Design-Tokens (CSS-Variablen) für hell und dunkel nach `prefers-color-scheme`.
-- **Gestaltung** (Farben [ADR 0020](docs/entscheidungen/0020-gestaltung.md), Formen [ADR 0021](docs/entscheidungen/0021-liquid-glass.md)): wie eine native macOS-26-App mit Liquid Glass (CSS-Variablen `--glass-*`), Systemschrift, konzentrische Rundungen, Kapseln für Leistenknöpfe und Tabs, keine umrahmten Karten und keine Großbuchstaben-Beschriftungen. Farben: Papierton, Flaschengrün (`--color-brand`), je Arbeitsbereich ein Ton (`data-tone`, `IconButton tone`, `ModeBadge`); neue Modi bekommen einen Ton und ein Namensschild. Unter macOS ist die Werkzeugleiste zugleich Titelleiste (`hiddenInset`, `data-drag-region`).
+- **Gestaltung** (Farben [ADR 0020](docs/entscheidungen/0020-gestaltung.md), Formen [ADR 0021](docs/entscheidungen/0021-liquid-glass.md)): wie eine native macOS-26-App mit Liquid Glass (CSS-Variablen `--glass-*`; Lichtbrechung, Glanzkanten und federnde Bewegung über `useLiquidGlass` und `.liquid`, [ADR 0022](docs/entscheidungen/0022-liquid-glass-lichtbrechung.md); Weg 2 mit Apples nativem Glas ist offen und braucht vom Auftraggeber die bestätigte Xcode-Lizenz), Systemschrift, konzentrische Rundungen, Kapseln für Leistenknöpfe und Tabs, keine umrahmten Karten und keine Großbuchstaben-Beschriftungen. Farben: Papierton, Flaschengrün (`--color-brand`), je Arbeitsbereich ein Ton (`data-tone`, `IconButton tone`, `ModeBadge`); neue Modi bekommen einen Ton und ein Namensschild. Unter macOS ist die Werkzeugleiste zugleich Titelleiste (`hiddenInset`, `data-drag-region`).
 - Tastenkürzel nur über die zentrale Tabelle in `src/shared/shortcuts.ts` (`CmdOrCtrl`). Menü und Renderer lesen dieselbe Tabelle.
 - Fehler aus Engines als typisierte Ergebnisse, nicht als nackte Exceptions über Prozessgrenzen. Meldungen an Nutzer immer übersetzt.
 - Commits: `typ(bereich): Beschreibung auf Deutsch`, z. B. `feat(viewer): Miniaturen erst bei Sichtbarkeit rendern`. Am Phasenende ein Commit `Phase N abgeschlossen`.

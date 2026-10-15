@@ -22,6 +22,7 @@ import type { Annotation, Rgb, StampId } from '../../../shared/annotations';
 import { rgbEquals, STAMP_IDS } from '../../../shared/annotations';
 import { IconButton } from '../../components/IconButton';
 import { ModeBadge } from '../../components/ModeBadge';
+import { GLASS, useLiquidGlass } from '../../components/glass/liquid-glass';
 import { executeCommand } from '../../engine/session';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { MARKUP_TOOLS, useAnnotations, useTabAnnotations, type Tool } from '../../state/annotations-store';
@@ -115,8 +116,11 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
     if (selected?.kind === 'freetext') restyle({ fontSize: value });
   };
 
+  const glassRef = useLiquidGlass<HTMLDivElement>(GLASS.control);
+
   return (
     <div
+      ref={glassRef}
       className={styles.bar}
       role="toolbar"
       aria-label={t('comments.toolbar')}

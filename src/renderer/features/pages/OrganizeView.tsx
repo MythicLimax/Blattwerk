@@ -17,6 +17,7 @@ import { api } from '../../api';
 import { markDropHandled } from '../../app/hooks';
 import { IconButton } from '../../components/IconButton';
 import { ModeBadge } from '../../components/ModeBadge';
+import { GLASS, useLiquidGlass } from '../../components/glass/liquid-glass';
 import { executeCommand } from '../../engine/session';
 import { getRuntime, type DocumentRuntime } from '../../engine/runtime';
 import { useDocuments, type TabState } from '../../state/documents-store';
@@ -277,13 +278,14 @@ export function OrganizeView({ tab }: { tab: TabState }) {
     }
   };
 
+  const glassRef = useLiquidGlass<HTMLDivElement>(GLASS.control);
   if (!runtime) return null;
   const targets = selection.length > 0 ? selection : [];
   const allSelected = selection.length === tab.pageCount;
 
   return (
     <div className={styles.view} data-testid="organize-view">
-      <div className={styles.toolbar} role="toolbar" aria-label={t('organize.toolbar')} data-tone="pages">
+      <div ref={glassRef} className={styles.toolbar} role="toolbar" aria-label={t('organize.toolbar')} data-tone="pages">
         <IconButton icon={ArrowLeft} label={t('organize.close')} onClick={() => toggleOrganize(tab)} data-testid="organize-close" />
         <ModeBadge tone="pages" icon={LayoutGrid} label={t('toolbar.organize')} />
         <span className={styles.status} data-testid="organize-status">

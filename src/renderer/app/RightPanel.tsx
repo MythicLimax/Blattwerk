@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { GLASS, useLiquidGlass } from '../components/glass/liquid-glass';
 import { IconButton } from '../components/IconButton';
 import { SearchPanel } from '../features/search/SearchPanel';
 import type { TabState } from '../state/documents-store';
@@ -10,8 +11,9 @@ import styles from './Sidebars.module.css';
 export function RightPanel({ tab }: { tab: TabState }) {
   const { t } = useTranslation();
   const setVisible = useUi((s) => s.setRightPanelVisible);
+  const glassRef = useLiquidGlass<HTMLElement>(GLASS.panel);
   return (
-    <aside className={styles.right} aria-label={t('search.title')} data-testid="right-panel">
+    <aside ref={glassRef} className={styles.right} aria-label={t('search.title')} data-testid="right-panel">
       <div className={styles.panelHeader}>
         <h2 className={styles.panelTitle}>{t('search.title')}</h2>
         <IconButton icon={X} label={t('search.close')} size={16} onClick={() => setVisible(false)} />

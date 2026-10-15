@@ -66,6 +66,7 @@
   /* Liquid Glass */
   --glass-bg: rgba(253, 251, 246, 0.62);
   --glass-bg-strong: rgba(253, 251, 246, 0.82);
+  --glass-bg-sheet: rgba(253, 251, 246, 0.72);
   --glass-blur: blur(20px) saturate(180%);
   --glass-edge: inset 0 0 0 0.5px rgba(255, 255, 255, 0.7), inset 0 0.5px 0 rgba(255, 255, 255, 0.9);
   --glass-outline: 0 0 0 0.5px rgba(40, 30, 10, 0.12);
@@ -118,6 +119,7 @@
 
     --glass-bg: rgba(44, 46, 39, 0.58);
     --glass-bg-strong: rgba(44, 46, 39, 0.82);
+    --glass-bg-sheet: rgba(44, 46, 39, 0.74);
     --glass-edge: inset 0 0 0 0.5px rgba(255, 255, 255, 0.14), inset 0 0.5px 0 rgba(255, 255, 255, 0.22);
     --glass-outline: 0 0 0 0.5px rgba(0, 0, 0, 0.5);
     --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.3);

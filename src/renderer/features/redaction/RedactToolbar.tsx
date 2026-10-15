@@ -2,6 +2,7 @@ import { Check, MousePointer2, Redo2, ScanSearch, SquareDashed, TextCursor, Tras
 import { useTranslation } from 'react-i18next';
 import { IconButton } from '../../components/IconButton';
 import { ModeBadge } from '../../components/ModeBadge';
+import { GLASS, useLiquidGlass } from '../../components/glass/liquid-glass';
 import { executeCommand } from '../../engine/session';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { useAnnotations, useTabAnnotations, type Tool } from '../../state/annotations-store';
@@ -37,8 +38,11 @@ export function RedactToolbar({ tab }: { tab: TabState }) {
     focusViewer(getRuntime(tab.id));
   };
 
+  const glassRef = useLiquidGlass<HTMLDivElement>(GLASS.control);
+
   return (
     <div
+      ref={glassRef}
       className={styles.bar}
       role="toolbar"
       aria-label={t('redaction.toolbar')}

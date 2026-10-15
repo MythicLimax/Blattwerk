@@ -9,6 +9,7 @@ import styles from './Thumbnails.module.css';
 
 const LABEL_HEIGHT = 22;
 const ITEM_PADDING = 16;
+const SWITCHER_SPACE = 44;
 
 export function useThumbnail(runtime: DocumentRuntime, pageNumber: number, rotation: number) {
   const subscribe = (notify: () => void) => runtime.thumbnails.subscribe(notify);
@@ -87,6 +88,9 @@ export function Thumbnails({ tab }: { tab: TabState }) {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => THUMB_WIDTH * aspect + LABEL_HEIGHT + ITEM_PADDING,
     overscan: 4,
+    // Platz für den schwebenden Umschalter der Seitenleiste (--panel-top in Sidebars.module.css)
+    paddingStart: SWITCHER_SPACE,
+    scrollPaddingStart: SWITCHER_SPACE,
   });
 
   // Aktuelle Seite in der Liste sichtbar halten.

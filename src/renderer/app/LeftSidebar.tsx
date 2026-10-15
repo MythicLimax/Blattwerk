@@ -1,57 +1,46 @@
-import { Bookmark, LayoutGrid, MessageSquare, Tags } from 'lucide-react';
+import { Bookmark, LayoutGrid, MessageSquare, Tags, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { GLASS, useLiquidGlass } from '../components/glass/liquid-glass';
 import { IconButton } from '../components/IconButton';
 import { TagsPanel } from '../features/accessibility/TagsPanel';
 import { CommentsPanel } from '../features/annotations/CommentsPanel';
 import { Outline } from '../features/outline/Outline';
 import { Thumbnails } from '../features/thumbnails/Thumbnails';
-import { useDocuments, type TabState } from '../state/documents-store';
+import { useDocuments, type SidebarTab, type TabState } from '../state/documents-store';
 import styles from './Sidebars.module.css';
 
+const PANELS: Array<{ id: SidebarTab; icon: LucideIcon }> = [
+  { id: 'pages', icon: LayoutGrid },
+  { id: 'bookmarks', icon: Bookmark },
+  { id: 'comments', icon: MessageSquare },
+  { id: 'tags', icon: Tags },
+];
+
+// Seitenleiste als schwebende Glasfläche; der Umschalter schwebt als Glas-Kapsel über dem Inhalt, die Auswahl gleitet
+// als helle Kapsel zum gewählten Bereich.
 export function LeftSidebar({ tab }: { tab: TabState }) {
   const { t } = useTranslation();
   const updateTab = useDocuments((s) => s.updateTab);
+  const panelRef = useLiquidGlass<HTMLElement>(GLASS.panel);
+  const switcherRef = useLiquidGlass<HTMLDivElement>(GLASS.control);
+  const index = Math.max(0, PANELS.findIndex((panel) => panel.id === tab.sidebarTab));
 
   return (
-    <aside className={styles.left} aria-label={t('sidebar.label')} data-testid="left-sidebar">
-      <div className={styles.switcher} role="tablist">
-        <IconButton
-          icon={LayoutGrid}
-          label={t('sidebar.pages')}
-          role="tab"
-          aria-selected={tab.sidebarTab === 'pages'}
-          pressed={tab.sidebarTab === 'pages'}
-          onClick={() => updateTab(tab.id, { sidebarTab: 'pages' })}
-          data-testid="sidebar-pages"
-        />
-        <IconButton
-          icon={Bookmark}
-          label={t('sidebar.bookmarks')}
-          role="tab"
-          aria-selected={tab.sidebarTab === 'bookmarks'}
-          pressed={tab.sidebarTab === 'bookmarks'}
-          onClick={() => updateTab(tab.id, { sidebarTab: 'bookmarks' })}
-          data-testid="sidebar-bookmarks"
-        />
-        <IconButton
-          icon={MessageSquare}
-          label={t('sidebar.comments')}
-          role="tab"
-          aria-selected={tab.sidebarTab === 'comments'}
-          pressed={tab.sidebarTab === 'comments'}
-          onClick={() => updateTab(tab.id, { sidebarTab: 'comments' })}
-          data-testid="sidebar-comments"
-        />
-        <IconButton
-          icon={Tags}
-          label={t('sidebar.tags')}
-          role="tab"
-          aria-selected={tab.sidebarTab === 'tags'}
-          pressed={tab.sidebarTab === 'tags'}
-          onClick={() => updateTab(tab.id, { sidebarTab: 'tags' })}
-          data-testid="sidebar-tags"
-        />
-        <span className={styles.switcherTitle}>{t(`sidebar.${tab.sidebarTab}`)}</span>
+    <aside ref={panelRef} className={styles.left} aria-label={t('sidebar.label')} data-testid="left-sidebar">
+      <div ref={switcherRef} className={styles.switcher} role="tablist">
+        <span className={styles.selection} style={{ transform: `translateX(${index * 100}%)` }} aria-hidden="true" />
+        {PANELS.map(({ id, icon }) => (
+          <IconButton
+            key={id}
+            icon={icon}
+            label={t(`sidebar.${id}`)}
+            role="tab"
+            aria-selected={tab.sidebarTab === id}
+            pressed={tab.sidebarTab === id}
+            onClick={() => updateTab(tab.id, { sidebarTab: id })}
+            data-testid={`sidebar-${id}`}
+          />
+        ))}
       </div>
       <div className={styles.content}>
         {tab.sidebarTab === 'pages' && <Thumbnails key={tab.id} tab={tab} />}

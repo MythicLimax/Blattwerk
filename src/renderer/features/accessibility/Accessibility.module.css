@@ -12,6 +12,7 @@
 }
 
 .emptyPanel {
+  padding-top: var(--panel-top, 0px);
   display: flex;
   flex-direction: column;
   align-items: flex-start;

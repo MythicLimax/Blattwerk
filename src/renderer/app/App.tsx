@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { trackPointerLight } from '../components/glass/liquid-glass';
 import { api } from '../api';
 import { handleCloseRequest, handleOpenResult, executeCommand } from '../engine/session';
 import { CommentToolbar } from '../features/annotations/CommentToolbar';
@@ -73,6 +74,9 @@ export function App() {
   const combine = useUi((s) => s.combine);
   const signatureDialog = useUi((s) => s.signatureDialog);
   const fieldDialog = useFormEdit((s) => s.dialog);
+
+  // Lichtquelle der Glanzkanten folgt der Maus
+  useEffect(() => trackPointerLight(), []);
 
   useEffect(() => {
     const offOpened = api.onFileOpened((result) => void handleOpenResult(result));

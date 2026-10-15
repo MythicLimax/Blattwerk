@@ -22,7 +22,7 @@ export function Notices() {
   return (
     <div className={styles.stack} role="alert" aria-live="assertive" data-testid="notices">
       {notices.map((notice) => (
-        <div key={notice.id} className={notice.tone === 'success' ? styles.success : styles.notice} data-tone={notice.tone}>
+        <div key={notice.id} className={`${notice.tone === 'success' ? styles.success : styles.notice} liquid`} data-tone={notice.tone}>
           {notice.tone === 'success' ? (
             <CircleCheck size={18} className={styles.icon} aria-hidden="true" />
           ) : (

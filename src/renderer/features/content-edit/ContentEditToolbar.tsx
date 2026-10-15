@@ -17,6 +17,7 @@ import type { Rgb } from '../../../shared/annotations';
 import { STAMP_FONTS, type StampFont } from '../../../shared/stamping';
 import { IconButton } from '../../components/IconButton';
 import { ModeBadge } from '../../components/ModeBadge';
+import { GLASS, useLiquidGlass } from '../../components/glass/liquid-glass';
 import { executeCommand } from '../../engine/session';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { useTabAnnotations } from '../../state/annotations-store';
@@ -98,8 +99,11 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
     focusViewer(getRuntime(tab.id));
   };
 
+  const glassRef = useLiquidGlass<HTMLDivElement>(GLASS.control);
+
   return (
     <div
+      ref={glassRef}
       className={styles.bar}
       role="toolbar"
       aria-label={t('contentEdit.toolbar')}

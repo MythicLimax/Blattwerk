@@ -1,4 +1,5 @@
-import { useEffect, useRef, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, type FormEvent, type ReactNode } from 'react';
+import { GLASS, useLiquidGlass } from './glass/liquid-glass';
 import styles from './Dialog.module.css';
 
 interface DialogProps {
@@ -14,6 +15,14 @@ interface DialogProps {
 // Modaler Dialog auf Basis von <dialog>: Fokus bleibt im Dialog, Esc schließt.
 export function Dialog({ title, children, actions, onClose, onSubmit, width = 420, testId }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const glassRef = useLiquidGlass<HTMLDialogElement>(GLASS.sheet);
+  const setRefs = useCallback(
+    (element: HTMLDialogElement | null) => {
+      ref.current = element;
+      glassRef(element);
+    },
+    [glassRef],
+  );
 
   useEffect(() => {
     const dialog = ref.current;
@@ -30,7 +39,7 @@ export function Dialog({ title, children, actions, onClose, onSubmit, width = 42
 
   return (
     <dialog
-      ref={ref}
+      ref={setRefs}
       className={styles.dialog}
       style={{ width }}
       aria-label={title}

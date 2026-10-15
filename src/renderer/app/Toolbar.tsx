@@ -18,10 +18,11 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { useState, type KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ViewMode } from '../../shared/ipc';
 import { IconButton } from '../components/IconButton';
+import { GLASS, useLiquidGlass } from '../components/glass/liquid-glass';
 import { focusViewer, getRuntime } from '../engine/runtime';
 import { executeCommand, goToPage, openWithDialog, printTab, setScaleValue, setViewMode } from '../engine/session';
 import { useTabDirty } from '../state/dirty';
@@ -30,6 +31,16 @@ import { isPresetScaleValue, scaleToPercent, ZOOM_MENU_PERCENTS } from '../featu
 import { useActiveTab, type TabState } from '../state/documents-store';
 import { useUi } from '../state/ui-store';
 import styles from './Toolbar.module.css';
+
+// Knopfgruppe als Liquid-Glass-Kapsel
+function GlassGroup({ children }: { children: ReactNode }) {
+  const ref = useLiquidGlass<HTMLDivElement>(GLASS.control);
+  return (
+    <div ref={ref} className={styles.group}>
+      {children}
+    </div>
+  );
+}
 
 function PageInput({ tab }: { tab: TabState }) {
   const { t } = useTranslation();
@@ -172,7 +183,7 @@ export function Toolbar() {
         if ((event.target as HTMLElement).closest('button')) event.preventDefault();
       }}
     >
-      <div className={styles.group}>
+      <GlassGroup>
         {ready && (
           <IconButton
             icon={PanelLeft}
@@ -201,11 +212,11 @@ export function Toolbar() {
             data-testid="print-button"
           />
         )}
-      </div>
+      </GlassGroup>
 
       {viewing && (
         <div className={styles.center}>
-          <div className={styles.group}>
+          <GlassGroup>
             <IconButton
               icon={ChevronUp}
               label={t('toolbar.previousPage')}
@@ -219,15 +230,15 @@ export function Toolbar() {
               onClick={() => executeCommand('nav.nextPage')}
             />
             <PageInput key={tab.id} tab={tab} />
-          </div>
+          </GlassGroup>
           <span className={styles.separator} />
-          <div className={styles.group}>
+          <GlassGroup>
             <IconButton icon={ZoomOut} label={t('toolbar.zoomOut')} onClick={() => executeCommand('view.zoomOut')} />
             <ZoomSelect tab={tab} />
             <IconButton icon={ZoomIn} label={t('toolbar.zoomIn')} onClick={() => executeCommand('view.zoomIn')} />
-          </div>
+          </GlassGroup>
           <span className={styles.separator} />
-          <div className={styles.group}>
+          <GlassGroup>
             <ViewModeSelect tab={tab} />
             <IconButton
               icon={RotateCcw}
@@ -239,12 +250,12 @@ export function Toolbar() {
               label={t('toolbar.rotateClockwise')}
               onClick={() => executeCommand('view.rotateClockwise')}
             />
-          </div>
+          </GlassGroup>
         </div>
       )}
 
       {ready && (
-        <div className={styles.group}>
+        <GlassGroup>
           <IconButton
             icon={Signature}
             tone="sign"
@@ -311,7 +322,7 @@ export function Toolbar() {
             onClick={() => (rightPanelVisible ? executeCommand('view.toggleRightPanel') : executeCommand('edit.find'))}
             data-testid="search-button"
           />
-        </div>
+        </GlassGroup>
       )}
     </header>
   );

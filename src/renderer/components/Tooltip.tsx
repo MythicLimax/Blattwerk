@@ -97,5 +97,5 @@ export function TooltipHost() {
     };
   }, []);
 
-  return <div ref={ref} popover="manual" role="tooltip" className={styles.tooltip} data-testid="tooltip" />;
+  return <div ref={ref} popover="manual" role="tooltip" className={`${styles.tooltip} liquid`} data-testid="tooltip" />;
 }
