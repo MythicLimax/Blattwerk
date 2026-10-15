@@ -13,7 +13,8 @@ export interface SelectedObject {
   members: number[];
 }
 
-// Texteingabe direkt auf der Seite: neue Zeilen an einer Stelle oder eine vorhandene Zeile ändern
+// Texteingabe direkt auf der Seite: neue Zeilen an einer Stelle (at = Klickstelle, Anfang und Mitte der ersten Zeile,
+// in Ansichtskoordinaten) oder eine vorhandene Zeile ändern
 export type TextEditing =
   | { tabId: string; pageIndex: number; mode: 'new'; at: Point }
   | { tabId: string; pageIndex: number; mode: 'edit'; index: number; merge: number[]; bounds: Rect; text: string; fontSize: number; font?: string; lines?: number[][] };

@@ -125,6 +125,10 @@ export async function addImage(tab: TabState): Promise<void> {
   });
 }
 
-// Abstand der ersten Grundlinie von der Oberkante der Eingabe
-export const baselineOffset = (size: number) => size * 0.8;
+// Abstand der ersten Grundlinie von der Oberkante einer Zeile (Zeilenhöhe 1,2): halber Durchschuss 0,1 plus
+// Oberlänge der Standardschriften (etwa 0,76). So steht der Text nach dem Übernehmen dort, wo er in der Eingabe stand.
+export const baselineOffset = (size: number) => size * 0.86;
 export const lineHeight = (size: number) => size * LINE_HEIGHT;
+// Neuer Text: Die Klickstelle ist die Mitte der ersten Zeile (wie der Strich des Textzeigers). Abstand der Grundlinie
+// von dort nach unten.
+export const baselineBelowClick = (size: number) => baselineOffset(size) - lineHeight(size) / 2;

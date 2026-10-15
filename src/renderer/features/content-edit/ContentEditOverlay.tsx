@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { normalizeRect, type Point, type Rect } from '../../../shared/annotations';
-import { editUnits, missingChars, scalingAbout, translation, type EditUnit, type PageObjectInfo, type PageObjects } from '../../../shared/content';
+import { editUnits, LINE_HEIGHT, missingChars, scalingAbout, translation, type EditUnit, type PageObjectInfo, type PageObjects } from '../../../shared/content';
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
 import { useContentEdit, type TextEditing } from '../../state/content-edit-store';
-import { addText, baselineOffset, editParagraph, editText, transformObject } from './actions';
+import { addText, baselineBelowClick, editParagraph, editText, transformObject } from './actions';
 import styles from './ContentEditOverlay.module.css';
 import { pageObjects } from './page-objects';
 
@@ -14,6 +14,8 @@ type Gesture =
   | { kind: 'scale'; object: EditUnit; fixed: Point; to: Point };
 
 const MIN_EDITOR_PX = 11;
+// Rahmen (1 px) und Innenabstand (2 px) der Eingabe links: So beginnt der Text genau an der Klickstelle
+const EDITOR_INSET_PX = 3;
 const pxToUnits = (px: number, scale: number) => px / (scale * (96 / 72));
 
 function corners([l, b, r, t]: Rect): Point[] {
@@ -273,7 +275,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
     } else if (editing.mode === 'edit') {
       void editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, value, initial);
     } else {
-      const baseline = geometry.toPdf(editing.at.x, editing.at.y + baselineOffset(style.size));
+      const baseline = geometry.toPdf(editing.at.x, editing.at.y + baselineBelowClick(style.size));
       void addText(editing.tabId, editing.pageIndex, baseline, value);
     }
   };
@@ -299,7 +301,11 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
 
   // Bei kleinem Zoom bleibt die Eingabe lesbar, auch wenn sie dann etwas größer ist als der Text auf der Seite.
   const fontSize = Math.max(MIN_EDITOR_PX, (editing.mode === 'edit' ? editing.fontSize : style.size) * viewScale);
-  const box = editing.mode === 'edit' ? geometry.rectToView(editing.bounds) : { x: editing.at.x, y: editing.at.y, w: 0, h: 0 };
+  // Neuer Text: Eingabe so legen, dass der Text an der Klickstelle beginnt und die erste Zeile mittig auf ihr liegt
+  const box =
+    editing.mode === 'edit'
+      ? geometry.rectToView(editing.bounds)
+      : { x: editing.at.x - EDITOR_INSET_PX / viewScale, y: editing.at.y - (fontSize * LINE_HEIGHT) / 2 / viewScale - 1 / viewScale, w: 0, h: 0 };
   const position = {
     left: `${(box.x / geometry.width) * 100}%`,
     top: `${(box.y / geometry.height) * 100}%`,

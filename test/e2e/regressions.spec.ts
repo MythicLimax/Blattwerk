@@ -198,3 +198,33 @@ test('Fenster schließen fragt bei Änderungen nach und beendet dann die App (au
   await page.getByTestId('prompt-discard').click();
   await exited;
 });
+
+test('Neuer Text beginnt an der Klickstelle, die erste Zeile liegt mittig darauf und springt beim Übernehmen nicht', async () => {
+  const { page, app, close } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, TEXT_PDF.pages);
+  await page.getByTestId('content-edit-button').click();
+  for (const zoom of ['view.fitPage', 'view.actualSize'] as const) {
+    await menuClick(app, zoom);
+    await page.getByTestId('content-tool-text').click();
+    const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
+    if (!overlay) throw new Error('keine Ebene');
+    const x = overlay.x + overlay.width * 0.5;
+    const y = overlay.y + overlay.height * (zoom === 'view.fitPage' ? 0.8 : 0.25);
+    await page.mouse.click(x, y);
+    const editor = page.getByTestId('content-text-editor');
+    const box = await editor.boundingBox();
+    if (!box) throw new Error('keine Eingabe');
+    // Text beginnt an der Klickstelle (Rahmen und Innenabstand: 3 px), Zeile mittig
+    expect(Math.abs(box.x + 3 - x)).toBeLessThan(1.5);
+    expect(Math.abs(box.y + box.height / 2 - y)).toBeLessThan(2);
+    await page.keyboard.type(`Klick ${zoom}`);
+    await page.keyboard.press('Meta+Enter');
+    const placed = page.locator(`[data-testid="content-object"][data-text="Klick ${zoom}"]`);
+    await expect(placed).toBeVisible();
+    const after = await placed.boundingBox();
+    if (!after) throw new Error('kein Text');
+    expect(Math.abs(after.x - x)).toBeLessThan(3);
+    expect(Math.abs(after.y + after.height / 2 - y)).toBeLessThan(3);
+  }
+  await close();
+});
