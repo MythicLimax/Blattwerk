@@ -80,3 +80,8 @@
 .select:hover {
   background: var(--color-hover);
 }
+
+/* Liegt Apples Glas unter dem Fenster, ist die Leiste durchsichtig (ADR 0023) */
+:global([data-native-glass='on']) .toolbar {
+  background: transparent;
+}

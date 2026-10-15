@@ -260,3 +260,42 @@ test('Neuer Text: ein Klick außerhalb der Eingabe übernimmt ihn, auch auf ein 
   }
   await close();
 });
+
+test.describe('Liquid Glass von macOS', () => {
+  test('Glasflächen liegen unter Band, Seitenleiste und Startseite', async () => {
+    test.skip(process.platform !== 'darwin', 'nur macOS');
+    const handle = await launchApp([]);
+    const { page, app } = handle;
+    const native = await page.evaluate(() => (window as unknown as { blattwerk: { getAppInfo(): Promise<{ nativeGlass: boolean }> } }).blattwerk.getAppInfo());
+    test.skip(!native.nativeGlass, 'macOS ohne Liquid Glass');
+    const regions = () => app.evaluate(() => (globalThis as unknown as { __blattwerkGlass: () => Array<{ x: number; y: number; width: number; height: number; windowOpaque: boolean }> }).__blattwerkGlass());
+    const size = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+    // Startseite: ein Glas über das ganze Fenster, Fenster durchsichtig
+    await expect.poll(async () => (await regions()).length).toBe(1);
+    const [full] = await regions();
+    expect(full).toMatchObject({ x: 0, y: 0, width: size.width, height: size.height, windowOpaque: false });
+    await expect(page.locator('html')).toHaveAttribute('data-native-glass', 'on');
+    await handle.close();
+
+    // Dokument: Band oben bis zur Arbeitsfläche, Seitenleiste mit ihrem Rahmen
+    const doc = await launchApp([fixture('text.pdf')]);
+    await waitForDocument(doc.page, TEXT_PDF.pages);
+    const docRegions = () => doc.app.evaluate(() => (globalThis as unknown as { __blattwerkGlass: () => Array<{ x: number; y: number; width: number; height: number }> }).__blattwerkGlass());
+    await expect.poll(async () => (await docRegions()).length).toBe(2);
+    const [band, sidebar] = await docRegions();
+    const workspaceTop = await doc.page.locator('[data-glass-workspace]').evaluate((el) => el.getBoundingClientRect().top);
+    expect(band).toMatchObject({ x: 0, y: 0, height: workspaceTop });
+    const box = await doc.page.getByTestId('left-sidebar').boundingBox();
+    if (!box || !sidebar) throw new Error('Seitenleiste fehlt');
+    expect(Math.abs(sidebar.x - box.x)).toBeLessThan(1);
+    expect(Math.abs(sidebar.y - box.y)).toBeLessThan(1);
+    expect(Math.abs(sidebar.height - box.height)).toBeLessThan(1);
+    // Kommentarleiste macht das Band höher
+    await menuClick(doc.app, 'view.toggleCommentTools');
+    await expect.poll(async () => (await docRegions())[0]?.height ?? 0).toBeGreaterThan(workspaceTop + 20);
+    // Seitenleiste aus: nur noch das Band
+    await menuClick(doc.app, 'view.toggleSidebar');
+    await expect.poll(async () => (await docRegions()).length).toBe(1);
+    await doc.close();
+  });
+});

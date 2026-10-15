@@ -41,6 +41,8 @@ export const IPC = {
   convertPick: 'convert:pick',
   convertDropped: 'convert:dropped',
   // Renderer → Hauptprozess (send)
+  // Glasflächen für Apples Liquid Glass unter macOS 26+ (ADR 0023)
+  glassRegions: 'glass:regions',
   menuState: 'app:menu-state',
   rendererReady: 'app:renderer-ready',
   closeConfirmed: 'app:close-confirmed',
@@ -175,6 +177,21 @@ export interface AppInfo {
   version: string;
   productName: string;
   e2e: boolean;
+  // Apples Liquid Glass liegt unter dem Fenster (macOS 26+, native Erweiterung geladen)
+  nativeGlass: boolean;
+}
+
+// Eine Glasfläche in Fensterkoordinaten (Punkte, oben links); tint = [r, g, b, Deckkraft 0–1]
+export interface GlassRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+  tint: [number, number, number, number];
+  style: 'regular' | 'clear';
+  // Größenänderung mit dem Fenster: band (oben, volle Breite), left, right (volle Höhe), fill (ganz)
+  anchor: 'band' | 'left' | 'right' | 'fill';
 }
 
 export interface PrintRequest {

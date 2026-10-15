@@ -5,6 +5,7 @@ import {
   MAX_READ_CHUNK,
   MAX_SIGNATURE_BYTES,
   MAX_SIGNATURE_SIDE,
+  type GlassRegion,
   type MenuState,
   type NamedBytes,
   type PickKind,
@@ -32,6 +33,25 @@ export function validateReadRange(
   const clampedEnd = Math.min(end, size);
   if (clampedEnd - begin > MAX_READ_CHUNK) return null;
   return { begin, end: clampedEnd };
+}
+
+const GLASS_ANCHORS = new Set(['band', 'left', 'right', 'fill']);
+
+// Glasflächen aus dem Renderer: höchstens 16, nur endliche Zahlen in sinnvollen Grenzen
+export function validateGlassRegions(value: unknown): GlassRegion[] | null {
+  if (!Array.isArray(value) || value.length > 16) return null;
+  const regions: GlassRegion[] = [];
+  const finite = (x: unknown, min: number, max: number): x is number => typeof x === 'number' && Number.isFinite(x) && x >= min && x <= max;
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) return null;
+    const r = item as Record<string, unknown>;
+    const tint = r.tint;
+    if (!finite(r.x, -10_000, 100_000) || !finite(r.y, -10_000, 100_000) || !finite(r.width, 0, 100_000) || !finite(r.height, 0, 100_000) || !finite(r.radius, 0, 1000)) return null;
+    if (!Array.isArray(tint) || tint.length !== 4 || !tint.every((c, i) => finite(c, 0, i === 3 ? 1 : 255))) return null;
+    if ((r.style !== 'regular' && r.style !== 'clear') || typeof r.anchor !== 'string' || !GLASS_ANCHORS.has(r.anchor)) return null;
+    regions.push({ x: r.x, y: r.y, width: r.width, height: r.height, radius: r.radius, tint: tint as GlassRegion['tint'], style: r.style, anchor: r.anchor as GlassRegion['anchor'] });
+  }
+  return regions;
 }
 
 export function validateMenuState(value: unknown): MenuState | null {

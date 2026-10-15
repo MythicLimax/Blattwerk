@@ -255,3 +255,32 @@ textarea {
     transition-duration: 1ms !important;
   }
 }
+
+/* Apples Liquid Glass unter dem Fenster (ADR 0023, nur macOS 26+): Wo Glas liegt, ist die Oberfläche durchsichtig,
+   die Dokumentansicht bleibt deckend. Die Lücken rund um die schwebenden Seitenleisten füllt ein breiter Schatten
+   in der Farbe der Dokumentansicht (folgt der Rundung, wird von der Arbeitsfläche abgeschnitten). */
+[data-native-glass='on'],
+[data-native-glass='on'] body {
+  background: transparent;
+}
+
+[data-native-glass='on'] [data-glass-workspace] {
+  background: transparent;
+  overflow: hidden;
+}
+
+[data-native-glass='on'] [data-testid='left-sidebar'],
+[data-native-glass='on'] [data-testid='right-panel'] {
+  background: transparent;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow:
+    var(--glass-edge),
+    var(--glass-outline),
+    0 0 0 48px var(--color-viewer-bg);
+}
+
+/* Streifen über der Dokumentansicht (Abstand unter dem Band) deckend füllen */
+[data-native-glass='on'] [data-glass-workspace] > main {
+  box-shadow: 0 -8px 0 0 var(--color-viewer-bg);
+}

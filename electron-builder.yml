@@ -14,6 +14,9 @@ files:
   - '!**/*.map'
   - '!node_modules/**'
 asar: true
+# Native Erweiterung (Liquid Glass) muss außerhalb des Archivs liegen, damit macOS sie laden kann
+asarUnpack:
+  - out/native/**
 afterPack: build/after-pack.cjs
 
 # Sicherheitsschalter im Electron-Binary (siehe CLAUDE.md, Abschnitt Sicherheit)

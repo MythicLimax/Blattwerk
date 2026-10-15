@@ -35,6 +35,7 @@ import {
   isSafeLocalPath,
   sanitizeFileName,
   validateAuthorName,
+  validateGlassRegions,
   validateMenuState,
   validateNamedPdfs,
 } from '../shared/validate';
@@ -42,6 +43,7 @@ import { atomicWrite } from './files/atomic-write';
 import { DOCUMENT_EXTENSIONS } from '../shared/convert';
 import { ConvertError, MAX_DOCUMENT_BYTES, detectAndConvert } from './convert';
 import { htmlToPdf } from './convert/pdf';
+import { nativeGlassAvailable, setNativeGlassRegions } from './native-glass';
 import type { FileRegistry } from './files/file-registry';
 import type { RecentFiles } from './files/recent-files';
 import type { SignatureStore } from './files/signatures';
@@ -175,6 +177,7 @@ export function registerIpc(ctx: IpcContext): void {
     version: ctx.appVersion,
     productName: PRODUCT_NAME,
     e2e: !app.isPackaged && Boolean(process.env.BLATTWERK_E2E),
+    nativeGlass: nativeGlassAvailable(),
   }));
 
   handle(IPC.print, async (event, request: unknown) => {
@@ -506,6 +509,13 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.openExternal, (event, url: unknown) => {
     if (typeof url !== 'string') return false;
     return confirmAndOpenExternal(url, windowOf(event));
+  });
+
+  ipcMain.on(IPC.glassRegions, (event, regions: unknown) => {
+    if (!ctx.isTrustedSender(event)) return;
+    const win = windowOf(event);
+    const valid = validateGlassRegions(regions);
+    if (win && valid) setNativeGlassRegions(win, valid);
   });
 
   ipcMain.on(IPC.menuState, (event, state: unknown) => {

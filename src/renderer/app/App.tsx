@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { trackPointerLight } from '../components/glass/liquid-glass';
+import { useNativeGlass } from './native-glass';
 import { api } from '../api';
 import { handleCloseRequest, handleOpenResult, executeCommand } from '../engine/session';
 import { CommentToolbar } from '../features/annotations/CommentToolbar';
@@ -77,6 +78,8 @@ export function App() {
 
   // Lichtquelle der Glanzkanten folgt der Maus
   useEffect(() => trackPointerLight(), []);
+  // macOS 26+: Apples Liquid Glass unter den durchsichtigen Bereichen
+  useNativeGlass();
 
   useEffect(() => {
     const offOpened = api.onFileOpened((result) => void handleOpenResult(result));
@@ -108,14 +111,14 @@ export function App() {
   const showDocumentChrome = tabs.length > 0 && active !== null;
 
   return (
-    <div className={styles.app}>
+    <div className={styles.app} data-glass-app>
       <Toolbar />
       {tabs.length > 0 && <TabBar />}
       {commentToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <CommentToolbar tab={active} />}
       {active?.status === 'ready' && active.mode === 'view' && active.formEditing && <FormEditToolbar tab={active} />}
       {active?.status === 'ready' && active.mode === 'view' && active.contentEditing && <ContentEditToolbar tab={active} />}
       {redactToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <RedactToolbar tab={active} />}
-      <div className={styles.workspace}>
+      <div className={styles.workspace} data-glass-workspace>
         {!showDocumentChrome ? (
           <StartScreen />
         ) : (

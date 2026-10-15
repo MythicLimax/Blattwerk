@@ -69,6 +69,13 @@ try {
   console.log(`Fertige App: ${count}, geladen von ${url}`);
   if (count !== 'von 12' || !url.startsWith('app://bundle/')) process.exitCode = 1;
 
+  // Apples Liquid Glass: native Erweiterung aus dem Paket geladen (macOS 26+)
+  if (process.platform === 'darwin') {
+    const glass = await page.evaluate(() => window.blattwerk.getAppInfo().then((info) => info.nativeGlass));
+    const marked = await page.evaluate(() => document.documentElement.dataset.nativeGlass === 'on');
+    console.log(`Liquid Glass von macOS: ${glass && marked ? 'ok' : 'nicht aktiv'}`);
+  }
+
   // Rechteck zeichnen und über die Werkzeugleiste speichern
   await page.getByTestId('comment-tools-button').click();
   await page.getByTestId('tool-square').click();

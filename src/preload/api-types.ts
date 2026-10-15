@@ -2,6 +2,7 @@
 import type { CommandId } from '../shared/commands';
 import type {
   ConvertResult,
+  GlassRegion,
   AppInfo,
   AppSettings,
   ExportFolderResult,
@@ -79,6 +80,8 @@ export interface BlattwerkApi {
   onRequestClose(listener: () => void): () => void;
   openExternal(url: string): Promise<boolean>;
   setMenuState(state: MenuState): void;
+  // Glasflächen für Apples Liquid Glass (nur wirksam, wenn appInfo().nativeGlass)
+  setGlassRegions(regions: GlassRegion[]): void;
   signalReady(): void;
   onFileOpened(listener: (result: OpenResult) => void): () => void;
   onMenuCommand(listener: (command: CommandId) => void): () => void;

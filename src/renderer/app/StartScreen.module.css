@@ -321,3 +321,8 @@
   background: var(--color-active);
   color: var(--color-text);
 }
+
+/* Mit Apples Glas unter dem Fenster scheint auf der Startseite der Schreibtisch durch (ADR 0023) */
+:global([data-native-glass='on']) .screen {
+  background: transparent;
+}

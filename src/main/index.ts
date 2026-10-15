@@ -16,6 +16,7 @@ import { applyMenu } from './menu';
 import { handleAppScheme, registerAppScheme } from './protocol';
 import { hardenSession, hardenWebContents, isTrustedAppUrl } from './security';
 import { createMainWindow, createSettingsStore, type SettingsData, type WindowState } from './window';
+import { attachNativeGlass, describeNativeGlass } from './native-glass';
 
 // Testschalter wirken nur beim Entwickeln, nie in der installierten App.
 const isE2E = !app.isPackaged && Boolean(process.env.BLATTWERK_E2E);
@@ -243,6 +244,10 @@ async function createWindow(): Promise<BrowserWindow> {
     },
   });
   mainWindow = win;
+  // macOS 26+: Apples Liquid Glass unter den durchsichtigen Bereichen des Fensters (ADR 0023)
+  attachNativeGlass(win);
+  // Oberflächentests lesen die nativen Glasflächen aus
+  if (isE2E) (globalThis as { __blattwerkGlass?: () => unknown }).__blattwerkGlass = () => describeNativeGlass(win);
   allowClose = false;
   win.on('close', (event) => {
     if (allowClose || menuState.dirtyCount === 0 || !rendererReady) return;

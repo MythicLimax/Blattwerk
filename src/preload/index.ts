@@ -71,6 +71,7 @@ const api: BlattwerkApi = {
   onRequestClose: (listener) => subscribe(IPC.requestClose, () => true, () => listener()),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
   setMenuState: (state) => ipcRenderer.send(IPC.menuState, state),
+  setGlassRegions: (regions) => ipcRenderer.send(IPC.glassRegions, regions),
   signalReady: () => ipcRenderer.send(IPC.rendererReady),
   onFileOpened: (listener) =>
     subscribe(IPC.fileOpened, (p) => (typeof p === 'object' && p !== null ? (p as OpenResult) : null), listener),

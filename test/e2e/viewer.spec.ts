@@ -305,7 +305,8 @@ test.describe('Drucken', () => {
 test.describe('Oberfläche', () => {
   test('Dunkelmodus folgt dem System', async () => {
     const { page, app, close } = await launchApp();
-    const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    // Hintergrundfarbe der App (der Seitenhintergrund selbst ist unter macOS 26 durchsichtig, darunter liegt Glas)
+    const background = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-bg').trim());
     await app.evaluate(({ nativeTheme }) => {
       nativeTheme.themeSource = 'light';
     });

@@ -27,3 +27,7 @@
   min-width: 0;
   background: var(--color-viewer-bg);
 }
+
+:global([data-native-glass='on']) .workspace:has(> [data-testid='start-screen']) {
+  background: transparent;
+}

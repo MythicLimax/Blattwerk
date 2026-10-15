@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
+import { buildNative } from './build-native.mjs';
 import { copyPdfjsAssets } from './copy-pdfjs-assets.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,6 +44,7 @@ export async function buildAll() {
   await build(mainConfig());
   await build(preloadConfig());
   await build({ configFile: path.join(root, 'vite.renderer.config.ts'), logLevel: 'warn' });
+  buildNative();
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
