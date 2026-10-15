@@ -50,6 +50,10 @@ const api: BlattwerkApi = {
     end: (token) => ipcRenderer.invoke(IPC.exportEnd, token),
   },
   exportText: (text, suggestedName, referenceFileId) => ipcRenderer.invoke(IPC.exportSaveText, text, suggestedName, referenceFileId),
+  convertDocument: {
+    pick: () => ipcRenderer.invoke(IPC.convertPick),
+    dropped: (file: File) => ipcRenderer.invoke(IPC.convertDropped, pathOf(file)),
+  },
   digitalId: {
     pick: () => ipcRenderer.invoke(IPC.signingPickId),
     last: () => ipcRenderer.invoke(IPC.signingLastId),

@@ -3,6 +3,7 @@ import type { CommandId } from '../../../shared/commands';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { commitPendingEdits } from '../../engine/session';
 import { t } from '../../i18n';
+import { convertDocument } from '../convert/actions';
 import { useDocuments, type TabState } from '../../state/documents-store';
 import { useUi } from '../../state/ui-store';
 import { createPdfFromImages, pickSources, rotatePages, targetPages } from './actions';
@@ -31,6 +32,10 @@ export function runPageCommand(command: CommandId, tab: TabState | null): boolea
   const ui = useUi.getState();
   if (command === 'file.combine') {
     ui.setCombine([]);
+    return true;
+  }
+  if (command === 'file.fromDocument') {
+    void convertDocument(null);
     return true;
   }
   if (command === 'file.fromImages') {

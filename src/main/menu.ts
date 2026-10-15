@@ -75,6 +75,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       { type: 'separator' },
       cmd('file.combine', t('menu.file.combine')),
       cmd('file.fromImages', t('menu.file.fromImages')),
+      cmd('file.fromDocument', t('menu.file.fromDocument')),
       { type: 'separator' },
       cmd('file.save', t('menu.file.save'), { enabled: doc && state.activeDirty }),
       cmd('file.saveAs', t('menu.file.saveAs'), { enabled: doc }),

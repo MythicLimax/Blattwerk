@@ -37,6 +37,9 @@ export const IPC = {
   signingPickId: 'signing:pick-id',
   signingLastId: 'signing:last-id',
   signingSaveId: 'signing:save-id',
+  // Textdokumente (Word, OpenDocument, RTF, Text, Markdown) in PDF umwandeln: wählen bzw. abgelegt
+  convertPick: 'convert:pick',
+  convertDropped: 'convert:dropped',
   // Renderer → Hauptprozess (send)
   menuState: 'app:menu-state',
   rendererReady: 'app:renderer-ready',
@@ -76,6 +79,10 @@ export type SaveNewErrorCode = 'cancelled' | 'write-failed' | 'invalid-data' | '
 export type SaveNewResult =
   | { ok: true; name: string; open: OpenResult | null }
   | { ok: false; error: SaveNewErrorCode; detail?: string };
+
+// Umwandeln eines Textdokuments: Fehler beim Lesen bzw. Umwandeln, sonst wie beim Speichern eines neuen Dokuments
+export type ConvertErrorCode = 'unsupported' | 'legacy-doc' | 'pages' | 'invalid' | 'too-large' | 'unreadable' | 'failed';
+export type ConvertResult = SaveNewResult | { ok: false; error: ConvertErrorCode; detail?: string };
 
 export interface NamedBytes {
   name: string;

@@ -59,6 +59,7 @@ export const COMMANDS = [
   'file.exportText',
   'file.combine',
   'file.fromImages',
+  'file.fromDocument',
   'nav.firstPage',
   'nav.previousPage',
   'nav.nextPage',

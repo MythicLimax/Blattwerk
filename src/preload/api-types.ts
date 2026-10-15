@@ -1,6 +1,7 @@
 // Typen der Schnittstelle, die der Preload dem Renderer als window.blattwerk bereitstellt.
 import type { CommandId } from '../shared/commands';
 import type {
+  ConvertResult,
   AppInfo,
   AppSettings,
   ExportFolderResult,
@@ -55,6 +56,11 @@ export interface BlattwerkApi {
   };
   // Export als Text über den Sichern-Dialog (UTF-8)
   exportText(text: string, suggestedName: string, referenceFileId: string | null): Promise<ExportTextResult>;
+  // Textdokument wählen bzw. abgelegtes umwandeln, als PDF speichern und öffnen
+  convertDocument: {
+    pick(): Promise<ConvertResult>;
+    dropped(file: File): Promise<ConvertResult>;
+  };
   // Digitale ID (Phase 7): wählen, zuletzt verwendete laden, neu erstellte speichern
   digitalId: {
     pick(): Promise<IdFileResult>;

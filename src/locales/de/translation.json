@@ -28,7 +28,8 @@
       "fromImages": "PDF aus Bildern erstellen …",
       "export": "Exportieren",
       "exportImages": "Als Bilder …",
-      "exportText": "Als Text …"
+      "exportText": "Als Text …",
+      "fromDocument": "PDF aus Textdokument erstellen …"
     },
     "edit": {
       "title": "Bearbeiten",
@@ -159,7 +160,9 @@
     "filterText": "Textdatei",
     "pickIdTitle": "Digitale ID wählen",
     "saveIdTitle": "Digitale ID speichern",
-    "filterId": "Digitale ID (PKCS#12)"
+    "filterId": "Digitale ID (PKCS#12)",
+    "convertTitle": "Textdokument in PDF umwandeln",
+    "filterDocuments": "Textdokumente (Word, OpenDocument, RTF, Text, Markdown)"
   },
   "errors": {
     "open": {
@@ -1131,6 +1134,18 @@
       "noAlt": "(ohne Alternativtext)",
       "customRole": "Eigene Rolle „{{role}}“",
       "page": "Seite {{page}}"
+    }
+  },
+  "convert": {
+    "busy": "Dokument wird in PDF umgewandelt …",
+    "errors": {
+      "unsupported": "Dieses Dateiformat lässt sich nicht umwandeln. Möglich sind Word (.docx), OpenDocument (.odt), RTF, Text und Markdown.",
+      "legacy-doc": "Das ist eine alte Word-Datei (.doc, Word 97–2003). Bitte in Word oder Pages als .docx sichern oder dort direkt als PDF exportieren.",
+      "pages": "Diese Pages-Datei enthält keine fertige Vorschau. Bitte in Pages „Ablage → Exportieren → PDF“ oder „→ Word“ wählen.",
+      "invalid": "Die Datei ist beschädigt oder kein gültiges Textdokument.",
+      "too-large": "Die Datei ist zu groß (höchstens 100 MB).",
+      "unreadable": "Die Datei ließ sich nicht lesen.",
+      "failed": "Das Dokument ließ sich nicht in PDF umwandeln."
     }
   }
 }

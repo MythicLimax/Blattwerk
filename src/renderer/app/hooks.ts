@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
+import { isDocumentFileName } from '../../shared/convert';
 import type { MenuState } from '../../shared/ipc';
 import { matchRendererShortcut } from '../../shared/shortcuts';
 import { api } from '../api';
 import { getRuntime } from '../engine/runtime';
 import { executeCommand, handleOpenResult } from '../engine/session';
 import { isPagedMode } from '../features/viewer/view-modes';
+import { convertDocument } from '../features/convert/actions';
 import { syncHiddenAnnotations } from '../features/annotations/controller';
 import { useAnnotations } from '../state/annotations-store';
 import { canRedoState, canUndoState, isDirtyState } from '../state/dirty';
@@ -162,7 +164,8 @@ export function useFileDrop(): void {
       // Eine Kennwortabfrage soll die übrigen Dateien nicht aufhalten.
       void (async () => {
         for (const file of files) {
-          void handleOpenResult(await api.openDroppedFile(file));
+          if (isDocumentFileName(file.name)) await convertDocument(file);
+          else void handleOpenResult(await api.openDroppedFile(file));
         }
       })();
     };

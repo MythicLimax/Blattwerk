@@ -7,6 +7,7 @@ import { fixture, TEXT_PDF } from '../fixtures/expectations';
 import { launchApp, menuClick, waitForDocument } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 import { taggedPdf } from '../fixtures/tagged';
+import { wordDocument } from '../fixtures/docx';
 
 const tempDirs: string[] = [];
 test.afterAll(() => {
@@ -173,6 +174,29 @@ test.describe('Barrierefreiheit', () => {
     await expect(page.getByTestId('tags-empty')).toBeVisible();
     await page.getByTestId('tags-check').click();
     await expect(page.locator('[data-code="tagged"]')).toHaveAttribute('data-status', 'failed');
+    await handle.close();
+  });
+});
+
+test.describe('PDF aus Textdokument', () => {
+  test('Word-Datei umwandeln: zwei Seiten, Lesezeichen, Tags', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+    tempDirs.push(dir);
+    const source = path.join(dir, 'bericht.docx');
+    writeFileSync(source, wordDocument());
+    const target = path.join(dir, 'bericht.pdf');
+    const handle = await launchApp([], { userData: dir });
+    const { page, app } = handle;
+    await stubDialogs(app, [source], [target]);
+    await menuClick(app, 'file.fromDocument');
+    await waitForDocument(page, 2);
+    expect(readFileSync(target).subarray(0, 5).toString()).toBe('%PDF-');
+    if (process.platform === 'darwin') expect(inspectWithPdfKit(target).ok).toBe(true);
+    // Überschriften werden zu Lesezeichen und Tags
+    await page.getByTestId('sidebar-bookmarks').click();
+    await expect(page.getByTestId('outline-item').first()).toHaveText('Jahresbericht 2026');
+    await page.getByTestId('sidebar-tags').click();
+    await expect(page.getByTestId('tags').locator('[data-role="H1"]').first()).toBeAttached();
     await handle.close();
   });
 });

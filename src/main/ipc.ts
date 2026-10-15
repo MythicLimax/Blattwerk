@@ -6,6 +6,7 @@ import {
   IPC,
   type AppInfo,
   type AppSettings,
+  type ConvertResult,
   type ExportFolderResult,
   type ExportTextResult,
   type ExportWriteResult,
@@ -38,6 +39,9 @@ import {
   validateNamedPdfs,
 } from '../shared/validate';
 import { atomicWrite } from './files/atomic-write';
+import { DOCUMENT_EXTENSIONS } from '../shared/convert';
+import { ConvertError, MAX_DOCUMENT_BYTES, detectAndConvert } from './convert';
+import { htmlToPdf } from './convert/pdf';
 import type { FileRegistry } from './files/file-registry';
 import type { RecentFiles } from './files/recent-files';
 import type { SignatureStore } from './files/signatures';
@@ -397,6 +401,63 @@ export function registerIpc(ctx: IpcContext): void {
     const read = await readId(filePath);
     if (read.ok) ctx.setLastIdPath(filePath);
     return read;
+  });
+
+  // Textdokument → PDF: lesen, umwandeln, Sichern-Dialog im Ordner der Quelle, danach öffnen
+  const convertAndSave = async (win: BrowserWindow, source: string): Promise<ConvertResult> => {
+    let bytes: Uint8Array;
+    try {
+      const stat = await fsp.stat(source);
+      if (!stat.isFile()) return { ok: false, error: 'unreadable' };
+      if (stat.size > MAX_DOCUMENT_BYTES) return { ok: false, error: 'too-large' };
+      bytes = new Uint8Array(await fsp.readFile(source));
+    } catch (error) {
+      return { ok: false, error: 'unreadable', detail: String(error) };
+    }
+    let pdf: Uint8Array;
+    try {
+      const converted = detectAndConvert(bytes, path.basename(source));
+      pdf = converted.kind === 'pdf' ? converted.bytes : await htmlToPdf(converted.html);
+    } catch (error) {
+      if (error instanceof ConvertError) return { ok: false, error: error.code, detail: error.message };
+      return { ok: false, error: 'failed', detail: String(error) };
+    }
+    if (!isPdfBytes(pdf)) return { ok: false, error: 'failed' };
+    const result = await dialog.showSaveDialog(win, {
+      title: t('dialog.saveNewTitle'),
+      defaultPath: path.join(path.dirname(source), sanitizeFileName(`${path.basename(source).replace(/\.[^.]+$/, '')}.pdf`)),
+      filters: [{ name: t('dialog.filterPdf'), extensions: ['pdf'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+    if (result.canceled || !result.filePath) return { ok: false, error: 'cancelled' };
+    const target = withPdfExtension(result.filePath);
+    if (ctx.files.isOpenPath(target)) return { ok: false, error: 'target-open' };
+    try {
+      await atomicWrite(target, pdf);
+    } catch (error) {
+      return { ok: false, error: 'write-failed', detail: String(error) };
+    }
+    return { ok: true, name: path.basename(target), open: await ctx.openPathFor(win, target) };
+  };
+
+  handle(IPC.convertPick, async (event): Promise<ConvertResult> => {
+    const win = windowOf(event);
+    if (!win) return { ok: false, error: 'cancelled' };
+    const result = await dialog.showOpenDialog(win, {
+      title: t('dialog.convertTitle'),
+      properties: ['openFile'],
+      filters: [{ name: t('dialog.filterDocuments'), extensions: DOCUMENT_EXTENSIONS }],
+    });
+    const filePath = result.filePaths[0];
+    if (result.canceled || !filePath) return { ok: false, error: 'cancelled' };
+    return convertAndSave(win, filePath);
+  });
+
+  handle(IPC.convertDropped, async (event, filePath: unknown): Promise<ConvertResult> => {
+    const win = windowOf(event);
+    if (!win) return { ok: false, error: 'cancelled' };
+    if (!isSafeLocalPath(filePath, process.platform)) return { ok: false, error: 'unreadable' };
+    return convertAndSave(win, filePath);
   });
 
   handle(IPC.signingLastId, async (): Promise<IdFileResult> => {
