@@ -30,7 +30,12 @@ try {
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`).catch(() => undefined);
   }
   if (!browser) throw new Error('App nicht erreichbar');
-  const page = browser.contexts()[0]?.pages()[0];
+  // Die Debug-Schnittstelle ist oft schon erreichbar, bevor das Fenster existiert
+  let page;
+  for (let i = 0; i < 40 && !page; i++) {
+    page = browser.contexts()[0]?.pages()[0];
+    if (!page) await new Promise((r) => setTimeout(r, 250));
+  }
   if (!page) throw new Error('Kein Fenster');
   await page.getByTestId('page-count').waitFor({ timeout: 15000 });
   const count = await page.getByTestId('page-count').textContent();
