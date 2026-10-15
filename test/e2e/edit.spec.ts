@@ -604,3 +604,41 @@ test.describe('Leeres Dokument', () => {
     await close();
   });
 });
+
+test.describe('Fließtext', () => {
+  test('wie in einer Textverarbeitung schreiben: Umbruch am Rand, Absätze, Überlauf auf eine neue Seite', async () => {
+    const dir = tempDir();
+    const target = path.join(dir, 'Brief.pdf');
+    const { page, app, close } = await launchApp([], { userData: dir });
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showSaveDialog = (async () => ({ canceled: false, filePath: file })) as typeof dialog.showSaveDialog;
+    }, target);
+    await page.getByTestId('start-blank').click();
+    await waitForDocument(page, 1);
+    await page.getByTestId('content-tool-flow').click();
+    const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
+    if (!overlay) throw new Error('keine Ebene');
+    // Klick mitten in die Seite: die Eingabe beginnt trotzdem am linken Rand und reicht bis zum rechten
+    await page.mouse.click(overlay.x + overlay.width * 0.6, overlay.y + 140);
+    const editor = page.getByTestId('content-text-editor');
+    await expect(editor).toBeVisible();
+    const box = await editor.boundingBox();
+    if (!box) throw new Error('keine Eingabe');
+    expect(box.x - overlay.x).toBeLessThan(overlay.width * 0.15);
+    expect(box.width).toBeGreaterThan(overlay.width * 0.7);
+    const paragraphs = Array.from({ length: 30 }, (_, i) => `Absatz ${i + 1}: Dieser Text ist lang genug, damit er am rechten Seitenrand von selbst in die nächste Zeile umbricht.`);
+    await editor.fill(paragraphs.join('\n'));
+    // Klick daneben übernimmt den Text
+    await page.mouse.click(overlay.x + 10, overlay.y + 10);
+    await waitForDocument(page, 2);
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    const texts = await pageTexts(target);
+    expect(texts).toHaveLength(2);
+    expect(texts[0]).toContain('Absatz 1:');
+    expect(texts[1]).toContain('Absatz 30:');
+    if (process.platform === 'darwin') expect(inspectWithPdfKit(target).ok).toBe(true);
+    await waitForDocument(page, 2);
+    await close();
+  });
+});

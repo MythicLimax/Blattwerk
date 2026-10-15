@@ -44,11 +44,11 @@ function run(tabId: string, operation: ContentOperation | ContentOperation[]): P
 
 // Neuer Text: at ist die linke obere Ecke der ersten Zeile in PDF-Punkten; baseline die erste Grundlinie
 // width: Breite (Punkt), in der der Text umbricht; ohne Angabe nur an Zeilenumbrüchen
-export async function addText(tabId: string, pageIndex: number, baseline: Point, value: string, width?: number): Promise<boolean> {
+export async function addText(tabId: string, pageIndex: number, baseline: Point, value: string, width?: number, flow?: { top: number; bottom: number }): Promise<boolean> {
   const lines = value.replace(/\s+$/, '').split('\n');
   if (lines.every((line) => line.trim() === '')) return false;
   const { style } = useContentEdit.getState();
-  return run(tabId, { type: 'addText', pageIndex, origin: baseline, lines, font: style.font, size: style.size, color: style.color, ...(width ? { width } : {}) });
+  return run(tabId, { type: 'addText', pageIndex, origin: baseline, lines, font: style.font, size: style.size, color: style.color, ...(width ? { width } : {}), ...(flow ? { flow } : {}) });
 }
 
 // merge: weitere Stücke derselben Zeile (siehe lineOf), die im ersten aufgehen
@@ -168,3 +168,9 @@ export const lineHeight = (size: number) => size * LINE_HEIGHT;
 // Neuer Text: Die Klickstelle ist die Mitte der ersten Zeile (wie der Strich des Textzeigers). Abstand der Grundlinie
 // von dort nach unten.
 export const baselineBelowClick = (size: number) => baselineOffset(size) - lineHeight(size) / 2;
+
+// Seitenränder für Fließtext (Punkt, Ansicht): 2,5 cm links, rechts und oben, 2 cm unten; auf kleinen Seiten weniger
+export function flowMargins(width: number, height: number): { left: number; right: number; top: number; bottom: number } {
+  const side = Math.min(70.87, width * 0.1);
+  return { left: side, right: side, top: Math.min(70.87, height * 0.1), bottom: Math.min(56.69, height * 0.08) };
+}

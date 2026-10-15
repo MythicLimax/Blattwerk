@@ -5,7 +5,8 @@ import type { Point, Rect, Rgb } from '../../shared/annotations';
 import type { EditUnit, ParagraphStyle } from '../../shared/content';
 import type { StampFont } from '../../shared/stamping';
 
-export type ContentTool = 'select' | 'text';
+// flow: Fließtext über die ganze Breite zwischen den Seitenrändern, wie in einer Textverarbeitung
+export type ContentTool = 'select' | 'text' | 'flow';
 
 export interface SelectedObject {
   pageIndex: number;
@@ -21,7 +22,7 @@ export interface SelectedObject {
 // Texteingabe direkt auf der Seite: neue Zeilen an einer Stelle (at = Klickstelle, Anfang und Mitte der ersten Zeile,
 // in Ansichtskoordinaten) oder eine vorhandene Zeile ändern
 export type TextEditing =
-  | { tabId: string; pageIndex: number; mode: 'new'; at: Point }
+  | { tabId: string; pageIndex: number; mode: 'new'; at: Point; flow?: boolean }
   | { tabId: string; pageIndex: number; mode: 'edit'; index: number; merge: number[]; bounds: Rect; text: string; fontSize: number; font?: string; lines?: number[][]; color?: Rgb; style?: ParagraphStyle };
 
 export interface TextStyle {

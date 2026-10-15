@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ImagePlus,
   MousePointer2,
+  Pilcrow,
   Redo2,
   Trash,
   Type,
@@ -55,6 +56,7 @@ const sameColor = (a: Rgb | undefined, b: Rgb) =>
 const TOOLS: Array<{ tool: ContentTool; icon: LucideIcon }> = [
   { tool: 'select', icon: MousePointer2 },
   { tool: 'text', icon: Type },
+  { tool: 'flow', icon: Pilcrow },
 ];
 
 const COLORS: Array<{ id: string; color: Rgb }> = [
@@ -183,7 +185,7 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
         data-testid="content-delete"
       />
       <span className={styles.notice}>
-        {tool === 'text' ? t('contentEdit.textHint') : t('contentEdit.selectHint')}
+        {tool === 'text' ? t('contentEdit.textHint') : tool === 'flow' ? t('contentEdit.flowHint') : t('contentEdit.selectHint')}
       </span>
       <span className={styles.spacer} />
       <div className={styles.group}>

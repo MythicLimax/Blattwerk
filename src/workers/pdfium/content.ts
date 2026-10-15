@@ -209,18 +209,40 @@ export function applyContentOperation(m: Pdfium, doc: number, operation: Content
             m.FPDFPageObj_Destroy(ruler);
           }
         }
-        const paragraph = newParagraphId();
-        lines.forEach((line, i) => {
-          if (line.text === '') return;
-          const object = newTextObject(m, doc, operation.font, operation.size, line.text, operation.color);
-          writeMark(m, doc, object, { p: paragraph, ...(operation.width ? { w: operation.width } : {}), ...(line.hard ? { h: true } : {}) });
-          // Zeile i liegt um i · Zeilenhöhe unter der ersten, in der Leserichtung der angezeigten Seite
-          const offset = i * operation.size * LINE_HEIGHT;
-          const x = operation.origin.x + sin * offset;
-          const y = operation.origin.y - cos * offset;
-          m.FPDFPageObj_Transform(object, cos, sin, -sin, cos, x, y);
-          m.FPDFPage_InsertObject(page, object);
-        });
+        const step = operation.size * LINE_HEIGHT;
+        // Zeilen auf eine Seite setzen, ab der Grundlinie startY; liefert die Zeilen, die nicht mehr passen (Fließtext)
+        const place = (target: number, rows: WrappedLine[], startY: number): WrappedLine[] => {
+          const paragraph = newParagraphId();
+          for (let i = 0; i < rows.length; i++) {
+            // Zeile i liegt um i · Zeilenhöhe unter der ersten, in der Leserichtung der angezeigten Seite
+            const offset = i * step;
+            const x = operation.origin.x + sin * offset;
+            const y = startY - cos * offset;
+            if (operation.flow && rotation === 0 && i > 0 && y < operation.flow.bottom) return rows.slice(i);
+            const line = rows[i] as WrappedLine;
+            if (line.text === '') continue;
+            const object = newTextObject(m, doc, operation.font, operation.size, line.text, operation.color);
+            writeMark(m, doc, object, { p: paragraph, ...(operation.width ? { w: operation.width } : {}), ...(line.hard ? { h: true } : {}) });
+            m.FPDFPageObj_Transform(object, cos, sin, -sin, cos, x, y);
+            m.FPDFPage_InsertObject(target, object);
+          }
+          return [];
+        };
+        let rest = place(page, lines, operation.origin.y);
+        // Überlauf: neue Seiten gleicher Größe direkt hinter dieser, oben am Rand weiter
+        const size = { width: m.FPDF_GetPageWidthF(page), height: m.FPDF_GetPageHeightF(page) };
+        for (let next = operation.pageIndex + 1; rest.length > 0 && operation.flow && next < operation.pageIndex + 200; next++) {
+          const added = m.FPDFPage_New(doc, next, size.width, size.height);
+          if (!added) throw new ContentError('Neue Seite lässt sich nicht anlegen');
+          try {
+            // Leerzeilen am Seitenanfang entfallen, wie in einer Textverarbeitung
+            while (rest.length > 0 && rest[0]?.text === '') rest = rest.slice(1);
+            rest = place(added, rest, operation.flow.top);
+            if (!m.FPDFPage_GenerateContent(added)) throw new ContentError(`Seite ${next + 1} lässt sich nicht schreiben`);
+          } finally {
+            m.FPDF_ClosePage(added);
+          }
+        }
         break;
       }
       case 'addImage': {

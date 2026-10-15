@@ -5,7 +5,7 @@ import { editUnits, LINE_HEIGHT, missingChars, scalingAbout, translation, type E
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
 import { useContentEdit, type TextEditing } from '../../state/content-edit-store';
-import { addText, baselineBelowClick, editParagraph, editText, reflowText, transformObjects } from './actions';
+import { addText, baselineBelowClick, baselineOffset, editParagraph, editText, flowMargins, lineHeight, reflowText, transformObjects } from './actions';
 import styles from './ContentEditOverlay.module.css';
 import { pageObjects } from './page-objects';
 
@@ -138,10 +138,18 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
       setGesture({ kind: 'marquee', start: at, to: at, additive: event.shiftKey || event.metaKey });
       return;
     }
-    if (tool !== 'text' || event.button !== 0 || editing) return;
+    if ((tool !== 'text' && tool !== 'flow') || event.button !== 0 || editing) return;
     event.preventDefault();
-    // Neuer Text: Eingabe an der Klickstelle (in der Ansicht, damit sie auch auf gedrehten Seiten aufrecht steht)
-    store().setEditing({ tabId, pageIndex, mode: 'new', at: toView(event) });
+    const at = toView(event);
+    if (tool === 'flow' && isUprightView(geometry)) {
+      // Fließtext: Zeile der Klickstelle, über die ganze Breite zwischen den Seitenrändern
+      const margins = flowMargins(geometry.width, geometry.height);
+      const half = lineHeight(store().style.size) / 2;
+      store().setEditing({ tabId, pageIndex, mode: 'new', at: { x: margins.left, y: Math.min(Math.max(at.y, margins.top + half), geometry.height - margins.bottom - half) }, flow: true });
+    } else {
+      // Neuer Text: Eingabe an der Klickstelle (in der Ansicht, damit sie auch auf gedrehten Seiten aufrecht steht)
+      store().setEditing({ tabId, pageIndex, mode: 'new', at });
+    }
     store().setTool('select');
   };
 
@@ -293,12 +301,12 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     <>
       <svg
         ref={svgRef}
-        className={[styles.svg, tool === 'text' ? styles.creating : '', tool === 'select' && !editing ? styles.selecting : '', gesture ? styles.capturing : ''].join(' ')}
+        className={[styles.svg, tool === 'text' || tool === 'flow' ? styles.creating : '', tool === 'select' && !editing ? styles.selecting : '', gesture ? styles.capturing : ''].join(' ')}
         viewBox={`0 0 ${geometry.width} ${geometry.height}`}
         preserveAspectRatio="none"
         onPointerDown={onBackgroundPointerDown}
         onMouseDown={(event) => {
-          if (tool === 'text' || gestureRef.current) event.preventDefault();
+          if (tool === 'text' || tool === 'flow' || gestureRef.current) event.preventDefault();
         }}
         onPointerMove={onPointerMove}
         onPointerUp={finish}
@@ -457,8 +465,13 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
   const done = useRef(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const viewScale = scale * (96 / 72);
+  // Fließtext: Breite zwischen den Seitenrändern
+  const flow = editing.mode === 'new' && editing.flow === true;
+  const margins = flowMargins(geometry.width, geometry.height);
   // Vom Nutzer gezogene Breite (Ansichtseinheiten = Punkt); null = wie vorgegeben
-  const [frame, setFrame] = useState<{ left: number; width: number } | null>(null);
+  const [frame, setFrame] = useState<{ left: number; width: number } | null>(() =>
+    flow ? { left: margins.left - EDITOR_INSET_PX / viewScale, width: geometry.width - margins.left - margins.right + (2 * EDITOR_INSET_PX) / viewScale } : null,
+  );
   const resizable = editing.mode === 'new' || isUprightView(geometry);
   const restyle = editing.mode === 'edit' ? editing.style : undefined;
 
@@ -505,7 +518,11 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
       // Text beginnt dort, wo die Eingabe steht (auch nach Ziehen am linken Rand)
       const baseline = geometry.toPdf(editing.at.x + (left - box.x), editing.at.y + baselineBelowClick(style.size));
       const width = frame ? frame.width - (2 * EDITOR_INSET_PX) / viewScale : undefined;
-      void addText(editing.tabId, editing.pageIndex, baseline, value, width);
+      // Fließtext: unterhalb des unteren Rands geht es auf einer neuen Seite oben am Rand weiter
+      const flowLimits = flow
+        ? { top: geometry.toPdf(margins.left, margins.top + baselineOffset(style.size)).y, bottom: geometry.toPdf(margins.left, geometry.height - margins.bottom).y }
+        : undefined;
+      void addText(editing.tabId, editing.pageIndex, baseline, value, width, flowLimits);
     }
   };
 
@@ -593,7 +610,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
     <div ref={wrapRef} className={styles.editorWrap} style={position}>
       <textarea
         ref={ref}
-        className={[styles.editor, fixedWidth !== null ? styles.paragraph : ''].join(' ')}
+        className={[styles.editor, fixedWidth !== null ? styles.paragraph : '', flow ? styles.flow : ''].join(' ')}
         style={{
           fontSize: `${fontSize}px`,
           lineHeight: 1.2,

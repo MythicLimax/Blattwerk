@@ -155,3 +155,10 @@
   overflow-wrap: break-word;
   pointer-events: none;
 }
+
+/* Fließtext: Eingabe wächst mit dem Text (umbrochene Zeilen), wie eine Seite in einer Textverarbeitung */
+.flow {
+  field-sizing: content;
+  min-height: 1.2em;
+  overflow: hidden;
+}

@@ -58,7 +58,9 @@ export type Matrix = [number, number, number, number, number, number];
 export type ContentOperation =
   // Neuer Text, erste Grundlinie bei origin; jede Zeile ein eigenes Textobjekt. Aufrecht zur Anzeige der Seite.
   // width: Breite (Punkt), in der die Zeilen umbrechen; ohne Angabe nur an harten Umbrüchen.
-  | { type: 'addText'; pageIndex: number; origin: Point; lines: string[]; font: StampFont; size: number; color: Rgb; width?: number }
+  // flow: Fließtext wie in einer Textverarbeitung; Zeilen unterhalb von bottom (Grundlinie, PDF-y) wandern auf neue
+  // Seiten gleicher Größe direkt dahinter, dort ab der Grundlinie top. Nur auf ungedrehten Seiten.
+  | { type: 'addText'; pageIndex: number; origin: Point; lines: string[]; font: StampFont; size: number; color: Rgb; width?: number; flow?: { top: number; bottom: number } }
   | { type: 'addImage'; pageIndex: number; rect: Rect; image: ImageSource }
   // Zusätzliche Abbildung (Verschieben, Skalieren) auf ein vorhandenes Objekt
   | { type: 'transform'; pageIndex: number; index: number; matrix: Matrix }

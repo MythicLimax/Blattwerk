@@ -815,7 +815,8 @@
     "tools": {
       "select": "Auswählen, verschieben, Größe ändern",
       "text": "Text hinzufügen",
-      "image": "Bild hinzufügen …"
+      "image": "Bild hinzufügen …",
+      "flow": "Fließtext schreiben (wie in einer Textverarbeitung)"
     },
     "kinds": {
       "text": "Text",
@@ -835,7 +836,8 @@
     "notAllowed": "Dieses Dokument erlaubt keine Änderungen am Inhalt.",
     "failed": "Die Änderung konnte nicht ausgeführt werden. Das Dokument wurde nicht verändert.",
     "originalFont": "Schrift des Textes",
-    "points": "pt"
+    "points": "pt",
+    "flowHint": "Auf die Seite klicken und losschreiben: Zeilen brechen am Seitenrand um, Eingabetaste beginnt einen neuen Absatz, Text unterhalb des Rands läuft auf eine neue Seite weiter. Klick daneben übernimmt den Text."
   },
   "security": {
     "title": "Kennwortschutz",

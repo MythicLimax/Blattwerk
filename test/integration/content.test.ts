@@ -174,6 +174,29 @@ describe('Inhalt bearbeiten', () => {
     expect(list.map((item) => item.str).join(' ')).toBe('Ein neuer Text, der in einem schmalen Feld umbrechen soll.');
   });
 
+  it('Fließtext läuft auf neue Seiten über, wie in einer Textverarbeitung', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([400, 300]);
+    doc.addPage([400, 300]).drawText('Alte zweite Seite', { x: 50, y: 150, size: 12, font: await doc.embedFont(StandardFonts.Helvetica) });
+    const bytes = await doc.save();
+    const paragraphs = Array.from({ length: 12 }, (_, i) => `Absatz ${i + 1} mit etwas Text, der in der Breite der Seite umbrechen muss.`);
+    const output = run(bytes, [
+      { type: 'addText', pageIndex: 0, origin: { x: 50, y: 250 }, lines: paragraphs, font: 'Helvetica', size: 12, color: { r: 0, g: 0, b: 0 }, width: 300, flow: { top: 250, bottom: 50 } },
+    ]);
+    const task = pdfjs.getDocument({ data: output.slice(), verbosity: 0 });
+    const pageCount = (await task.promise).numPages;
+    await task.destroy();
+    // 12 Absätze à 2 Zeilen = 24 Zeilen, je Seite höchstens 15: eine neue Seite, die alte zweite rückt nach hinten
+    expect(pageCount).toBe(3);
+    const first = await items(output, 1);
+    const second = await items(output, 2);
+    expect(first.every((item) => (item.transform[5] ?? 0) >= 49)).toBe(true);
+    expect(Math.round(Math.max(...second.map((item) => item.transform[5] ?? 0)))).toBe(250);
+    const all = [...first, ...second].map((item) => item.str).join(' ');
+    for (const paragraph of paragraphs) expect(all).toContain(paragraph.split(' ')[1] as string);
+    expect((await items(output, 3)).map((item) => item.str).join('')).toContain('Alte zweite Seite');
+  });
+
   it('bricht einen geänderten Absatz in seiner Breite neu um', async () => {
     const bytes = await paragraphPdf();
     const listing = engine.listObjects(bytes, null, [0])[0];
