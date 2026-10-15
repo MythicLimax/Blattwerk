@@ -18,6 +18,7 @@ export function TooltipHost() {
     let target: HTMLElement | null = null;
     let timer: number | undefined;
     let hiddenAt = 0;
+    let pointer = { x: 0, y: 0 };
 
     const place = (element: HTMLElement) => {
       const box = element.getBoundingClientRect();
@@ -29,9 +30,15 @@ export function TooltipHost() {
       tip.style.top = `${Math.round(Math.max(MARGIN, top))}px`;
     };
 
-    const show = (element: HTMLElement) => {
-      const text = element.dataset.tooltip;
-      if (!text || !element.isConnected) return;
+    // Wurde das Element unter der Maus inzwischen neu aufgebaut (React), gilt das neue an derselben Stelle
+    const current = (element: HTMLElement): HTMLElement | null =>
+      element.isConnected ? element : (document.elementFromPoint(pointer.x, pointer.y)?.closest<HTMLElement>('[data-tooltip]') ?? null);
+
+    const show = (candidate: HTMLElement) => {
+      const element = current(candidate);
+      const text = element?.dataset.tooltip;
+      if (!element || !text) return;
+      target = element;
       // Nur bei neuem Text schreiben: Das Schreiben selbst würde den MutationObserver unten erneut auslösen.
       if (tip.textContent !== text) tip.textContent = text;
       if (!tip.matches(':popover-open')) tip.showPopover();
@@ -48,6 +55,7 @@ export function TooltipHost() {
     };
 
     const onOver = (event: PointerEvent) => {
+      pointer = { x: event.clientX, y: event.clientY };
       const element = (event.target as Element | null)?.closest<HTMLElement>('[data-tooltip]') ?? null;
       if (element === target) return;
       hide();
@@ -64,8 +72,9 @@ export function TooltipHost() {
     // Text kann sich ändern, während die Maus darüber steht (z. B. gedrückter Knopf)
     const observer = new MutationObserver(() => {
       if (target && tip.matches(':popover-open')) {
-        if (!target.isConnected || !target.dataset.tooltip) hide();
-        else show(target);
+        const element = current(target);
+        if (!element?.dataset.tooltip) hide();
+        else show(element);
       }
     });
     observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-tooltip'], childList: true });
