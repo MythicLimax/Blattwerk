@@ -456,6 +456,9 @@ test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
     await page.mouse.down();
     await page.mouse.move(box.x - before.width * 0.3, box.y + box.height / 2, { steps: 5 });
     await page.mouse.move(box.x - before.width * 0.55, box.y + box.height / 2, { steps: 5 });
+    // Live-Vorschau während des Ziehens: schon umbrochen
+    await expect(page.getByTestId('content-width-preview')).toBeVisible();
+    expect((await page.getByTestId('content-width-preview').boundingBox())?.height ?? 0).toBeGreaterThan(before.height * 1.8);
     await page.mouse.up();
     // Neu umbrochen: schmaler und höher, der ganze Text bleibt, er ist weiter ausgewählt
     await expect.poll(async () => (await line.boundingBox())?.height ?? 0).toBeGreaterThan(before.height * 1.8);
@@ -465,9 +468,15 @@ test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
     await expect(page.getByTestId('content-selection')).toHaveCount(1);
 
     // Größe: der ausgewählte Text wird größer, die Leiste zeigt die neue Größe
-    await page.getByTestId('content-size').selectOption('24');
+    // Größe aus der Liste wählen
+    await page.getByTestId('content-size-toggle').click();
+    await page.getByTestId('content-size-list').locator('[data-size="24"]').click();
     await expect.poll(async () => (await line.boundingBox())?.height ?? 0).toBeGreaterThan((after?.height ?? 0) * 1.5);
     await expect(page.getByTestId('content-size')).toHaveValue('24');
+    // Größe eintippen (mit Komma)
+    await page.getByTestId('content-size').fill('13,5');
+    await page.getByTestId('content-size').press('Enter');
+    await expect(page.getByTestId('content-size')).toHaveValue('13,5');
     await page.getByTestId('content-color-red').click();
     await expect(page.getByTestId('content-color-red')).toHaveAttribute('aria-checked', 'true');
     await close();
@@ -483,7 +492,9 @@ test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
     const editor = page.getByTestId('content-text-editor');
     await page.keyboard.type('Ein neuer Absatz, der in einem schmalen Feld mehrere Zeilen bekommt.');
     // Größe in der Leiste: die Eingabe bleibt offen
-    await page.getByTestId('content-size').selectOption('18');
+    await page.getByTestId('content-size').fill('18');
+    await page.getByTestId('content-size').press('Enter');
+    await page.getByTestId('content-text-editor').focus();
     await expect(editor).toHaveCount(1);
     await expect(editor).toHaveCSS('font-size', '24px');
     const handle = await page.getByTestId('content-editor-width-right').boundingBox();

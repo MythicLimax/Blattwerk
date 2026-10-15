@@ -57,3 +57,86 @@
   background: var(--color-surface);
   flex: none;
 }
+
+/* Schriftgröße zum Eintippen (Inhalt bearbeiten) */
+.sizeField {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  flex: none;
+}
+
+.sizeInput {
+  width: 48px;
+  height: 100%;
+  padding: 0 0 0 var(--space-1);
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sizeInput:focus {
+  outline: none;
+}
+
+.sizeUnit {
+  padding: 0 var(--space-1) 0 2px;
+  color: var(--color-text-muted);
+}
+
+.sizeToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.sizeToggle:hover {
+  background: var(--color-hover);
+}
+
+.sizeList {
+  position: fixed;
+  z-index: 20;
+  max-height: 280px;
+  margin: 0;
+  padding: var(--space-1) 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-popover);
+}
+
+.sizeOption,
+.sizeOptionCurrent {
+  padding: 2px var(--space-3) 2px var(--space-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.sizeOption:hover,
+.sizeOptionCurrent:hover {
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+}
+
+.sizeOptionCurrent {
+  font-weight: 600;
+}

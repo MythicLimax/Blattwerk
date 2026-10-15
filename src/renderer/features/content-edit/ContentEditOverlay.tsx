@@ -31,7 +31,8 @@ export function isUprightView(geometry: PageGeometry): boolean {
 }
 
 // Leiste „Inhalt bearbeiten“: Klicks dort beenden die Texteingabe nicht (Größe, Schrift, Farbe wirken auf sie)
-const inToolbar = (target: EventTarget | null) => target instanceof Element && target.closest('[data-testid="content-edit-toolbar"]') !== null;
+const inToolbar = (target: EventTarget | null) =>
+  target instanceof Element && target.closest('[data-testid="content-edit-toolbar"], [data-testid="content-size-list"]') !== null;
 
 function corners([l, b, r, t]: Rect): Point[] {
   return [
@@ -77,6 +78,8 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
   const [listing, setListing] = useState<PageObjects | null>(null);
   // Dokumentstand, zu dem listing gehört (nach einer Änderung kommt die neue Liste erst etwas später)
   const [listingSource, setListingSource] = useState<unknown>(null);
+  // Vorschau nach dem Loslassen, bis der neu gesetzte Text geladen ist (kein kurzes Aufblitzen des alten Textes)
+  const [afterglow, setAfterglow] = useState<{ unit: EditUnit; bounds: Rect; source: unknown } | null>(null);
   const [gesture, setGestureState] = useState<Gesture | null>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const tool = useContentEdit((s) => s.tool);
@@ -168,7 +171,10 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     if (current.kind === 'width') {
       const [l, , r] = current.object.bounds;
       if (Math.abs(bounds[0] - l) < 0.5 && Math.abs(bounds[2] - r) < 0.5) return;
-      void reflowText(tabId, pageIndex, current.object, current.object.text ?? '', { box: { left: bounds[0], right: bounds[2] }, bounds });
+      setAfterglow({ unit: current.object, bounds, source: pdf });
+      void reflowText(tabId, pageIndex, current.object, current.object.text ?? '', { box: { left: bounds[0], right: bounds[2] }, bounds }).then((done) => {
+        if (!done) setAfterglow(null);
+      });
       return;
     }
     if (current.kind === 'move') {
@@ -302,7 +308,54 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
             );
           })}
       </svg>
+      {(() => {
+        // Live-Vorschau beim Ziehen der Breite: der Text bricht sofort in der neuen Breite um
+        const live =
+          gesture?.kind === 'width'
+            ? { unit: gesture.object, bounds: previewBounds(gesture.object, gesture) }
+            : afterglow && afterglow.source === listingSource
+              ? afterglow
+              : null;
+        return live ? <WidthPreview unit={live.unit} bounds={live.bounds} geometry={geometry} scale={scale} listing={listing} /> : null;
+      })()}
       {editing && <TextEditor editing={editing} geometry={geometry} scale={scale} listing={listing} />}
+    </>
+  );
+}
+
+// Vorschau eines Textes in neuer Breite: deckt den bisherigen Text ab und zeigt den Text mit einer ähnlichen Schrift
+// umbrochen. Endgültig setzt ihn danach PDFium mit den echten Zeichenbreiten.
+function WidthPreview({ unit, bounds, geometry, scale, listing }: { unit: EditUnit; bounds: Rect; geometry: PageGeometry; scale: number; listing: PageObjects | null }) {
+  const viewScale = scale * (96 / 72);
+  const size = unit.visualSize ?? unit.fontSize ?? 12;
+  const lines = unit.lines?.length ?? 1;
+  // Zeilenabstand wie im Absatz (aus Höhe und Zeilenzahl), sonst 1,2
+  const step = lines > 1 ? Math.max(size, (unit.bounds[3] - unit.bounds[1] - size) / (lines - 1)) : size * LINE_HEIGHT;
+  const old = geometry.rectToView(unit.bounds);
+  const box = geometry.rectToView(bounds);
+  const color = unit.color;
+  const percent = (value: number, total: number) => `${(value / total) * 100}%`;
+  return (
+    <>
+      <div
+        className={styles.previewMask}
+        style={{ left: percent(old.x, geometry.width), top: percent(old.y, geometry.height), width: percent(old.w, geometry.width), height: percent(old.h, geometry.height) }}
+      />
+      <div
+        className={styles.preview}
+        style={{
+          left: percent(box.x, geometry.width),
+          top: percent(box.y, geometry.height),
+          width: percent(box.w, geometry.width),
+          fontSize: `${size * viewScale}px`,
+          lineHeight: `${step * viewScale}px`,
+          ...lookOf(listing?.fonts[unit.font ?? '']?.name ?? ''),
+          color: color ? `rgb(${color.r * 255} ${color.g * 255} ${color.b * 255})` : undefined,
+        }}
+        data-testid="content-width-preview"
+      >
+        {unit.text}
+      </div>
     </>
   );
 }

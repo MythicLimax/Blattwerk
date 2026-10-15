@@ -775,7 +775,7 @@
       "form": "Grafikgruppe"
     },
     "font": "Schrift für neuen Text",
-    "size": "Schriftgröße für neuen Text",
+    "size": "Schriftgröße (eintippen oder wählen)",
     "color": "Farbe für neuen Text",
     "delete": "Auswahl löschen",
     "done": "Fertig",
@@ -786,7 +786,8 @@
     "impossible": "Nicht darstellbar: {{chars}}",
     "notAllowed": "Dieses Dokument erlaubt keine Änderungen am Inhalt.",
     "failed": "Die Änderung konnte nicht ausgeführt werden. Das Dokument wurde nicht verändert.",
-    "originalFont": "Schrift des Textes"
+    "originalFont": "Schrift des Textes",
+    "points": "pt"
   },
   "security": {
     "title": "Kennwortschutz",

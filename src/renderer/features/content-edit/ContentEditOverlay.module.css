@@ -134,3 +134,23 @@
 .editorHandleRight {
   right: -4px;
 }
+
+/* Live-Vorschau beim Ziehen der Breite */
+.previewMask {
+  position: absolute;
+  z-index: 1;
+  background: #fff;
+  pointer-events: none;
+}
+
+.preview {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  outline: 1px dashed var(--color-accent);
+  background: rgb(255 255 255 / 0.92);
+  color: #000;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  pointer-events: none;
+}
