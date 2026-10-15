@@ -10,7 +10,25 @@ import { useContentEdit, type ContentTool } from '../../state/content-edit-store
 import { canRedoState, canUndoState, useTabHistory } from '../../state/dirty';
 import type { TabState } from '../../state/documents-store';
 import styles from '../annotations/CommentToolbar.module.css';
-import { addImage, toggleContentEditing } from './actions';
+import { addImage, reflowText, toggleContentEditing } from './actions';
+import type { ParagraphStyle } from '../../../shared/content';
+
+// Größe, Schrift oder Farbe gewählt: gilt für die Texteingabe, sonst für den ausgewählten Text, immer auch für neuen Text
+function applyStyle(tab: TabState, patch: ParagraphStyle): void {
+  const store = useContentEdit.getState();
+  store.setStyle(patch);
+  const editing = store.editing?.tabId === tab.id ? store.editing : null;
+  if (editing) {
+    if (editing.mode === 'edit') store.setEditing({ ...editing, style: { ...editing.style, ...patch } });
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-testid="content-text-editor"]')?.focus({ preventScroll: true }));
+    return;
+  }
+  const selected = store.selected[tab.id];
+  const unit = selected?.unit;
+  if (selected && unit?.kind === 'text' && !tab.working) void reflowText(tab.id, selected.pageIndex, unit, unit.text ?? '', { style: patch });
+}
+
+const sameColor = (a: Rgb | undefined, b: Rgb) => a !== undefined && Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b) < 0.03;
 
 const TOOLS: Array<{ tool: ContentTool; icon: LucideIcon }> = [
   { tool: 'select', icon: MousePointer2 },
@@ -33,6 +51,17 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
   const tool = useContentEdit((s) => s.tool);
   const style = useContentEdit((s) => s.style);
   const selected = useContentEdit((s) => s.selected[tab.id] ?? null);
+  const editing = useContentEdit((s) => (s.editing?.tabId === tab.id ? s.editing : null));
+  // Angezeigt wird die Gestaltung des bearbeiteten oder ausgewählten Textes, sonst die Vorgabe für neuen Text
+  const unit = !editing && selected?.unit?.kind === 'text' ? selected.unit : null;
+  const shown =
+    editing?.mode === 'edit'
+      ? { size: editing.style?.size ?? editing.fontSize, font: editing.style?.font ?? null, color: editing.style?.color ?? editing.color }
+      : unit
+        ? { size: unit.visualSize ?? unit.fontSize ?? style.size, font: null, color: unit.color }
+        : { size: style.size, font: style.font as StampFont | null, color: style.color };
+  const shownSize = Math.round(shown.size);
+  const sizes = SIZES.includes(shownSize) ? SIZES : [...SIZES, shownSize].sort((a, b) => a - b);
   const annotations = useTabAnnotations(tab.id);
   const history = useTabHistory(tab.id);
 
@@ -76,12 +105,15 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
       <span className={styles.separator} />
       <select
         className={styles.select}
-        value={style.font}
+        value={shown.font ?? ''}
         aria-label={t('contentEdit.font')}
         data-tooltip={t('contentEdit.font')}
-        onChange={(event) => useContentEdit.getState().setStyle({ font: event.target.value as StampFont })}
+        onChange={(event) => {
+          if (event.target.value) applyStyle(tab, { font: event.target.value as StampFont });
+        }}
         data-testid="content-font"
       >
+        {shown.font === null && <option value={''}>{t('contentEdit.originalFont')}</option>}
         {STAMP_FONTS.map((font) => (
           <option key={font} value={font}>
             {t(`stamp.fonts.${font}`)}
@@ -90,13 +122,13 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
       </select>
       <select
         className={styles.select}
-        value={style.size}
+        value={shownSize}
         aria-label={t('contentEdit.size')}
         data-tooltip={t('contentEdit.size')}
-        onChange={(event) => useContentEdit.getState().setStyle({ size: Number(event.target.value) })}
+        onChange={(event) => applyStyle(tab, { size: Number(event.target.value) })}
         data-testid="content-size"
       >
-        {SIZES.map((size) => (
+        {sizes.map((size) => (
           <option key={size} value={size}>
             {t('stamp.points', { value: size })}
           </option>
@@ -108,12 +140,13 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
             key={id}
             type="button"
             role="radio"
-            aria-checked={style.color === color}
+            aria-checked={sameColor(shown.color, color)}
             className={styles.swatch}
             style={{ background: toCss(color) }}
             data-tooltip={t(`stamp.colors.${id}`)}
             aria-label={t(`stamp.colors.${id}`)}
-            onClick={() => useContentEdit.getState().setStyle({ color })}
+            onClick={() => applyStyle(tab, { color })}
+            data-testid={`content-color-${id}`}
           />
         ))}
       </div>

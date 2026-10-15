@@ -429,3 +429,78 @@ test.describe('Inhalt bearbeiten', () => {
     await close();
   });
 });
+
+test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
+  async function openActualSize() {
+    const dir = tempDir();
+    const file = path.join(dir, 'felder.pdf');
+    copyFileSync(fixture('text.pdf'), file);
+    const handle = await launchApp([file], { userData: dir });
+    await waitForDocument(handle.page, TEXT_PDF.pages);
+    await handle.page.getByTestId('content-edit-button').click();
+    await menuClick(handle.app, 'view.actualSize');
+    return handle;
+  }
+  const textObject = (page: Page, start: string) => page.locator(`[data-testid="content-object"][data-text^="${start}"]`).first();
+
+  test('vorhandenen Text schmaler ziehen und Größe und Farbe ändern', async () => {
+    const { page, close } = await openActualSize();
+    const line = textObject(page, 'Ein PDF besteht aus Objekten');
+    const before = await line.boundingBox();
+    if (!before) throw new Error('Zeile fehlt');
+    await line.click();
+    const handle = page.getByTestId('content-width-right');
+    const box = await handle.boundingBox();
+    if (!box) throw new Error('kein Anfasser');
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x - before.width * 0.3, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.move(box.x - before.width * 0.55, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    // Neu umbrochen: schmaler und höher, der ganze Text bleibt, er ist weiter ausgewählt
+    await expect.poll(async () => (await line.boundingBox())?.height ?? 0).toBeGreaterThan(before.height * 1.8);
+    const after = await line.boundingBox();
+    expect(after?.width ?? 0).toBeLessThan(before.width * 0.5);
+    await expect(line).toHaveAttribute('data-text', 'Ein PDF besteht aus Objekten, die über eine Querverweistabelle gefunden werden.');
+    await expect(page.getByTestId('content-selection')).toHaveCount(1);
+
+    // Größe: der ausgewählte Text wird größer, die Leiste zeigt die neue Größe
+    await page.getByTestId('content-size').selectOption('24');
+    await expect.poll(async () => (await line.boundingBox())?.height ?? 0).toBeGreaterThan((after?.height ?? 0) * 1.5);
+    await expect(page.getByTestId('content-size')).toHaveValue('24');
+    await page.getByTestId('content-color-red').click();
+    await expect(page.getByTestId('content-color-red')).toHaveAttribute('aria-checked', 'true');
+    await close();
+  });
+
+  test('neuer Text: Größe während des Tippens ändern und Breite des Feldes ziehen', async () => {
+    const { page, close } = await openActualSize();
+    await page.getByTestId('content-tool-text').click();
+    const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
+    if (!overlay) throw new Error('keine Ebene');
+    // Freie Stelle im sichtbaren Bereich (unterhalb der Überschrift)
+    await page.mouse.click(overlay.x + 100, overlay.y + 420);
+    const editor = page.getByTestId('content-text-editor');
+    await page.keyboard.type('Ein neuer Absatz, der in einem schmalen Feld mehrere Zeilen bekommt.');
+    // Größe in der Leiste: die Eingabe bleibt offen
+    await page.getByTestId('content-size').selectOption('18');
+    await expect(editor).toHaveCount(1);
+    await expect(editor).toHaveCSS('font-size', '24px');
+    const handle = await page.getByTestId('content-editor-width-right').boundingBox();
+    if (!handle) throw new Error('kein Anfasser');
+    await page.mouse.move(handle.x + 3, handle.y + 9);
+    await page.mouse.down();
+    await page.mouse.move(overlay.x + 300, handle.y + 9, { steps: 6 });
+    await page.mouse.up();
+    await expect(editor).toHaveCount(1);
+    await page.keyboard.press('Meta+Enter');
+    await expect(editor).toHaveCount(0);
+    const placed = textObject(page, 'Ein neuer Absatz');
+    await expect(placed).toBeVisible();
+    const box = await placed.boundingBox();
+    // Mehrere Zeilen in Größe 18 (Zeilenhöhe bei 100 %: 18 pt · 4/3 · 1,2 ≈ 29 px)
+    expect(box?.height ?? 0).toBeGreaterThan(60);
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThan(overlay.x + 310);
+    await close();
+  });
+});

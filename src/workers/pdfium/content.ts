@@ -8,6 +8,8 @@ import {
   MAX_PAGE_OBJECTS,
   missingChars,
   type ContentOperation,
+  type ParagraphStyle,
+  type TextMark,
   type PageFontInfo,
   type PageObjectInfo,
   type PageObjects,
@@ -116,7 +118,8 @@ export function listPageObjects(m: Pdfium, doc: number, pageIndex: number): Page
           const matrix = readFloats(m, 6, (ptr) => Boolean(m.FPDFPageObj_GetMatrix(object, ptr)));
           const scale = matrix ? Math.hypot(matrix[2] ?? 0, matrix[3] ?? 0) : 1;
           const upright = matrix !== null && (matrix[0] ?? 0) > 0 && (matrix[3] ?? 0) > 0 && Math.abs(matrix[1] ?? 0) < 1e-3 && Math.abs(matrix[2] ?? 0) < 1e-3;
-          Object.assign(info, { text, fontSize, visualSize: fontSize * (scale || 1), font: key, color: fillColor(m, object), upright, ...(upright ? { baseline: matrix[5] } : {}) });
+          const mark = readMark(m, object);
+          Object.assign(info, { text, fontSize, visualSize: fontSize * (scale || 1), font: key, color: fillColor(m, object), upright, ...(upright ? { baseline: matrix[5] } : {}), ...(mark ? { mark } : {}) });
         }
         objects.push(info);
       }
@@ -191,9 +194,23 @@ export function applyContentOperation(m: Pdfium, doc: number, operation: Content
         const angle = (rotation * Math.PI) / 180;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
-        operation.lines.forEach((line, i) => {
-          if (line === '') return;
-          const object = newTextObject(m, doc, operation.font, operation.size, line, operation.color);
+        let lines: WrappedLine[] = operation.lines.map((text) => ({ text, hard: true }));
+        if (operation.width) {
+          // In der gewählten Breite umbrechen, gemessen in der Schrift des neuen Textes
+          const ruler = newTextObject(m, doc, operation.font, operation.size, 'x', operation.color);
+          try {
+            const widthOf = measureWith(m, ruler, 1, 1);
+            const width = operation.width;
+            lines = wrapText(operation.lines.join('\n'), (line) => widthOf(line) <= width + 0.5);
+          } finally {
+            m.FPDFPageObj_Destroy(ruler);
+          }
+        }
+        const paragraph = newParagraphId();
+        lines.forEach((line, i) => {
+          if (line.text === '') return;
+          const object = newTextObject(m, doc, operation.font, operation.size, line.text, operation.color);
+          writeMark(m, doc, object, { p: paragraph, ...(operation.width ? { w: operation.width } : {}), ...(line.hard ? { h: true } : {}) });
           // Zeile i liegt um i · Zeilenhöhe unter der ersten, in der Leserichtung der angezeigten Seite
           const offset = i * operation.size * LINE_HEIGHT;
           const x = operation.origin.x + sin * offset;
@@ -243,7 +260,7 @@ export function applyContentOperation(m: Pdfium, doc: number, operation: Content
         break;
       }
       case 'editParagraph':
-        if (listing) setParagraph(m, doc, page, listing, operation.lines, operation.text);
+        if (listing) setParagraph(m, doc, page, listing, operation.lines, operation.text, operation.box, operation.style);
         break;
     }
     if (!m.FPDFPage_GenerateContent(page)) throw new ContentError(`Seite ${operation.pageIndex + 1} lässt sich nicht neu schreiben`);
@@ -279,10 +296,106 @@ function removeObject(m: Pdfium, page: number, object: number): void {
   if (m.FPDFPage_RemoveObject(page, object)) m.FPDFPageObj_Destroy(object);
 }
 
-// Absatz neu setzen (siehe ContentOperation editParagraph). Die Zeilen behalten Schrift, Größe, Farbe, linken Rand
-// und Zeilenabstand; umgebrochen wird in der bisherigen Breite mit den echten Zeichenbreiten der Schrift. Kennt die
-// Schrift nicht alle Zeichen, bekommt der ganze Absatz eine ähnliche Standardschrift.
-function setParagraph(m: Pdfium, doc: number, page: number, listing: PageObjects, lines: number[][], text: string): void {
+// Bricht Text in Zeilen um: harte Umbrüche (\n) bleiben, sonst Wort für Wort, solange die Zeile in ihre Breite passt.
+// Ein Wort, das allein nicht passt, steht in einer eigenen Zeile. Leere Zeilen am Ende entfallen.
+interface WrappedLine {
+  text: string;
+  // Zeile endet mit einem harten Umbruch (Absatzende oder Eingabetaste)
+  hard: boolean;
+}
+
+function wrapText(text: string, fits: (line: string, index: number) => boolean): WrappedLine[] {
+  const out: WrappedLine[] = [];
+  for (const block of text.split('\n')) {
+    const words = block.split(/[ \t]+/).filter((word) => word !== '');
+    let current = '';
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (!current || fits(candidate, out.length)) current = candidate;
+      else {
+        out.push({ text: current, hard: false });
+        current = word;
+      }
+    }
+    out.push({ text: current, hard: true });
+  }
+  while (out.length > 0 && out[out.length - 1]?.text === '') out.pop();
+  return out;
+}
+
+// Eigene Kennzeichnung gesetzter Texte (Marked Content): Absatz, Breite, harter Umbruch. So bleibt ein Textfeld beim
+// erneuten Öffnen ein Absatz, egal wie schmal es ist, und behält seine Breite und Umbrüche.
+const MARK = 'BlattwerkText';
+
+function markName(m: Pdfium, mark: number): string {
+  return withBuffer(m, 4, (lengthPtr) => {
+    if (!m.FPDFPageObjMark_GetName(mark, 0, 0, lengthPtr)) return '';
+    const length = m.pdfium.getValue(lengthPtr, 'i32') as number;
+    if (length <= 2) return '';
+    return withBuffer(m, length, (buffer) => {
+      m.FPDFPageObjMark_GetName(mark, buffer, length, lengthPtr);
+      return m.pdfium.UTF16ToString(buffer);
+    });
+  });
+}
+
+function ownMark(m: Pdfium, object: number): number | null {
+  const count = m.FPDFPageObj_CountMarks(object);
+  for (let i = 0; i < count; i++) {
+    const mark = m.FPDFPageObj_GetMark(object, i);
+    if (mark && markName(m, mark) === MARK) return mark;
+  }
+  return null;
+}
+
+function readMark(m: Pdfium, object: number): TextMark | undefined {
+  const mark = ownMark(m, object);
+  if (!mark) return undefined;
+  const int = (key: string) => withBuffer(m, 4, (ptr) => (m.FPDFPageObjMark_GetParamIntValue(mark, key, ptr) ? (m.pdfium.getValue(ptr, 'i32') as number) : null));
+  const p = int('P');
+  if (p === null) return undefined;
+  const w = withBuffer(m, 4, (ptr) => (m.FPDFPageObjMark_GetParamFloatValue(mark, 'W', ptr) ? (m.pdfium.getValue(ptr, 'float') as number) : null));
+  return { p, ...(w !== null && w > 0 ? { w } : {}), ...(int('H') === 1 ? { h: true } : {}) };
+}
+
+function writeMark(m: Pdfium, doc: number, object: number, value: TextMark): void {
+  for (let mark = ownMark(m, object); mark; mark = ownMark(m, object)) if (!m.FPDFPageObj_RemoveMark(object, mark)) break;
+  const mark = m.FPDFPageObj_AddMark(object, MARK);
+  if (!mark) return;
+  m.FPDFPageObjMark_SetIntParam(doc, object, mark, 'P', value.p);
+  if (value.w) m.FPDFPageObjMark_SetFloatParam(doc, object, mark, 'W', value.w);
+  if (value.h) m.FPDFPageObjMark_SetIntParam(doc, object, mark, 'H', 1);
+}
+
+// Kennzahl eines neuen Absatzes (nur innerhalb der Seite von Bedeutung)
+const newParagraphId = () => 1 + Math.floor(Math.random() * 2 ** 30);
+
+// Breite eines Textes in Seiteneinheiten, gemessen mit einem nicht eingefügten Objekt (Ursprung 0, nur Skalierung).
+// PDFium stürzt bei leerem Text in neu angelegten Objekten ab; gemessen wird deshalb nie ein leerer Text.
+function measureWith(m: Pdfium, ruler: number, scaleX: number, scaleY: number): (value: string) => number {
+  withFloats(m, [scaleX, 0, 0, scaleY, 0, 0], (ptr) => m.FPDFPageObj_SetMatrix(ruler, ptr));
+  return (value) => {
+    if (value === '') return 0;
+    withWString(m, value, (ptr) => m.FPDFText_SetText(ruler, ptr));
+    return readFloats(m, 4, (ptr) => Boolean(m.FPDFPageObj_GetBounds(ruler, ptr, ptr + 4, ptr + 8, ptr + 12)))?.[2] ?? 0;
+  };
+}
+
+// Absatz oder Zeile neu setzen (ContentOperation editParagraph). Ohne Angaben behalten die Zeilen Schrift, Größe,
+// Farbe, linken Rand, Breite und Zeilenabstand; umgebrochen wird mit den echten Zeichenbreiten der Schrift.
+// box ändert linken und rechten Rand (die erste Zeile behält ihren Einzug), style Größe, Schrift oder Farbe. Neue
+// Größe oder Schrift erfordern neue Textobjekte (PDFium kann sie an vorhandenen nicht ändern); die Oberkante bleibt.
+// Kennt die Schrift nicht alle Zeichen, bekommt der ganze Absatz eine ähnliche Standardschrift.
+function setParagraph(
+  m: Pdfium,
+  doc: number,
+  page: number,
+  listing: PageObjects,
+  lines: number[][],
+  text: string,
+  box: { left: number; right: number } | undefined,
+  style: ParagraphStyle | undefined,
+): void {
   if (lines.length === 0 || lines.some((line) => line.length === 0)) throw new ContentError('Absatz ohne Zeilen');
   const infos = new Map(listing.objects.map((info) => [info.index, info]));
   // Erst alle Objekte holen: Nach dem Entfernen gelten die Positionen in der Objektliste nicht mehr
@@ -301,27 +414,41 @@ function setParagraph(m: Pdfium, doc: number, page: number, listing: PageObjects
   const [first, ...rest] = matrices as number[][];
   const firstInfo = infos.get(lines[0]?.[0] ?? -1);
   if (!first || !firstInfo) throw new ContentError('Absatz fehlt');
-  const right = Math.max(...lines.flat().map((index) => infos.get(index)?.bounds[2] ?? -Infinity));
+  const members = lines.flat().map((index) => infos.get(index)?.bounds);
+  const oldLeft = Math.min(...members.map((bounds) => bounds?.[0] ?? Infinity));
+  const oldRight = Math.max(...members.map((bounds) => bounds?.[2] ?? -Infinity));
+  const visual = firstInfo.visualSize ?? firstInfo.fontSize ?? 12;
+  const factor = style?.size && visual > 0 ? style.size / visual : 1;
   const firstX = first[4] ?? 0;
   const restX = rest[0]?.[4] ?? firstX;
+  const indent = firstX - restX;
+  // box gilt für die sichtbaren Ränder; die Zeilen beginnen um denselben Betrag verschoben
+  const left = box ? restX + (box.left - oldLeft) : restX;
+  const ownWidth = firstInfo.mark?.w;
+  const right = box ? box.right : ownWidth ? restX + ownWidth : oldRight;
+  const x = (i: number) => (box ? left + (i === 0 ? Math.max(0, indent) : 0) : i === 0 ? firstX : restX);
   const lastY = (matrices[matrices.length - 1] as number[])[5] ?? 0;
-  const gap = lines.length > 1 ? ((first[5] ?? 0) - lastY) / (lines.length - 1) : (firstInfo.visualSize ?? 12) * LINE_HEIGHT;
+  const gap = (lines.length > 1 ? ((first[5] ?? 0) - lastY) / (lines.length - 1) : visual * LINE_HEIGHT) * factor;
   if (!(gap > 0)) throw new ContentError('Zeilenabstand unbekannt');
+  // Oberkante bleibt: Grundlinie um die Änderung der Oberlänge verschieben
+  const firstY = (first[5] ?? 0) - 0.8 * visual * (factor - 1);
 
   const font = firstInfo.font ? listing.fonts[firstInfo.font] : undefined;
-  const substitute = missingChars(text, font) !== '';
-  if (substitute) {
+  const substitute = !style?.font && missingChars(text, font) !== '';
+  if (substitute || style?.font) {
     const impossible = missingChars(text, undefined);
     if (impossible) throw new ContentError(impossible, 'content-characters');
   }
-  const size = firstInfo.fontSize ?? 12;
-  const color = firstInfo.color ?? { r: 0, g: 0, b: 0 };
+  const size = (firstInfo.fontSize ?? 12) * factor;
+  const color = style?.color ?? firstInfo.color ?? { r: 0, g: 0, b: 0 };
   const originalFont = m.FPDFTextObj_GetFont(anchors[0] as number);
   const renderMode = m.FPDFTextObj_GetTextRenderMode(anchors[0] as number);
-  const replacementFont = substituteFont(font?.name ?? '', m.FPDFFont_GetWeight(originalFont));
+  const standard = style?.font ?? (substitute ? substituteFont(font?.name ?? '', m.FPDFFont_GetWeight(originalFont)) : null);
+  // Vorhandene Objekte nur weiterverwenden, wenn Schrift und Größe bleiben
+  const reuse = !standard && factor === 1;
   const make = (value: string): number => {
     let object: number;
-    if (substitute) object = newTextObject(m, doc, replacementFont, size, value, color);
+    if (standard) object = newTextObject(m, doc, standard, size, value, color);
     else {
       object = m.FPDFPageObj_CreateTextObj(doc, originalFont, size);
       if (!object) throw new ContentError('Textobjekt lässt sich nicht anlegen');
@@ -332,49 +459,41 @@ function setParagraph(m: Pdfium, doc: number, page: number, listing: PageObjects
     return object;
   };
   const place = (object: number, matrix: number[]) => withFloats(m, matrix, (ptr) => m.FPDFPageObj_SetMatrix(object, ptr));
-
-  // Messen mit einem Objekt in derselben Schrift und Skalierung, Ursprung bei 0 (PDFium stürzt bei leerem Text in
-  // neu angelegten Objekten ab; gemessen wird deshalb nie ein leerer Text)
-  const ruler = make('x');
-  place(ruler, [first[0] ?? 1, 0, 0, first[3] ?? 1, 0, 0]);
-  const widthOf = (value: string): number => {
-    withWString(m, value, (ptr) => m.FPDFText_SetText(ruler, ptr));
-    return readFloats(m, 4, (ptr) => Boolean(m.FPDFPageObj_GetBounds(ruler, ptr, ptr + 4, ptr + 8, ptr + 12)))?.[2] ?? 0;
+  const matrixFor = (i: number): number[] => {
+    // Unverändert: die eigene Lage der Zeile (genau wie vorher)
+    const own = matrices[i];
+    if (own && !box && factor === 1) return own;
+    return [first[0] ?? 1, 0, 0, first[3] ?? 1, x(i), firstY - i * gap];
   };
-  const out: string[] = [];
+
+  const ruler = make('x');
+  let out: WrappedLine[];
   try {
-    for (const block of text.split('\n')) {
-      const words = block.split(/[ \t]+/).filter((word) => word !== '');
-      let current = '';
-      for (const word of words) {
-        const candidate = current ? `${current} ${word}` : word;
-        // Ein Wort, das allein nicht passt, steht in einer eigenen Zeile
-        if (!current || (out.length === 0 ? firstX : restX) + widthOf(candidate) <= right + 0.5) current = candidate;
-        else {
-          out.push(current);
-          current = word;
-        }
-      }
-      out.push(current);
-    }
+    const widthOf = measureWith(m, ruler, first[0] ?? 1, first[3] ?? 1);
+    out = wrapText(text, (line, i) => x(i) + widthOf(line) <= right + 0.5);
   } finally {
     m.FPDFPageObj_Destroy(ruler);
   }
-  while (out.length > 0 && out[out.length - 1] === '') out.pop();
 
+  const paragraph = firstInfo.mark?.p ?? newParagraphId();
+  const mark = (line: WrappedLine): TextMark => ({ p: paragraph, w: right - left, ...(line.hard ? { h: true } : {}) });
   groups.forEach((group, i) => {
-    const value = out[i];
-    const keepAnchor = !substitute && value !== undefined && value !== '';
+    const line = out[i];
+    const keepAnchor = reuse && line !== undefined && line.text !== '';
     group.forEach((object, j) => {
-      if (j === 0 && keepAnchor) withWString(m, value, (ptr) => m.FPDFText_SetText(object, ptr));
-      else removeObject(m, page, object);
+      if (j === 0 && keepAnchor) {
+        withWString(m, line.text, (ptr) => m.FPDFText_SetText(object, ptr));
+        writeMark(m, doc, object, mark(line));
+        place(object, matrixFor(i));
+        if (style?.color) m.FPDFPageObj_SetFillColor(object, byte(color.r), byte(color.g), byte(color.b), 255);
+      } else removeObject(m, page, object);
     });
   });
-  out.forEach((value, i) => {
-    if (value === '' || (!substitute && i < anchors.length)) return;
-    const object = make(value);
-    const own = matrices[i];
-    place(object, own ?? [first[0] ?? 1, 0, 0, first[3] ?? 1, restX, (first[5] ?? 0) - i * gap]);
+  out.forEach((line, i) => {
+    if (line.text === '' || (reuse && i < anchors.length)) return;
+    const object = make(line.text);
+    writeMark(m, doc, object, mark(line));
+    place(object, matrixFor(i));
     m.FPDFPage_InsertObject(page, object);
   });
 }

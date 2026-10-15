@@ -5,18 +5,33 @@ import { editUnits, LINE_HEIGHT, missingChars, scalingAbout, translation, type E
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
 import { useContentEdit, type TextEditing } from '../../state/content-edit-store';
-import { addText, baselineBelowClick, editParagraph, editText, transformObject } from './actions';
+import { addText, baselineBelowClick, editParagraph, editText, reflowText, transformObject } from './actions';
 import styles from './ContentEditOverlay.module.css';
 import { pageObjects } from './page-objects';
 
 type Gesture =
   | { kind: 'move'; object: EditUnit; origin: Point; dx: number; dy: number }
-  | { kind: 'scale'; object: EditUnit; fixed: Point; to: Point };
+  | { kind: 'scale'; object: EditUnit; fixed: Point; to: Point }
+  // Breite eines Textes ändern (Anfasser links oder rechts); der Text bricht neu um
+  | { kind: 'width'; object: EditUnit; side: 'left' | 'right'; to: Point };
 
 const MIN_EDITOR_PX = 11;
 // Rahmen (1 px) und Innenabstand (2 px) der Eingabe links: So beginnt der Text genau an der Klickstelle
 const EDITOR_INSET_PX = 3;
 const pxToUnits = (px: number, scale: number) => px / (scale * (96 / 72));
+// Schmalste Breite eines Textes beim Ziehen: zwei Schriftgrößen
+const minTextWidth = (object: PageObjectInfo) => 2 * (object.visualSize ?? object.fontSize ?? 12);
+
+// Die Seite wird ungedreht angezeigt (x der Seite läuft nach rechts): nur dann gibt es Anfasser für die Breite
+// vorhandener Texte, deren Ränder im PDF links und rechts liegen.
+export function isUprightView(geometry: PageGeometry): boolean {
+  const [x0, y0] = geometry.toView({ x: 0, y: 0 });
+  const [x1, y1] = geometry.toView({ x: 1, y: 0 });
+  return x1 > x0 && Math.abs(y1 - y0) < 1e-6;
+}
+
+// Leiste „Inhalt bearbeiten“: Klicks dort beenden die Texteingabe nicht (Größe, Schrift, Farbe wirken auf sie)
+const inToolbar = (target: EventTarget | null) => target instanceof Element && target.closest('[data-testid="content-edit-toolbar"]') !== null;
 
 function corners([l, b, r, t]: Rect): Point[] {
   return [
@@ -39,6 +54,10 @@ function previewBounds(object: PageObjectInfo, gesture: Gesture | null): Rect {
   if (!gesture || gesture.object.index !== object.index) return object.bounds;
   const [l, b, r, t] = object.bounds;
   if (gesture.kind === 'move') return [l + gesture.dx, b + gesture.dy, r + gesture.dx, t + gesture.dy];
+  if (gesture.kind === 'width') {
+    const min = minTextWidth(object);
+    return gesture.side === 'left' ? [Math.min(gesture.to.x, r - min), b, r, t] : [l, b, Math.max(gesture.to.x, l + min), t];
+  }
   const f = scaleFactor(object, gesture.fixed, gesture.to);
   const { x, y } = gesture.fixed;
   return normalizeRect([x + (l - x) * f, y + (b - y) * f, x + (r - x) * f, y + (t - y) * f]);
@@ -56,6 +75,8 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
   const { t } = useTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
   const [listing, setListing] = useState<PageObjects | null>(null);
+  // Dokumentstand, zu dem listing gehört (nach einer Änderung kommt die neue Liste erst etwas später)
+  const [listingSource, setListingSource] = useState<unknown>(null);
   const [gesture, setGestureState] = useState<Gesture | null>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const tool = useContentEdit((s) => s.tool);
@@ -69,7 +90,9 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     if (!pdf) return;
     let cancelled = false;
     void pageObjects(pdf, runtime?.password ?? null, pageIndex).then((result) => {
-      if (!cancelled) setListing(result);
+      if (cancelled) return;
+      setListing(result);
+      setListingSource(pdf);
     });
     return () => {
       cancelled = true;
@@ -107,7 +130,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     if (tool !== 'select' || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
-    store().select(tabId, { pageIndex, index: object.index, members: object.members });
+    store().select(tabId, { pageIndex, index: object.index, members: object.members, unit: object });
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
     setGesture({ kind: 'move', object, origin: toPdf(event), dx: 0, dy: 0 });
   };
@@ -119,6 +142,14 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
     const points = corners(object.bounds);
     setGesture({ kind: 'scale', object, fixed: points[(corner + 2) % 4] as Point, to: toPdf(event) });
+  };
+
+  const onSidePointerDown = (event: ReactPointerEvent, object: EditUnit, side: 'left' | 'right') => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    (event.currentTarget as Element).setPointerCapture(event.pointerId);
+    setGesture({ kind: 'width', object, side, to: toPdf(event) });
   };
 
   const onPointerMove = (event: ReactPointerEvent) => {
@@ -134,6 +165,12 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     setGesture(null);
     if (!current) return;
     const bounds = previewBounds(current.object, current);
+    if (current.kind === 'width') {
+      const [l, , r] = current.object.bounds;
+      if (Math.abs(bounds[0] - l) < 0.5 && Math.abs(bounds[2] - r) < 0.5) return;
+      void reflowText(tabId, pageIndex, current.object, current.object.text ?? '', { box: { left: bounds[0], right: bounds[2] }, bounds });
+      return;
+    }
     if (current.kind === 'move') {
       if (Math.hypot(current.dx, current.dy) < 0.5) return;
       void transformObject(tabId, pageIndex, current.object.index, current.object.members, translation(current.dx, current.dy), bounds);
@@ -147,7 +184,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
   // Text bearbeiten: immer die ganze Zeile, auch wenn das PDF sie in mehreren Stücken speichert (siehe editUnits)
   const startEdit = (unit: EditUnit) => {
     if (unit.kind !== 'text') return;
-    store().select(tabId, { pageIndex, index: unit.index, members: unit.members });
+    store().select(tabId, { pageIndex, index: unit.index, members: unit.members, unit });
     store().setEditing({
       tabId,
       pageIndex,
@@ -159,11 +196,24 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
       fontSize: unit.visualSize ?? unit.fontSize ?? 12,
       ...(unit.font ? { font: unit.font } : {}),
       ...(unit.lines ? { lines: unit.lines } : {}),
+      ...(unit.color ? { color: unit.color } : {}),
     });
   };
 
   const handleSize = pxToUnits(8, scale);
+  const upright = isUprightView(geometry);
   const objects = useMemo(() => editUnits(listing?.objects ?? [], listing?.fonts), [listing]);
+
+  // Nach dem Neusetzen eines Textes ist er wieder ausgewählt (Größe, Schrift, Farbe lassen sich weiter ändern)
+  const reselect = useContentEdit((s) => (s.reselect?.tabId === tabId && s.reselect.pageIndex === pageIndex ? s.reselect : null));
+  useEffect(() => {
+    if (!reselect || !listing || listing.pageIndex !== pageIndex || listingSource !== pdf) return;
+    const { x, y } = reselect.at;
+    const unit = objects.find((object) => object.kind === 'text' && object.bounds[0] - 2 <= x && x <= object.bounds[2] && object.bounds[1] <= y && y <= object.bounds[3] + 2);
+    if (!unit) return;
+    useContentEdit.getState().setReselect(null);
+    useContentEdit.getState().select(tabId, { pageIndex, index: unit.index, members: unit.members, unit });
+  }, [reselect, listing, listingSource, pdf, objects, tabId, pageIndex]);
 
   return (
     <>
@@ -209,6 +259,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
         })}
         {objects
           .filter((object) => selected?.pageIndex === pageIndex && selected.index === object.index && tool === 'select' && !editing)
+          // eslint-disable-next-line react-hooks/refs -- Refs werden nur in den Zeiger-Handlern gelesen, nicht beim Zeichnen
           .map((object) => {
             const bounds = pending?.index === object.index ? pending.bounds : previewBounds(object, gesture);
             return (
@@ -228,6 +279,25 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
                     />
                   );
                 })}
+                {object.kind === 'text' &&
+                  object.upright &&
+                  upright &&
+                  (['left', 'right'] as const).map((side) => {
+                    const [l, b, r, top] = bounds;
+                    const [x, y] = geometry.toView({ x: side === 'left' ? l : r, y: (b + top) / 2 });
+                    return (
+                      <rect
+                        key={side}
+                        className={styles.sideHandle}
+                        x={x - handleSize / 2}
+                        y={y - handleSize}
+                        width={handleSize}
+                        height={handleSize * 2}
+                        onPointerDown={(event) => onSidePointerDown(event, object, side)}
+                        data-testid={`content-width-${side}`}
+                      />
+                    );
+                  })}
               </g>
             );
           })}
@@ -254,6 +324,20 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
   const done = useRef(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const viewScale = scale * (96 / 72);
+  // Vom Nutzer gezogene Breite (Ansichtseinheiten = Punkt); null = wie vorgegeben
+  const [frame, setFrame] = useState<{ left: number; width: number } | null>(null);
+  const resizable = editing.mode === 'new' || isUprightView(geometry);
+  const restyle = editing.mode === 'edit' ? editing.style : undefined;
+
+  // Bei kleinem Zoom bleibt die Eingabe lesbar, auch wenn sie dann etwas größer ist als der Text auf der Seite.
+  const pointSize = editing.mode === 'edit' ? (restyle?.size ?? editing.fontSize) : style.size;
+  const fontSize = Math.max(MIN_EDITOR_PX, pointSize * viewScale);
+  // Neuer Text: Eingabe so legen, dass der Text an der Klickstelle beginnt und die erste Zeile mittig auf ihr liegt
+  const box =
+    editing.mode === 'edit'
+      ? geometry.rectToView(editing.bounds)
+      : { x: editing.at.x - EDITOR_INSET_PX / viewScale, y: editing.at.y - (fontSize * LINE_HEIGHT) / 2 / viewScale - 1 / viewScale, w: 0, h: 0 };
+  const left = frame?.left ?? box.x;
 
   useEffect(() => {
     const area = ref.current;
@@ -271,13 +355,24 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
     done.current = true;
     useContentEdit.getState().setEditing(null);
     if (impossible) return;
-    if (editing.mode === 'edit' && editing.lines) {
+    if (editing.mode === 'edit' && (frame || (restyle && Object.keys(restyle).length > 0))) {
+      // Neue Breite oder Gestaltung: Zeile bzw. Absatz neu setzen (bricht in der Breite um)
+      const y = box.y;
+      const change = {
+        ...(frame ? { box: { left: geometry.toPdf(frame.left, y).x, right: geometry.toPdf(frame.left + frame.width, y).x } } : {}),
+        ...(restyle ? { style: restyle } : {}),
+      };
+      const unit = { index: editing.index, members: [editing.index, ...editing.merge], bounds: editing.bounds, ...(editing.lines ? { lines: editing.lines } : {}) };
+      void reflowText(editing.tabId, editing.pageIndex, unit, value, change);
+    } else if (editing.mode === 'edit' && editing.lines) {
       void editParagraph(editing.tabId, editing.pageIndex, editing.lines, value, initial);
     } else if (editing.mode === 'edit') {
       void editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, value, initial);
     } else {
-      const baseline = geometry.toPdf(editing.at.x, editing.at.y + baselineBelowClick(style.size));
-      void addText(editing.tabId, editing.pageIndex, baseline, value);
+      // Text beginnt dort, wo die Eingabe steht (auch nach Ziehen am linken Rand)
+      const baseline = geometry.toPdf(editing.at.x + (left - box.x), editing.at.y + baselineBelowClick(style.size));
+      const width = frame ? frame.width - (2 * EDITOR_INSET_PX) / viewScale : undefined;
+      void addText(editing.tabId, editing.pageIndex, baseline, value, width);
     }
   };
 
@@ -290,6 +385,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node && wrapRef.current?.contains(event.target)) return;
+      if (inToolbar(event.target)) return;
       commitRef.current();
     };
     document.addEventListener('pointerdown', onPointerDown, true);
@@ -303,6 +399,39 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
 
   const paragraph = editing.mode === 'edit' && editing.lines !== undefined;
 
+  // Breite ziehen: Anfasser links und rechts der Eingabe
+  const onHandleDown = (event: ReactPointerEvent<HTMLDivElement>, side: 'left' | 'right') => {
+    const wrap = wrapRef.current;
+    const container = wrap?.offsetParent;
+    if (!wrap || !container || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const pxPerUnit = container.getBoundingClientRect().width / geometry.width;
+    const startX = event.clientX;
+    const startLeft = left;
+    const startWidth = wrap.getBoundingClientRect().width / pxPerUnit;
+    const min = (2 * fontSize) / viewScale;
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    const move = (moveEvent: PointerEvent) => {
+      const dx = (moveEvent.clientX - startX) / pxPerUnit;
+      if (side === 'right') setFrame({ left: startLeft, width: Math.max(min, startWidth + dx) });
+      else {
+        const width = Math.max(min, startWidth - dx);
+        setFrame({ left: startLeft + startWidth - width, width });
+      }
+    };
+    const end = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      ref.current?.focus({ preventScroll: true });
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     event.stopPropagation();
     if (event.key === 'Escape') {
@@ -315,41 +444,52 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
     }
   };
 
-  // Bei kleinem Zoom bleibt die Eingabe lesbar, auch wenn sie dann etwas größer ist als der Text auf der Seite.
-  const fontSize = Math.max(MIN_EDITOR_PX, (editing.mode === 'edit' ? editing.fontSize : style.size) * viewScale);
-  // Neuer Text: Eingabe so legen, dass der Text an der Klickstelle beginnt und die erste Zeile mittig auf ihr liegt
-  const box =
-    editing.mode === 'edit'
-      ? geometry.rectToView(editing.bounds)
-      : { x: editing.at.x - EDITOR_INSET_PX / viewScale, y: editing.at.y - (fontSize * LINE_HEIGHT) / 2 / viewScale - 1 / viewScale, w: 0, h: 0 };
+  const fixedWidth = frame?.width ?? (paragraph ? box.w : null);
   const position = {
-    left: `${(box.x / geometry.width) * 100}%`,
+    left: `${(left / geometry.width) * 100}%`,
     top: `${(box.y / geometry.height) * 100}%`,
-    minWidth: editing.mode === 'edit' ? `${(box.w / geometry.width) * 100}%` : `${12 * fontSize}px`,
-    // Absatz: feste Breite, die Eingabe bricht um wie später der Absatz
-    ...(paragraph ? { width: `${(box.w / geometry.width) * 100}%`, whiteSpace: 'normal' as const } : {}),
+    // Feste Breite (Absatz oder gezogen): die Eingabe bricht um wie später der Text auf der Seite
+    ...(fixedWidth !== null
+      ? { width: `${(fixedWidth / geometry.width) * 100}%`, whiteSpace: 'normal' as const }
+      : { minWidth: editing.mode === 'edit' ? `${(box.w / geometry.width) * 100}%` : `${12 * fontSize}px` }),
   };
+  const textColor = editing.mode === 'new' ? style.color : (restyle?.color ?? editing.color);
+  const family = editing.mode === 'new' ? style.font : (restyle?.font ?? font?.name ?? '');
 
   return (
     <div ref={wrapRef} className={styles.editorWrap} style={position}>
       <textarea
         ref={ref}
-        className={[styles.editor, paragraph ? styles.paragraph : ''].join(' ')}
+        className={[styles.editor, fixedWidth !== null ? styles.paragraph : ''].join(' ')}
         style={{
           fontSize: `${fontSize}px`,
           lineHeight: 1.2,
-          ...lookOf(editing.mode === 'edit' ? (font?.name ?? '') : style.font),
-          color: editing.mode === 'new' ? `rgb(${style.color.r * 255} ${style.color.g * 255} ${style.color.b * 255})` : undefined,
+          ...lookOf(family),
+          color: textColor ? `rgb(${textColor.r * 255} ${textColor.g * 255} ${textColor.b * 255})` : undefined,
         }}
-        rows={editing.mode === 'edit' && !paragraph ? 1 : Math.max(1, value.split('\n').length)}
+        rows={editing.mode === 'edit' && fixedWidth === null ? 1 : Math.max(1, value.split('\n').length)}
         value={value}
         aria-label={t('contentEdit.textInput')}
         onChange={(event) => setValue(event.target.value)}
-        onBlur={commit}
+        onBlur={(event) => {
+          // Größe, Schrift oder Farbe in der Leiste wählen beendet die Eingabe nicht
+          if (!inToolbar(event.relatedTarget)) commit();
+        }}
         onKeyDown={onKeyDown}
         onPointerDown={(event) => event.stopPropagation()}
         data-testid="content-text-editor"
       />
+      {resizable &&
+        (['left', 'right'] as const).map((side) => (
+          <div
+            key={side}
+            className={[styles.editorHandle, side === 'left' ? styles.editorHandleLeft : styles.editorHandleRight].join(' ')}
+            // eslint-disable-next-line react-hooks/refs -- liest Refs erst beim Ziehen, nicht beim Zeichnen
+            onPointerDown={(event) => onHandleDown(event, side)}
+            onMouseDown={(event) => event.preventDefault()}
+            data-testid={`content-editor-width-${side}`}
+          />
+        ))}
       {(impossible || missing) && (
         <p className={styles.warning} role="status" data-testid="content-font-warning">
           {impossible ? t('contentEdit.impossible', { chars: impossible }) : t('contentEdit.substitute', { chars: missing })}

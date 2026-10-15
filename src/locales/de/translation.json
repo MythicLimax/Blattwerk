@@ -779,13 +779,14 @@
     "color": "Farbe für neuen Text",
     "delete": "Auswahl löschen",
     "done": "Fertig",
-    "selectHint": "Doppelklick auf eine Zeile oder einen Absatz ändert den Text (bei Absätzen übernimmt Cmd+Eingabe); Objekte lassen sich ziehen und an den Ecken skalieren.",
+    "selectHint": "Doppelklick ändert den Text, die Anfasser links und rechts die Breite. Größe, Schrift und Farbe gelten für den ausgewählten Text.",
     "textHint": "Auf die Seite klicken, um Text zu schreiben. Cmd+Eingabe übernimmt.",
     "textInput": "Text",
     "substitute": "Die Schrift der Zeile kennt „{{chars}}“ nicht; die Zeile erhält eine ähnliche Standardschrift.",
     "impossible": "Nicht darstellbar: {{chars}}",
     "notAllowed": "Dieses Dokument erlaubt keine Änderungen am Inhalt.",
-    "failed": "Die Änderung konnte nicht ausgeführt werden. Das Dokument wurde nicht verändert."
+    "failed": "Die Änderung konnte nicht ausgeführt werden. Das Dokument wurde nicht verändert.",
+    "originalFont": "Schrift des Textes"
   },
   "security": {
     "title": "Kennwortschutz",

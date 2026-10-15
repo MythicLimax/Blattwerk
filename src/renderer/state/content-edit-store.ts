@@ -2,6 +2,7 @@
 // Die Objekte selbst stehen im Dokument; jede Änderung ergibt einen neuen Dokumentstand (history-store).
 import { create } from 'zustand';
 import type { Point, Rect, Rgb } from '../../shared/annotations';
+import type { EditUnit, ParagraphStyle } from '../../shared/content';
 import type { StampFont } from '../../shared/stamping';
 
 export type ContentTool = 'select' | 'text';
@@ -11,13 +12,15 @@ export interface SelectedObject {
   index: number;
   // alle Objekte der Einheit (bei Text: alle Stücke der Zeile), einschließlich index
   members: number[];
+  // die Einheit selbst (Text, Lage, Gestaltung), für Größe, Schrift und Farbe in der Leiste
+  unit?: EditUnit;
 }
 
 // Texteingabe direkt auf der Seite: neue Zeilen an einer Stelle (at = Klickstelle, Anfang und Mitte der ersten Zeile,
 // in Ansichtskoordinaten) oder eine vorhandene Zeile ändern
 export type TextEditing =
   | { tabId: string; pageIndex: number; mode: 'new'; at: Point }
-  | { tabId: string; pageIndex: number; mode: 'edit'; index: number; merge: number[]; bounds: Rect; text: string; fontSize: number; font?: string; lines?: number[][] };
+  | { tabId: string; pageIndex: number; mode: 'edit'; index: number; merge: number[]; bounds: Rect; text: string; fontSize: number; font?: string; lines?: number[][]; color?: Rgb; style?: ParagraphStyle };
 
 export interface TextStyle {
   font: StampFont;
@@ -32,6 +35,9 @@ interface ContentEditState {
   style: TextStyle;
   // Lage eines Objekts, die gerade übernommen wird (bis zum Neuladen)
   pending: Record<string, { pageIndex: number; index: number; bounds: Rect } | null>;
+  // Nach dem Neusetzen eines Textes: den Text an dieser Stelle wieder auswählen (Positionen ändern sich dabei)
+  reselect: { tabId: string; pageIndex: number; at: Point } | null;
+  setReselect: (reselect: { tabId: string; pageIndex: number; at: Point } | null) => void;
   setTool: (tool: ContentTool) => void;
   select: (tabId: string, selected: SelectedObject | null) => void;
   setEditing: (editing: TextEditing | null) => void;
@@ -46,6 +52,8 @@ export const useContentEdit = create<ContentEditState>((set) => ({
   editing: null,
   style: { font: 'Helvetica', size: 12, color: { r: 0, g: 0, b: 0 } },
   pending: {},
+  reselect: null,
+  setReselect: (reselect) => set({ reselect }),
   setTool: (tool) => set({ tool }),
   select: (tabId, selected) => set((state) => ({ selected: { ...state.selected, [tabId]: selected } })),
   setEditing: (editing) => set({ editing }),

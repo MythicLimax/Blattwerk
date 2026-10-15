@@ -101,6 +101,79 @@ describe('Inhalt bearbeiten', () => {
     ])).toBe('Eine volle Zeile Ende.\nNeuer Gedanke');
   });
 
+  it('Breite ändern: schmaler gibt mehr Zeilen, breiter weniger, alle im neuen Rahmen', async () => {
+    const bytes = await paragraphPdf();
+    const listing = engine.listObjects(bytes, null, [0])[0];
+    const paragraph = editUnits(listing?.objects ?? [], listing?.fonts).find((unit) => unit.text?.startsWith('Dies ist'));
+    if (!paragraph?.lines) throw new Error('kein Absatz');
+    const [left] = paragraph.bounds;
+    const font = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+    const linesOf = async (output: Uint8Array) => (await items(output)).filter((item) => (item.transform[5] ?? 0) > 220 && (item.transform[4] ?? 0) > 40);
+    const narrow = run(bytes, [{ type: 'editParagraph', pageIndex: 0, lines: paragraph.lines, text: paragraph.text ?? '', box: { left, right: left + 90 } }]);
+    const narrowLines = await linesOf(narrow);
+    expect(narrowLines.length).toBeGreaterThan(3);
+    for (const item of narrowLines) expect((item.transform[4] ?? 0) + font.widthOfTextAtSize(item.str, 10)).toBeLessThanOrEqual(left + 91);
+    expect(narrowLines.map((item) => item.str).join(' ')).toBe(paragraph.text);
+    const wide = run(bytes, [{ type: 'editParagraph', pageIndex: 0, lines: paragraph.lines, text: paragraph.text ?? '', box: { left: left + 20, right: 380 } }]);
+    const wideLines = await linesOf(wide);
+    expect(wideLines).toHaveLength(2);
+    expect(wideLines.map((item) => Math.round(item.transform[4] ?? 0))).toEqual([70, 70]);
+    // Erste Zeile bleibt oben
+    expect(Math.round(wideLines[0]?.transform[5] ?? 0)).toBe(300);
+  });
+
+  it('Größe, Schrift und Farbe eines Absatzes ändern; die Oberkante bleibt', async () => {
+    const bytes = await paragraphPdf();
+    const listing = engine.listObjects(bytes, null, [0])[0];
+    const paragraph = editUnits(listing?.objects ?? [], listing?.fonts).find((unit) => unit.text?.startsWith('Dies ist'));
+    if (!paragraph?.lines) throw new Error('kein Absatz');
+    const output = run(bytes, [
+      { type: 'editParagraph', pageIndex: 0, lines: paragraph.lines, text: paragraph.text ?? '', style: { size: 14, font: 'TimesRoman', color: { r: 1, g: 0, b: 0 } } },
+    ]);
+    const after = engine.listObjects(output, null, [0])[0];
+    const units = editUnits(after?.objects ?? [], after?.fonts);
+    const changed = units.find((unit) => unit.text?.startsWith('Dies ist'));
+    expect(changed?.visualSize).toBeCloseTo(14, 1);
+    expect(after?.fonts[changed?.font ?? '']?.name).toMatch(/Times/);
+    expect(changed?.color).toEqual({ r: 1, g: 0, b: 0 });
+    // Oberkante etwa gleich (Toleranz für die Oberlänge der neuen Schrift)
+    expect(Math.abs((changed?.bounds[3] ?? 0) - paragraph.bounds[3])).toBeLessThan(2.5);
+    expect(units.map((unit) => unit.text)).toContain('1.');
+  });
+
+  it('selbst gesetzte Texte bleiben ein Textfeld mit Breite und eigenen Umbrüchen, auch sehr schmal', async () => {
+    const text = 'Erster Absatz mit einigen Wörtern zum Umbrechen.\n\nZweiter Absatz nach einer Leerzeile.';
+    const added = run(textPdf(), [
+      { type: 'addText', pageIndex: 0, origin: { x: 300, y: 200 }, lines: text.split('\n'), font: 'Helvetica', size: 10, color: { r: 0, g: 0, b: 0 }, width: 60 },
+    ]);
+    const unitOf = (bytes: Uint8Array) => {
+      const listing = engine.listObjects(bytes, null, [0])[0];
+      return editUnits(listing?.objects ?? [], listing?.fonts).find((unit) => unit.text?.startsWith('Erster'));
+    };
+    const unit = unitOf(added);
+    expect(unit?.text).toBe(text);
+    expect(unit?.lines?.length).toBeGreaterThan(5);
+    // Das Feld zeigt die gewählte Breite, nicht nur die längste Zeile
+    expect((unit?.bounds[2] ?? 0) - (unit?.bounds[0] ?? 0)).toBeGreaterThanOrEqual(59);
+    // Breiter ziehen: weniger Zeilen, Text und Umbrüche bleiben
+    const wide = run(added, [{ type: 'editParagraph', pageIndex: 0, lines: unit?.lines ?? [], text: unit?.text ?? '', box: { left: 300, right: 560 } }]);
+    const widened = unitOf(wide);
+    expect(widened?.text).toBe(text);
+    expect(widened?.lines).toHaveLength(2);
+    // Unverändert gespeichert behält er die Breite (kein Zurückspringen)
+    const again = run(wide, [{ type: 'editParagraph', pageIndex: 0, lines: widened?.lines ?? [], text: widened?.text ?? '' }]);
+    expect(unitOf(again)?.lines).toHaveLength(2);
+  });
+
+  it('neuer Text bricht in der gewählten Breite um', async () => {
+    const output = run(textPdf(), [
+      { type: 'addText', pageIndex: 0, origin: { x: 100, y: 200 }, lines: ['Ein neuer Text, der in einem schmalen Feld umbrechen soll.'], font: 'Helvetica', size: 12, color: { r: 0, g: 0, b: 0 }, width: 120 },
+    ]);
+    const list = (await items(output)).filter((item) => Math.round(item.transform[4] ?? 0) === 100 && (item.transform[5] ?? 0) <= 200 && (item.transform[5] ?? 0) > 120);
+    expect(list.length).toBeGreaterThan(2);
+    expect(list.map((item) => item.str).join(' ')).toBe('Ein neuer Text, der in einem schmalen Feld umbrechen soll.');
+  });
+
   it('bricht einen geänderten Absatz in seiner Breite neu um', async () => {
     const bytes = await paragraphPdf();
     const listing = engine.listObjects(bytes, null, [0])[0];

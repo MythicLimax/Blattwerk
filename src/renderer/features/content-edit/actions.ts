@@ -1,7 +1,7 @@
 // Modus „Inhalt bearbeiten“ (Phase 5): ein- und ausschalten, Text und Bilder einfügen, Objekte ändern.
 // Jede Änderung ist eine Inhaltsoperation und damit ein neuer Dokumentstand (Rückgängig wie bei Seiten).
 import type { Point, Rect } from '../../../shared/annotations';
-import { LINE_HEIGHT, type ContentOperation, type Matrix } from '../../../shared/content';
+import { LINE_HEIGHT, type ContentOperation, type EditUnit, type Matrix, type ParagraphStyle } from '../../../shared/content';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { applyContentOperations, commitPendingEdits } from '../../engine/session';
 import { t } from '../../i18n';
@@ -43,11 +43,12 @@ function run(tabId: string, operation: ContentOperation | ContentOperation[]): P
 }
 
 // Neuer Text: at ist die linke obere Ecke der ersten Zeile in PDF-Punkten; baseline die erste Grundlinie
-export async function addText(tabId: string, pageIndex: number, baseline: Point, value: string): Promise<boolean> {
+// width: Breite (Punkt), in der der Text umbricht; ohne Angabe nur an Zeilenumbrüchen
+export async function addText(tabId: string, pageIndex: number, baseline: Point, value: string, width?: number): Promise<boolean> {
   const lines = value.replace(/\s+$/, '').split('\n');
   if (lines.every((line) => line.trim() === '')) return false;
   const { style } = useContentEdit.getState();
-  return run(tabId, { type: 'addText', pageIndex, origin: baseline, lines, font: style.font, size: style.size, color: style.color });
+  return run(tabId, { type: 'addText', pageIndex, origin: baseline, lines, font: style.font, size: style.size, color: style.color, ...(width ? { width } : {}) });
 }
 
 // merge: weitere Stücke derselben Zeile (siehe lineOf), die im ersten aufgehen
@@ -66,6 +67,39 @@ export async function editParagraph(tabId: string, pageIndex: number, lines: num
   if (text === before) return false;
   if (text.trim() === '') return run(tabId, { type: 'delete', pageIndex, indices: lines.flat() });
   return run(tabId, { type: 'editParagraph', pageIndex, lines, text });
+}
+
+// Zeile oder Absatz neu setzen: andere Breite (box, Seitenkoordinaten der sichtbaren Ränder), Größe, Schrift oder
+// Farbe. Der Text bricht dabei in der Breite neu um.
+export async function reflowText(
+  tabId: string,
+  pageIndex: number,
+  unit: Pick<EditUnit, 'index' | 'members' | 'lines' | 'bounds'>,
+  text: string,
+  change: { box?: { left: number; right: number }; style?: ParagraphStyle; bounds?: Rect },
+): Promise<boolean> {
+  const value = text.replace(/\r/g, '').replace(/[ \t]+$/gm, '');
+  if (value.trim() === '') return run(tabId, { type: 'delete', pageIndex, indices: unit.members });
+  const store = useContentEdit.getState();
+  if (change.bounds) store.setPending(tabId, { pageIndex, index: unit.index, bounds: change.bounds });
+  // Die bisherige Auswahl gilt nicht mehr (Objekte und Text ändern sich). Nach dem Neuladen wird der Text an seiner
+  // linken oberen Ecke wieder ausgewählt.
+  store.select(tabId, null);
+  const [left, , , top] = change.bounds ?? unit.bounds;
+  try {
+    const done = await run(tabId, {
+      type: 'editParagraph',
+      pageIndex,
+      lines: unit.lines ?? [unit.members],
+      text: value,
+      ...(change.box ? { box: change.box } : {}),
+      ...(change.style ? { style: change.style } : {}),
+    });
+    if (done) store.setReselect({ tabId, pageIndex, at: { x: left + 1, y: top - 1 } });
+    return done;
+  } finally {
+    if (change.bounds) store.setPending(tabId, null);
+  }
 }
 
 // members: alle Objekte der Einheit (index ist ihr Anker)

@@ -25,6 +25,15 @@ export interface PageObjectInfo {
   upright?: boolean;
   // Höhe der Grundlinie (nur bei upright)
   baseline?: number;
+  // Von Blattwerk gesetzter Text (Kennzeichnung im PDF)
+  mark?: TextMark;
+}
+
+// Kennzeichnung gesetzter Texte: p = Absatz, w = Breite (Punkt, vom Zeilenanfang), h = Zeile endet mit hartem Umbruch
+export interface TextMark {
+  p: number;
+  w?: number;
+  h?: boolean;
 }
 
 export interface PageFontInfo {
@@ -47,7 +56,8 @@ export type Matrix = [number, number, number, number, number, number];
 
 export type ContentOperation =
   // Neuer Text, erste Grundlinie bei origin; jede Zeile ein eigenes Textobjekt. Aufrecht zur Anzeige der Seite.
-  | { type: 'addText'; pageIndex: number; origin: Point; lines: string[]; font: StampFont; size: number; color: Rgb }
+  // width: Breite (Punkt), in der die Zeilen umbrechen; ohne Angabe nur an harten Umbrüchen.
+  | { type: 'addText'; pageIndex: number; origin: Point; lines: string[]; font: StampFont; size: number; color: Rgb; width?: number }
   | { type: 'addImage'; pageIndex: number; rect: Rect; image: ImageSource }
   // Zusätzliche Abbildung (Verschieben, Skalieren) auf ein vorhandenes Objekt
   | { type: 'transform'; pageIndex: number; index: number; matrix: Matrix }
@@ -57,7 +67,22 @@ export type ContentOperation =
   | { type: 'editText'; pageIndex: number; index: number; text: string; merge?: number[] }
   // Absatz neu setzen: lines = Stücke je bisheriger Zeile (Anker zuerst), text mit harten Zeilenumbrüchen (\n). Der
   // Worker bricht mit den echten Zeichenbreiten in der Breite des Absatzes um.
-  | { type: 'editParagraph'; pageIndex: number; lines: number[][]; text: string };
+  | {
+      type: 'editParagraph';
+      pageIndex: number;
+      lines: number[][];
+      text: string;
+      // Neue Ränder (Seitenkoordinaten der sichtbaren Kanten); der Text bricht in dieser Breite um
+      box?: { left: number; right: number };
+      style?: ParagraphStyle;
+    };
+
+// Neue Gestaltung eines Absatzes oder einer Zeile (Größe in Punkt, wie sie auf der Seite erscheint)
+export interface ParagraphStyle {
+  size?: number;
+  font?: StampFont;
+  color?: Rgb;
+}
 
 // Höchstens so viele Objekte je Seite werden zum Bearbeiten angeboten
 export const MAX_PAGE_OBJECTS = 3000;
@@ -165,7 +190,7 @@ export type EditUnit = PageObjectInfo & { members: number[]; lines?: number[][] 
 
 export function editUnits(objects: PageObjectInfo[], fonts?: Record<string, PageFontInfo>): EditUnit[] {
   const assigned = new Set<number>();
-  const units: EditUnit[] = [];
+  const units: EditUnit[] = markedUnits(objects, assigned);
   for (const object of objects) {
     if (assigned.has(object.index)) continue;
     if (object.kind !== 'text') {
@@ -180,6 +205,56 @@ export function editUnits(objects: PageObjectInfo[], fonts?: Record<string, Page
   return groupParagraphs(units, fonts);
 }
 
+// Von Blattwerk gesetzte Texte (Kennzeichnung im PDF): Stücke mit derselben Absatzkennzahl bilden eine Einheit,
+// unabhängig von Breite und Abständen. Zeilen nach Grundlinie, harte Umbrüche und Leerzeilen aus der Kennzeichnung.
+function markedUnits(objects: PageObjectInfo[], assigned: Set<number>): EditUnit[] {
+  const groups = new Map<number, PageObjectInfo[]>();
+  for (const object of objects) {
+    if (object.kind !== 'text' || !object.mark || !object.upright || object.baseline === undefined) continue;
+    const group = groups.get(object.mark.p) ?? [];
+    group.push(object);
+    groups.set(object.mark.p, group);
+  }
+  const units: EditUnit[] = [];
+  for (const pieces of groups.values()) {
+    const size = sizeOf(pieces[0] as PageObjectInfo) || 12;
+    const sorted = [...pieces].sort((a, b) => (b.baseline ?? 0) - (a.baseline ?? 0) || a.bounds[0] - b.bounds[0]);
+    const lines: PageObjectInfo[][] = [];
+    for (const piece of sorted) {
+      const line = lines[lines.length - 1];
+      const head = line?.[0];
+      if (line && head && Math.abs((head.baseline ?? 0) - (piece.baseline ?? 0)) < size * 0.3) line.push(piece);
+      else lines.push([piece]);
+    }
+    for (const line of lines) line.sort((a, b) => a.bounds[0] - b.bounds[0]);
+    const step = size * LINE_HEIGHT;
+    let text = '';
+    lines.forEach((line, i) => {
+      text += lineText(line);
+      const next = lines[i + 1];
+      if (!next) return;
+      const hard = line.some((piece) => piece.mark?.h);
+      // Leerzeilen zwischen Absätzen haben kein eigenes Objekt: aus dem Abstand der Grundlinien
+      const skipped = Math.max(0, Math.round(((line[0]?.baseline ?? 0) - (next[0]?.baseline ?? 0)) / step) - 1);
+      text += hard ? '\n'.repeat(1 + skipped) : ' ';
+    });
+    const all = lines.flat();
+    for (const piece of all) assigned.add(piece.index);
+    const [anchor] = lines[0] as [PageObjectInfo];
+    const bounds = unionBounds(all);
+    const width = anchor.mark?.w;
+    if (width) bounds[2] = Math.max(bounds[2], Math.min(...lines.map((line) => line[0]?.bounds[0] ?? Infinity)) + width);
+    units.push({
+      ...anchor,
+      bounds,
+      text,
+      members: all.map((piece) => piece.index),
+      ...(lines.length > 1 ? { lines: lines.map((line) => line.map((piece) => piece.index)) } : {}),
+    });
+  }
+  return units;
+}
+
 // Zeilen, die direkt untereinander stehen, links bündig sind (die erste darf eingerückt sein), gleich aussehen und
 // gleichmäßigen Abstand haben, bilden einen Absatz. Zeilen mit weiteren Textstücken daneben (anders formatiertes
 // Wort, zweite Spalte) und gedrehter Text bleiben einzelne Zeilen.
@@ -190,8 +265,8 @@ function sameStyle(a: PageObjectInfo, b: PageObjectInfo, fonts: Fonts): boolean 
 
 function groupParagraphs(units: EditUnit[], fonts: Fonts): EditUnit[] {
   const texts = units.filter((unit) => unit.kind === 'text');
-  // Nur Textspalten: Sehr schmale Blöcke (Adressen, Tabellenzellen) bleiben einzelne Zeilen, dort sind Umbrüche fast
-  // immer gewollt
+  // Nur Textspalten (mindestens acht Schriftgrößen breit): Sehr schmale Blöcke (Adressen, Tabellenzellen) bleiben
+  // einzelne Zeilen, dort sind Umbrüche fast immer gewollt
   const lines = texts.filter((unit) => unit.upright === true && unit.baseline !== undefined && sizeOf(unit) > 0).sort((a, b) => b.bounds[3] - a.bounds[3]);
   // Weitere Textstücke in derselben Zeile innerhalb der Breite [left, right]? Links davor (Nummer, Aufzählungszeichen)
   // stört nicht.
@@ -230,7 +305,7 @@ function groupParagraphs(units: EditUnit[], fonts: Fonts): EditUnit[] {
       left = Math.min(left, next.bounds[0]);
       right = Math.max(right, next.bounds[2]);
     }
-    if (paragraph.length < 2 || right - left < size * 12) continue;
+    if (paragraph.length < 2 || right - left < size * 8) continue;
     for (const line of paragraph) used.add(line);
     paragraphs.push(paragraph);
   }
