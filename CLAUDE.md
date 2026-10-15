@@ -26,6 +26,7 @@ Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001
 
 ## Arbeitsweise (verbindlich)
 
+- **Testumfang (Auftraggeber, 2026-10-15):** Kleine Änderungen nur gezielt testen (neue und betroffene Oberflächentests mit `-g`, dazu Typprüfung, Lint, `npm test`). Die komplette E2E-Suite vor jeder neuen `.dmg`/Version und nach größeren Umbauten.
 - Strikt Phase für Phase. **Fertig** heißt: App startet, alle Features der Phase funktionieren, `npm test` und E2E-Tests sind grün, Git-Commit existiert.
 - Nach jeder Phase: Bericht in `docs/phasen/phase-N.md` (was geht, was nicht, bekannte Bugs). Ab Phase 2 ohne Warten weiter (siehe oben).
 - Ist ein Feature nicht sauber machbar: sagen und eine Alternative vorschlagen. Nichts halbgar bauen.
@@ -78,6 +79,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **PDF/A** ([ADR 0017](docs/entscheidungen/0017-pdfa.md)): `pdfa.ts` (umwandeln, prüfen), `cff.ts` (Breiten aus CFF), `icc.ts` (sRGB-Profil), `font-tables.ts`; Standardschriften aus PDFium (`standardFontProgram`). Immer neue Datei. Oberfläche `features/pdfa/`.
 - **Barrierefreiheit** ([ADR 0018](docs/entscheidungen/0018-barrierefreiheit.md)): `accessibility.ts` (Tags lesen, prüfen, Sprache/Titel/Tab-Reihenfolge setzen); Seitenleiste „Tags“ und Prüfdialog in `features/accessibility/`, Ergebnis je Stand in `report.ts`.
 - **Textdokumente → PDF** ([ADR 0019](docs/entscheidungen/0019-textdokumente-umwandeln.md)): im Hauptprozess, `src/main/convert/` (eigene Leser für DOCX, ODT, RTF, Text, Markdown → `model.ts` → `html.ts`; `pdf.ts` setzt mit `printToPDF` in einem unsichtbaren Fenster mit eigener Sitzung ohne Netz und ohne JavaScript). IPC `convert:pick`, `convert:dropped`; abgelegte Textdokumente erkennt `isDocumentFileName` (`src/shared/convert.ts`).
+- **Leeres Dokument** („Unbenannt“, ⌘N, Startseite): `src/main/files/blank-document.ts` legt eine A4-Seite im temporären Ordner an (wird beim Beenden gelöscht, nicht in „Zuletzt geöffnet“). `TabState.untitled`: Sichern wird zu Sichern unter (Vorschlag im Ordner Dokumente); danach normales Dokument. Öffnet gleich im Modus „Text und Bilder bearbeiten“.
 - Es ist immer höchstens ein Bearbeitungsmodus aktiv (Kommentieren, Schwärzen, Formular bearbeiten, Inhalt bearbeiten, Seiten organisieren).
 - Dieses Verfahren (Snapshot der Dokumentbytes) gilt für Seiten-, Feld-, Wasserzeichen- und Inhaltsänderungen sowie für das Schwärzen. Nach dem Speichern beginnt der Verlauf neu.
 

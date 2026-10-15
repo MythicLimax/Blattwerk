@@ -12,6 +12,7 @@ export interface Shortcut {
 
 export const SHORTCUTS: Partial<Record<CommandId, Shortcut>> = {
   'file.open': { accelerator: 'CmdOrCtrl+O' },
+  'file.newBlank': { accelerator: 'CmdOrCtrl+N' },
   'file.close': { accelerator: 'CmdOrCtrl+W' },
   'file.save': { accelerator: 'CmdOrCtrl+S' },
   'file.saveAs': { accelerator: 'Shift+CmdOrCtrl+S' },

@@ -46,6 +46,8 @@ export interface BlattwerkApi {
   // Quelldateien (PDFs, Bilder) wählen bzw. per Drag & Drop anmelden; gelesen wird danach über readRange.
   pickFiles(kind: PickKind): Promise<PickResult>;
   registerDroppedFile(file: File): Promise<OpenResult>;
+  // Neues leeres Dokument (eine A4-Seite, unbenannt) anlegen und öffnen
+  newBlankDocument(): Promise<OpenResult>;
   // Neues Dokument über den Sichern-Dialog speichern, auf Wunsch danach im Tab öffnen
   saveNewFile(bytes: Uint8Array, suggestedName: string, referenceFileId: string | null, openAfter: boolean): Promise<SaveNewResult>;
   saveFilesToFolder(files: NamedBytes[], referenceFileId: string | null): Promise<SaveToFolderResult>;

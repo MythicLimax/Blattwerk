@@ -24,6 +24,8 @@ export const IPC = {
   registerDropped: 'files:register-dropped',
   saveNewFile: 'files:save-new',
   saveToFolder: 'files:save-to-folder',
+  // Neues leeres Dokument (eine A4-Seite), sofort im Tab geöffnet
+  newBlank: 'files:new-blank',
   // Phase 4: gespeicherte Unterschriften
   signaturesList: 'signatures:list',
   signaturesAdd: 'signatures:add',
@@ -63,6 +65,8 @@ export interface FileInfo {
   size: number;
   // Art der Datei (nur Quelldateien zum Einfügen und Zusammenführen können Bilder sein)
   kind?: FileKind;
+  // Neues leeres Dokument ohne festen Ort: „Sichern“ fragt nach Ort und Namen
+  untitled?: boolean;
 }
 
 // Welche Dateien ein Auswahldialog anbietet

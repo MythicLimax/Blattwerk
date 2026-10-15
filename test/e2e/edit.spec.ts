@@ -570,3 +570,37 @@ test.describe('Mehrfachauswahl', () => {
     await close();
   });
 });
+
+test.describe('Leeres Dokument', () => {
+  test('auf der Startseite anlegen, beschreiben, Sichern fragt nach Ort und Namen', async () => {
+    const dir = tempDir();
+    const target = path.join(dir, 'Notiz.pdf');
+    const { page, app, close } = await launchApp([], { userData: dir });
+    await app.evaluate(({ dialog }, file) => {
+      dialog.showSaveDialog = (async () => ({ canceled: false, filePath: file })) as typeof dialog.showSaveDialog;
+    }, target);
+    await page.getByTestId('start-blank').click();
+    await waitForDocument(page, 1);
+    await expect(page.getByTestId('tab')).toContainText('Unbenannt');
+    // Gleich im Modus „Text und Bilder bearbeiten“
+    await expect(page.getByTestId('content-edit-toolbar')).toBeVisible();
+    await page.getByTestId('content-tool-text').click();
+    const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
+    if (!overlay) throw new Error('keine Ebene');
+    await page.mouse.click(overlay.x + overlay.width * 0.3, overlay.y + 120);
+    await expect(page.getByTestId('content-text-editor')).toBeVisible();
+    await page.keyboard.type('Erste Zeile im neuen Dokument');
+    await page.keyboard.press('Meta+Enter');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+    // Sichern (nicht „Sichern unter“): fragt trotzdem nach dem Ort
+    await menuClick(app, 'file.save');
+    await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+    await expect(page.getByTestId('tab')).toContainText('Notiz.pdf');
+    const [text] = await pageTexts(target);
+    expect(text).toContain('Erste Zeile im neuen Dokument');
+    if (process.platform === 'darwin') expect(inspectWithPdfKit(target).ok).toBe(true);
+    // Danach normales Dokument: Sichern schreibt ohne Rückfrage in dieselbe Datei
+    await waitForDocument(page, 1);
+    await close();
+  });
+});

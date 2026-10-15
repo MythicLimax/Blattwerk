@@ -54,6 +54,8 @@ export interface TabState {
   ownerAccess: boolean;
   // Geprüfte digitale Signaturen (Phase 7); null = keine oder noch nicht geprüft
   signatures: SignatureCheck[] | null;
+  // Neues leeres Dokument ohne festen Ort („Unbenannt“): Sichern fragt nach Ort und Namen
+  untitled: boolean;
   // Modus „Inhalt bearbeiten“ (Phase 5): Text und Bilder der Seite
   contentEditing: boolean;
   // Modus „Formular bearbeiten“: Felder anlegen, verschieben, ändern, löschen (statt ausfüllen)
@@ -83,7 +85,7 @@ export const EMPTY_SEARCH: SearchState = {
 interface DocumentsState {
   tabs: TabState[];
   activeId: string | null;
-  addTab: (tab: Pick<TabState, 'id' | 'fileId' | 'name' | 'dir' | 'size'>) => void;
+  addTab: (tab: Pick<TabState, 'id' | 'fileId' | 'name' | 'dir' | 'size'> & { untitled?: boolean }) => void;
   updateTab: (id: string, patch: Partial<TabState>) => void;
   updateSearch: (id: string, patch: Partial<SearchState>) => void;
   removeTab: (id: string) => void;
@@ -120,6 +122,7 @@ export const useDocuments = create<DocumentsState>((set) => ({
           canModify: true,
           ownerAccess: true,
           signatures: null,
+          untitled: tab.untitled === true,
           contentEditing: false,
           formEditing: false,
           saving: false,

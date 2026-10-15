@@ -29,7 +29,8 @@
       "export": "Exportieren",
       "exportImages": "Als Bilder …",
       "exportText": "Als Text …",
-      "fromDocument": "PDF aus Textdokument erstellen …"
+      "fromDocument": "PDF aus Textdokument erstellen …",
+      "newBlank": "Neues leeres Dokument"
     },
     "edit": {
       "title": "Bearbeiten",
@@ -236,6 +237,10 @@
       "fromDocument": {
         "title": "PDF aus Textdokument",
         "detail": "Word, OpenDocument, RTF, Text, Markdown"
+      },
+      "blank": {
+        "title": "Leeres Dokument",
+        "detail": "Eine leere A4-Seite zum Beschreiben"
       }
     },
     "legend": "Jede Farbe steht für einen Arbeitsbereich",
@@ -1172,5 +1177,8 @@
       "unreadable": "Die Datei ließ sich nicht lesen.",
       "failed": "Das Dokument ließ sich nicht in PDF umwandeln."
     }
+  },
+  "files": {
+    "untitled": "Unbenannt"
   }
 }

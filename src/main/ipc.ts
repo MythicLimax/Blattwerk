@@ -40,6 +40,7 @@ import {
   validateNamedPdfs,
 } from '../shared/validate';
 import { atomicWrite } from './files/atomic-write';
+import { createBlankDocument, isBlankDocumentPath } from './files/blank-document';
 import { DOCUMENT_EXTENSIONS } from '../shared/convert';
 import { ConvertError, MAX_DOCUMENT_BYTES, detectAndConvert } from './convert';
 import { htmlToPdf } from './convert/pdf';
@@ -60,7 +61,7 @@ export interface IpcContext {
   onRendererReady: (win: BrowserWindow) => void;
   onRecentChanged: () => void;
   clearRecent: () => Promise<RecentFile[]>;
-  openPathFor: (win: BrowserWindow, filePath: string) => Promise<OpenResult>;
+  openPathFor: (win: BrowserWindow, filePath: string, options?: { recent?: boolean }) => Promise<OpenResult>;
   // Nach erfolgreichem Speichern unter neuem Namen (Zuletzt-Liste, Menü)
   onSavedAs: (filePath: string) => Promise<void>;
   getSettings: () => AppSettings;
@@ -218,7 +219,8 @@ export function registerIpc(ctx: IpcContext): void {
     if (!current) return { ok: false, error: 'unknown-file' };
     const result = await dialog.showSaveDialog(win, {
       title: t('dialog.saveAsTitle'),
-      defaultPath: current,
+      // Unbenanntes Dokument: im Ordner „Dokumente“ vorschlagen, nicht im temporären Ordner
+      defaultPath: isBlankDocumentPath(current) ? path.join(app.getPath('documents'), path.basename(current)) : current,
       filters: [{ name: t('dialog.filterPdf'), extensions: ['pdf'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     });
@@ -290,6 +292,14 @@ export function registerIpc(ctx: IpcContext): void {
 
   // Mehrere neue Dokumente in einen gewählten Ordner (Teilen, Extrahieren als einzelne Dateien).
   // Vorhandene Dateien werden nie überschrieben; bei gleichem Namen kommt eine Nummer dazu.
+  handle(IPC.newBlank, async (event): Promise<OpenResult> => {
+    const win = windowOf(event);
+    if (!win) return { ok: false, error: 'unreadable' };
+    const file = await createBlankDocument(t('files.untitled'));
+    const result = await ctx.openPathFor(win, file, { recent: false });
+    return result.ok ? { ...result, file: { ...result.file, untitled: true } } : result;
+  });
+
   handle(IPC.saveToFolder, async (event, files: unknown, referenceFileId: unknown): Promise<SaveToFolderResult> => {
     const win = windowOf(event);
     const valid = validateNamedPdfs(files);

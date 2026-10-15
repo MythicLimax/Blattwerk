@@ -16,6 +16,7 @@ import { applyMenu } from './menu';
 import { handleAppScheme, registerAppScheme } from './protocol';
 import { hardenSession, hardenWebContents, isTrustedAppUrl } from './security';
 import { createMainWindow, createSettingsStore, type SettingsData, type WindowState } from './window';
+import { removeBlankDocuments } from './files/blank-document';
 import { attachNativeGlass, describeNativeGlass, nativeGlassAvailable } from './native-glass';
 
 // Testschalter wirken nur beim Entwickeln, nie in der installierten App.
@@ -143,9 +144,9 @@ function sendOpenResult(win: BrowserWindow | null, result: OpenResult): void {
   if (win && !win.isDestroyed()) win.webContents.send(IPC.fileOpened, result);
 }
 
-async function openPathFor(win: BrowserWindow, filePath: string): Promise<OpenResult> {
+async function openPathFor(win: BrowserWindow, filePath: string, options: { recent?: boolean } = {}): Promise<OpenResult> {
   const result = await files.open(filePath, win.webContents.id);
-  if (result.ok) {
+  if (result.ok && options.recent !== false) {
     try {
       await recent.add(filePath);
     } catch (error) {
@@ -301,6 +302,8 @@ async function createWindow(): Promise<BrowserWindow> {
 }
 
 app.on('web-contents-created', (_event, contents) => hardenWebContents(contents, devServerOrigin));
+
+app.on('will-quit', () => removeBlankDocuments());
 
 app.on('before-quit', () => {
   quitting = true;

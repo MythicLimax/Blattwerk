@@ -172,10 +172,18 @@ export async function handleOpenResult(result: OpenResult): Promise<void> {
   }
 
   const tabId = crypto.randomUUID();
-  documents.addTab({ id: tabId, fileId: file.fileId, name: file.name, dir: file.dir, size: file.size });
+  documents.addTab({ id: tabId, fileId: file.fileId, name: file.name, dir: file.dir, size: file.size, untitled: file.untitled === true });
   useAnnotations.getState().init(tabId);
   useHistory.getState().reset(tabId);
   await loadIntoTab(tabId, file, null);
+}
+
+// Neues leeres Dokument: eine A4-Seite, sofort im Modus „Text und Bilder bearbeiten“
+export async function createBlankDocument(): Promise<void> {
+  const result = await api.newBlankDocument();
+  await handleOpenResult(result);
+  const tab = getActiveTab();
+  if (result.ok && tab?.untitled && tab.status === 'ready' && tab.canModify && !tab.contentEditing) toggleContentEditing(tab);
 }
 
 export function submitPassword(tabId: string, password: string): void {
@@ -275,6 +283,7 @@ async function reloadTab(tabId: string, file: FileInfo): Promise<void> {
     name: file.name,
     dir: file.dir,
     size: file.size,
+    untitled: file.untitled === true,
     status: 'loading',
     search: EMPTY_SEARCH,
   });
@@ -289,6 +298,8 @@ export async function saveTab(tabId: string, mode: 'save' | 'saveAs'): Promise<b
   const runtime = getRuntime(tabId);
   const annotations = tabAnnotations(tabId);
   if (!tab || tab.status !== 'ready' || !runtime?.pdf || !annotations || tab.saving || tab.working) return false;
+  // Unbenanntes neues Dokument: Sichern fragt immer nach Ort und Namen
+  if (tab.untitled) mode = 'saveAs';
   const changes = computeChanges(annotations.items, annotations.originals);
   const forms = await currentFormChanges(tabId);
   // Nichts zu schreiben: keine Kommentar- oder Formularänderungen und der angezeigte Stand ist die Datei
@@ -926,6 +937,10 @@ export function executeCommand(command: CommandId): void {
   if (command === 'forms.edit') {
     const active = getActiveTab();
     if (active) toggleFormEditing(active);
+    return;
+  }
+  if (command === 'file.newBlank') {
+    void createBlankDocument();
     return;
   }
   if (command === 'content.edit') {

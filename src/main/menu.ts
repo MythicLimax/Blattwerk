@@ -73,6 +73,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       },
       { label: t('menu.file.openRecent'), submenu: recentItems },
       { type: 'separator' },
+      cmd('file.newBlank', t('menu.file.newBlank')),
       cmd('file.combine', t('menu.file.combine')),
       cmd('file.fromImages', t('menu.file.fromImages')),
       cmd('file.fromDocument', t('menu.file.fromDocument')),

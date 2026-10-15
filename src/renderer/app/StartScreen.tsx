@@ -1,4 +1,4 @@
-import { ChevronRight, Combine, FileText, FileType2, FolderOpen, Images, X, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Combine, FilePlus2, FileText, FileType2, FolderOpen, Images, X, type LucideIcon } from 'lucide-react';
 import appIcon from '../../../resources/icon.svg?url';
 import { useTranslation } from 'react-i18next';
 import type { CommandId } from '../../shared/commands';
@@ -12,8 +12,9 @@ const dateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeS
 
 // Neue Dokumente: je Kachel Befehl, Symbol und Farbe des Arbeitsbereichs
 const CREATE: Array<{ command: CommandId; key: string; icon: LucideIcon; tone: Tone }> = [
+  { command: 'file.newBlank', key: 'blank', icon: FilePlus2, tone: 'edit' },
   { command: 'file.combine', key: 'combine', icon: Combine, tone: 'pages' },
-  { command: 'file.fromImages', key: 'fromImages', icon: Images, tone: 'edit' },
+  { command: 'file.fromImages', key: 'fromImages', icon: Images, tone: 'sign' },
   { command: 'file.fromDocument', key: 'fromDocument', icon: FileType2, tone: 'forms' },
 ];
 
