@@ -81,7 +81,7 @@ export async function reflowText(
   const value = text.replace(/\r/g, '').replace(/[ \t]+$/gm, '');
   if (value.trim() === '') return run(tabId, { type: 'delete', pageIndex, indices: unit.members });
   const store = useContentEdit.getState();
-  if (change.bounds) store.setPending(tabId, { pageIndex, index: unit.index, bounds: change.bounds });
+  if (change.bounds) store.setPending(tabId, { pageIndex, bounds: { [unit.index]: change.bounds } });
   // Die bisherige Auswahl gilt nicht mehr (Objekte und Text ändern sich). Nach dem Neuladen wird der Text an seiner
   // linken oberen Ecke wieder ausgewählt.
   store.select(tabId, null);
@@ -102,12 +102,13 @@ export async function reflowText(
   }
 }
 
-// members: alle Objekte der Einheit (index ist ihr Anker)
-export async function transformObject(tabId: string, pageIndex: number, index: number, members: number[], matrix: Matrix, bounds: Rect): Promise<void> {
+// Eine oder mehrere Einheiten verschieben oder skalieren (dieselbe Abbildung für alle). units: Anker, alle Objekte und
+// neue Lage je Einheit (für die Anzeige bis zum Neuladen)
+export async function transformObjects(tabId: string, pageIndex: number, units: Array<{ index: number; members: number[]; bounds: Rect }>, matrix: Matrix): Promise<void> {
   const store = useContentEdit.getState();
-  store.setPending(tabId, { pageIndex, index, bounds });
+  store.setPending(tabId, { pageIndex, bounds: Object.fromEntries(units.map((unit) => [unit.index, unit.bounds])) });
   try {
-    await run(tabId, members.map((member) => ({ type: 'transform' as const, pageIndex, index: member, matrix })));
+    await run(tabId, units.flatMap((unit) => unit.members).map((member) => ({ type: 'transform' as const, pageIndex, index: member, matrix })));
   } finally {
     store.setPending(tabId, null);
   }
@@ -118,7 +119,8 @@ export function deleteSelectedObject(tab: TabState): boolean {
   const selected = store.selected[tab.id];
   if (!tab.contentEditing || !selected) return false;
   store.select(tab.id, null);
-  void run(tab.id, { type: 'delete', pageIndex: selected.pageIndex, indices: selected.members });
+  const indices = selected.group ? selected.group.flatMap((unit) => unit.members) : selected.members;
+  void run(tab.id, { type: 'delete', pageIndex: selected.pageIndex, indices });
   return true;
 }
 

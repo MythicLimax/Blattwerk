@@ -5,12 +5,15 @@ import { editUnits, LINE_HEIGHT, missingChars, scalingAbout, translation, type E
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
 import { useContentEdit, type TextEditing } from '../../state/content-edit-store';
-import { addText, baselineBelowClick, editParagraph, editText, reflowText, transformObject } from './actions';
+import { addText, baselineBelowClick, editParagraph, editText, reflowText, transformObjects } from './actions';
 import styles from './ContentEditOverlay.module.css';
 import { pageObjects } from './page-objects';
 
 type Gesture =
-  | { kind: 'move'; object: EditUnit; origin: Point; dx: number; dy: number }
+  // Verschieben: object ist die angefasste Einheit, group alle, die mitwandern (Mehrfachauswahl)
+  | { kind: 'move'; object: EditUnit; group: EditUnit[]; origin: Point; dx: number; dy: number }
+  // Auswahlrechteck auf freier Fläche (Ansichtskoordinaten); additive: Umschalt/Cmd ergänzt die Auswahl
+  | { kind: 'marquee'; start: Point; to: Point; additive: boolean }
   | { kind: 'scale'; object: EditUnit; fixed: Point; to: Point }
   // Breite eines Textes ändern (Anfasser links oder rechts); der Text bricht neu um
   | { kind: 'width'; object: EditUnit; side: 'left' | 'right'; to: Point };
@@ -52,9 +55,12 @@ function scaleFactor(object: PageObjectInfo, fixed: Point, to: Point): number {
 }
 
 function previewBounds(object: PageObjectInfo, gesture: Gesture | null): Rect {
-  if (!gesture || gesture.object.index !== object.index) return object.bounds;
+  if (!gesture || gesture.kind === 'marquee') return object.bounds;
   const [l, b, r, t] = object.bounds;
-  if (gesture.kind === 'move') return [l + gesture.dx, b + gesture.dy, r + gesture.dx, t + gesture.dy];
+  if (gesture.kind === 'move') {
+    return gesture.group.some((unit) => unit.index === object.index) ? [l + gesture.dx, b + gesture.dy, r + gesture.dx, t + gesture.dy] : object.bounds;
+  }
+  if (gesture.object.index !== object.index) return object.bounds;
   if (gesture.kind === 'width') {
     const min = minTextWidth(object);
     return gesture.side === 'left' ? [Math.min(gesture.to.x, r - min), b, r, t] : [l, b, Math.max(gesture.to.x, l + min), t];
@@ -102,6 +108,8 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     };
   }, [pdf, pageIndex, runtime?.password]);
 
+  const objects = useMemo(() => editUnits(listing?.objects ?? [], listing?.fonts), [listing]);
+
   const setGesture = (next: Gesture | null) => {
     gestureRef.current = next;
     setGestureState(next);
@@ -122,6 +130,14 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
   const store = useContentEdit.getState;
 
   const onBackgroundPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (tool === 'select' && event.button === 0 && !editing) {
+      // Auswahlrechteck aufziehen
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      const at = toView(event);
+      setGesture({ kind: 'marquee', start: at, to: at, additive: event.shiftKey || event.metaKey });
+      return;
+    }
     if (tool !== 'text' || event.button !== 0 || editing) return;
     event.preventDefault();
     // Neuer Text: Eingabe an der Klickstelle (in der Ansicht, damit sie auch auf gedrehten Seiten aufrecht steht)
@@ -133,9 +149,42 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     if (tool !== 'select' || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
-    store().select(tabId, { pageIndex, index: object.index, members: object.members, unit: object });
+    const current = groupUnits();
+    if (event.shiftKey || event.metaKey) {
+      // Umschalt/Cmd: zur Auswahl hinzufügen oder herausnehmen
+      const included = current.some((unit) => unit.index === object.index);
+      selectUnits(included ? current.filter((unit) => unit.index !== object.index) : [...current, object]);
+      return;
+    }
+    // Angefasste Einheit gehört zur Mehrfachauswahl: alle wandern mit, sonst nur sie
+    const group = current.length > 1 && current.some((unit) => unit.index === object.index) ? current : [object];
+    if (group.length === 1) selectUnits([object]);
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
-    setGesture({ kind: 'move', object, origin: toPdf(event), dx: 0, dy: 0 });
+    setGesture({ kind: 'move', object, group, origin: toPdf(event), dx: 0, dy: 0 });
+  };
+
+  // Ausgewählte Einheiten dieser Seite, aus der aktuellen Liste (Lage und Text immer aktuell)
+  const groupUnits = (): EditUnit[] => {
+    const current = store().selected[tabId];
+    if (!current || current.pageIndex !== pageIndex) return [];
+    const indices = current.group ? current.group.map((unit) => unit.index) : [current.index];
+    return objects.filter((object) => indices.includes(object.index));
+  };
+
+  // Auswahl setzen: keine, eine (mit Anfassern) oder mehrere; die zuletzt hinzugefügte ist die Haupteinheit
+  const selectUnits = (units: EditUnit[]) => {
+    const last = units[units.length - 1];
+    if (!last) {
+      store().select(tabId, null);
+      return;
+    }
+    store().select(tabId, {
+      pageIndex,
+      index: last.index,
+      members: last.members,
+      unit: last,
+      ...(units.length > 1 ? { group: units.map((unit) => ({ index: unit.index, members: unit.members })) } : {}),
+    });
   };
 
   const onHandlePointerDown = (event: ReactPointerEvent, object: EditUnit, corner: number) => {
@@ -158,6 +207,10 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
   const onPointerMove = (event: ReactPointerEvent) => {
     const current = gestureRef.current;
     if (!current) return;
+    if (current.kind === 'marquee') {
+      setGesture({ ...current, to: toView(event) });
+      return;
+    }
     const at = toPdf(event);
     if (current.kind === 'move') setGesture({ ...current, dx: at.x - current.origin.x, dy: at.y - current.origin.y });
     else setGesture({ ...current, to: at });
@@ -167,6 +220,21 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     const current = gestureRef.current;
     setGesture(null);
     if (!current) return;
+    if (current.kind === 'marquee') {
+      // Alle Einheiten, die das Rechteck berührt (in Ansichtskoordinaten verglichen, auch bei gedrehten Seiten)
+      const x0 = Math.min(current.start.x, current.to.x);
+      const x1 = Math.max(current.start.x, current.to.x);
+      const y0 = Math.min(current.start.y, current.to.y);
+      const y1 = Math.max(current.start.y, current.to.y);
+      if (x1 - x0 < 2 && y1 - y0 < 2) return;
+      const hit = objects.filter((object) => {
+        const r = geometry.rectToView(object.bounds);
+        return r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0;
+      });
+      const base = current.additive ? groupUnits().filter((unit) => !hit.some((other) => other.index === unit.index)) : [];
+      selectUnits([...base, ...hit]);
+      return;
+    }
     const bounds = previewBounds(current.object, current);
     if (current.kind === 'width') {
       const [l, , r] = current.object.bounds;
@@ -179,12 +247,13 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     }
     if (current.kind === 'move') {
       if (Math.hypot(current.dx, current.dy) < 0.5) return;
-      void transformObject(tabId, pageIndex, current.object.index, current.object.members, translation(current.dx, current.dy), bounds);
+      const moved = current.group.map((unit) => ({ index: unit.index, members: unit.members, bounds: previewBounds(unit, current) }));
+      void transformObjects(tabId, pageIndex, moved, translation(current.dx, current.dy));
       return;
     }
     const factor = scaleFactor(current.object, current.fixed, current.to);
     if (Math.abs(factor - 1) < 0.01) return;
-    void transformObject(tabId, pageIndex, current.object.index, current.object.members, scalingAbout(factor, current.fixed.x, current.fixed.y), bounds);
+    void transformObjects(tabId, pageIndex, [{ index: current.object.index, members: current.object.members, bounds }], scalingAbout(factor, current.fixed.x, current.fixed.y));
   };
 
   // Text bearbeiten: immer die ganze Zeile, auch wenn das PDF sie in mehreren Stücken speichert (siehe editUnits)
@@ -208,7 +277,6 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
 
   const handleSize = pxToUnits(8, scale);
   const upright = isUprightView(geometry);
-  const objects = useMemo(() => editUnits(listing?.objects ?? [], listing?.fonts), [listing]);
 
   // Nach dem Neusetzen eines Textes ist er wieder ausgewählt (Größe, Schrift, Farbe lassen sich weiter ändern)
   const reselect = useContentEdit((s) => (s.reselect?.tabId === tabId && s.reselect.pageIndex === pageIndex ? s.reselect : null));
@@ -225,7 +293,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     <>
       <svg
         ref={svgRef}
-        className={[styles.svg, tool === 'text' ? styles.creating : '', gesture ? styles.capturing : ''].join(' ')}
+        className={[styles.svg, tool === 'text' ? styles.creating : '', tool === 'select' && !editing ? styles.selecting : '', gesture ? styles.capturing : ''].join(' ')}
         viewBox={`0 0 ${geometry.width} ${geometry.height}`}
         preserveAspectRatio="none"
         onPointerDown={onBackgroundPointerDown}
@@ -239,9 +307,10 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
         data-content-edit-overlay=""
       >
         {objects.map((object) => {
-          const moving = pending?.pageIndex === pageIndex && pending.index === object.index ? pending.bounds : null;
+          const moving = pending?.pageIndex === pageIndex ? pending.bounds[object.index] : undefined;
           const r = geometry.rectToView(moving ?? previewBounds(object, gesture));
-          const isSelected = selected?.pageIndex === pageIndex && selected.index === object.index;
+          const isSelected =
+            selected?.pageIndex === pageIndex && (selected.index === object.index || (selected.group?.some((unit) => unit.index === object.index) ?? false));
           const hidden = editing?.mode === 'edit' && editing.index === object.index;
           if (hidden) return null;
           return (
@@ -258,16 +327,17 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
               data-kind={object.kind}
               data-text={object.text}
               data-index={object.index}
+              data-selected={isSelected || undefined}
             >
               <title>{object.kind === 'text' ? object.text : t(`contentEdit.kinds.${object.kind}`)}</title>
             </rect>
           );
         })}
         {objects
-          .filter((object) => selected?.pageIndex === pageIndex && selected.index === object.index && tool === 'select' && !editing)
+          .filter((object) => selected?.pageIndex === pageIndex && !selected.group && selected.index === object.index && tool === 'select' && !editing)
           // eslint-disable-next-line react-hooks/refs -- Refs werden nur in den Zeiger-Handlern gelesen, nicht beim Zeichnen
           .map((object) => {
-            const bounds = pending?.index === object.index ? pending.bounds : previewBounds(object, gesture);
+            const bounds = (pending?.pageIndex === pageIndex ? pending.bounds[object.index] : undefined) ?? previewBounds(object, gesture);
             return (
               <g key={`handles-${object.index}`} data-testid="content-selection">
                 {corners(bounds).map((p, i) => {
@@ -307,6 +377,16 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
               </g>
             );
           })}
+        {gesture?.kind === 'marquee' && (
+          <rect
+            className={styles.marquee}
+            x={Math.min(gesture.start.x, gesture.to.x)}
+            y={Math.min(gesture.start.y, gesture.to.y)}
+            width={Math.abs(gesture.to.x - gesture.start.x)}
+            height={Math.abs(gesture.to.y - gesture.start.y)}
+            data-testid="content-marquee"
+          />
+        )}
       </svg>
       {(() => {
         // Live-Vorschau beim Ziehen der Breite: der Text bricht sofort in der neuen Breite um

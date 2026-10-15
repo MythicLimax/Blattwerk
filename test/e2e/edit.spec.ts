@@ -515,3 +515,56 @@ test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
     await close();
   });
 });
+
+test.describe('Mehrfachauswahl', () => {
+  test('Umschalt-Klick und Auswahlrechteck: gemeinsam verschieben und löschen', async () => {
+    const dir = tempDir();
+    const file = path.join(dir, 'mehrere.pdf');
+    copyFileSync(fixture('text.pdf'), file);
+    const { page, app, close } = await launchApp([file], { userData: dir });
+    await waitForDocument(page, TEXT_PDF.pages);
+    await page.getByTestId('content-edit-button').click();
+    await menuClick(app, 'view.fitPage');
+    const object = (text: string) => page.locator(`[data-testid="content-object"][data-text^="${text}"]`).first();
+    const selectedCount = () => page.locator('[data-testid="content-object"][data-selected]').count();
+
+    // Zwei Zeilen: Klick, dann Umschalt-Klick
+    await object('Inhaltsverzeichnis').click();
+    await object('Externer Link').click({ modifiers: ['Shift'] });
+    expect(await selectedCount()).toBe(2);
+    // Mehrfachauswahl ohne Anfasser
+    await expect(page.locator('[data-handle]')).toHaveCount(0);
+    const before = [await object('Inhaltsverzeichnis').boundingBox(), await object('Externer Link').boundingBox()];
+    const start = before[0];
+    if (!start || !before[1]) throw new Error('Zeilen fehlen');
+    await page.mouse.move(start.x + 5, start.y + start.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 45, start.y + start.height / 2, { steps: 4 });
+    await page.mouse.move(start.x + 85, start.y + start.height / 2, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => (await object('Inhaltsverzeichnis').boundingBox())?.x ?? 0).toBeGreaterThan(start.x + 60);
+    await expect.poll(async () => (await object('Externer Link').boundingBox())?.x ?? 0).toBeGreaterThan((before[1]?.x ?? 0) + 60);
+    // Umschalt-Klick nimmt eine heraus
+    await object('Externer Link').click({ modifiers: ['Shift'] });
+    expect(await selectedCount()).toBe(1);
+
+    // Auswahlrechteck über Überschrift und Kapitelblock (ein Absatz), dann beide löschen
+    await page.keyboard.press('Escape');
+    const heading = await object('Inhaltsverzeichnis').boundingBox();
+    const chapters = await object('Kapitel 1').boundingBox();
+    if (!heading || !chapters) throw new Error('Inhaltsverzeichnis fehlt');
+    const left = Math.min(heading.x, chapters.x) - 8;
+    await page.mouse.move(left, heading.y - 4);
+    await page.mouse.down();
+    await page.mouse.move(left + 20, chapters.y, { steps: 4 });
+    await expect(page.getByTestId('content-marquee')).toBeVisible();
+    await page.mouse.move(Math.max(heading.x, chapters.x) + 20, chapters.y + chapters.height / 2, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(selectedCount).toBe(2);
+    await page.keyboard.press('Backspace');
+    await expect(object('Kapitel 1')).toHaveCount(0);
+    await expect(object('Inhaltsverzeichnis')).toHaveCount(0);
+    await expect(object('Externer Link')).toBeVisible();
+    await close();
+  });
+});

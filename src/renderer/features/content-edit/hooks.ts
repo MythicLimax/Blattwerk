@@ -28,6 +28,7 @@ export function useContentEditInput(tabId: string, active: boolean, contentEditi
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null;
       if (target?.closest('[data-content-edit-overlay] [data-index], [data-content-edit-overlay] [data-handle], textarea')) return;
+      if (event.shiftKey || event.metaKey) return;
       if (useContentEdit.getState().selected[tabId]) useContentEdit.getState().select(tabId, null);
     };
     container.addEventListener('pointerdown', onPointerDown);

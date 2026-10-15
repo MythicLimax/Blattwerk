@@ -14,7 +14,8 @@
 }
 
 .creating,
-.capturing {
+.capturing,
+.selecting {
   pointer-events: all;
 }
 

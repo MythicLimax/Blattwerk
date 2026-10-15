@@ -14,6 +14,8 @@ export interface SelectedObject {
   members: number[];
   // die Einheit selbst (Text, Lage, Gestaltung), für Größe, Schrift und Farbe in der Leiste
   unit?: EditUnit;
+  // Mehrfachauswahl: alle ausgewählten Einheiten der Seite (mindestens zwei, einschließlich index)
+  group?: Array<{ index: number; members: number[] }>;
 }
 
 // Texteingabe direkt auf der Seite: neue Zeilen an einer Stelle (at = Klickstelle, Anfang und Mitte der ersten Zeile,
@@ -34,7 +36,8 @@ interface ContentEditState {
   editing: TextEditing | null;
   style: TextStyle;
   // Lage eines Objekts, die gerade übernommen wird (bis zum Neuladen)
-  pending: Record<string, { pageIndex: number; index: number; bounds: Rect } | null>;
+  // Neue Lage von Objekten, die gerade übernommen wird (bis zum Neuladen), je Index
+  pending: Record<string, { pageIndex: number; bounds: Record<number, Rect> } | null>;
   // Nach dem Neusetzen eines Textes: den Text an dieser Stelle wieder auswählen (Positionen ändern sich dabei)
   reselect: { tabId: string; pageIndex: number; at: Point } | null;
   setReselect: (reselect: { tabId: string; pageIndex: number; at: Point } | null) => void;
@@ -42,7 +45,7 @@ interface ContentEditState {
   select: (tabId: string, selected: SelectedObject | null) => void;
   setEditing: (editing: TextEditing | null) => void;
   setStyle: (patch: Partial<TextStyle>) => void;
-  setPending: (tabId: string, pending: { pageIndex: number; index: number; bounds: Rect } | null) => void;
+  setPending: (tabId: string, pending: { pageIndex: number; bounds: Record<number, Rect> } | null) => void;
   drop: (tabId: string) => void;
 }
 

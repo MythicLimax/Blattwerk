@@ -42,7 +42,7 @@ function applyStyle(tab: TabState, patch: ParagraphStyle): void {
   }
   const selected = store.selected[tab.id];
   const unit = selected?.unit;
-  if (selected && unit?.kind === 'text' && !tab.working)
+  if (selected && !selected.group && unit?.kind === 'text' && !tab.working)
     void reflowText(tab.id, selected.pageIndex, unit, unit.text ?? '', { style: patch });
 }
 
@@ -73,7 +73,7 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
   const selected = useContentEdit((s) => s.selected[tab.id] ?? null);
   const editing = useContentEdit((s) => (s.editing?.tabId === tab.id ? s.editing : null));
   // Angezeigt wird die Gestaltung des bearbeiteten oder ausgewählten Textes, sonst die Vorgabe für neuen Text
-  const unit = !editing && selected?.unit?.kind === 'text' ? selected.unit : null;
+  const unit = !editing && !selected?.group && selected?.unit?.kind === 'text' ? selected.unit : null;
   const shown =
     editing?.mode === 'edit'
       ? {

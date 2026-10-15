@@ -780,7 +780,7 @@
     "color": "Farbe für neuen Text",
     "delete": "Auswahl löschen",
     "done": "Fertig",
-    "selectHint": "Doppelklick ändert den Text, die Anfasser links und rechts die Breite. Größe, Schrift und Farbe gelten für den ausgewählten Text.",
+    "selectHint": "Klicken wählt, Umschalt-Klick oder Rechteck aufziehen wählt mehrere. Doppelklick ändert den Text, die Anfasser links und rechts die Breite.",
     "textHint": "Auf die Seite klicken, um Text zu schreiben. Cmd+Eingabe übernimmt.",
     "textInput": "Text",
     "substitute": "Die Schrift der Zeile kennt „{{chars}}“ nicht; die Zeile erhält eine ähnliche Standardschrift.",
