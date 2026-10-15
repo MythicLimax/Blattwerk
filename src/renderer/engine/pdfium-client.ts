@@ -3,6 +3,7 @@
 // erst das Beenden gibt ihn frei.
 import type { AnnotationChanges } from '../../shared/annotations';
 import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
+import type { CompressionLevel } from '../../shared/compress';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
@@ -235,4 +236,14 @@ export async function closeSession(session: number): Promise<void> {
   openSessions = Math.max(0, openSessions - 1);
   if (!worker) return;
   await send({ type: 'closeSession', session }, []).catch(() => undefined);
+}
+
+// Verkleinern: liefert das vollständig neu geschriebene Dokument. Die Bytes gehen an den Worker.
+export function compressDocument(
+  bytes: Uint8Array,
+  password: string | null,
+  input: { changes: AnnotationChanges; formValues: FormFieldValue[]; level: CompressionLevel },
+): Promise<Uint8Array> {
+  const buffer = ownBuffer(bytes);
+  return bytesOf(send({ type: 'compress', bytes: buffer, password, ...input }, [buffer]));
 }

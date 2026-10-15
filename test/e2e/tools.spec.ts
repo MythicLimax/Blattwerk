@@ -1,6 +1,6 @@
 // Phase 6: Werkzeuge. Arbeitet auf Kopien der Test-PDFs.
 import { expect, test, type ElectronApplication } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fixture, PASSWORDS, TEXT_PDF } from '../fixtures/expectations';
@@ -164,6 +164,54 @@ test.describe('Exportieren', () => {
     await waitForDocument(handle.page, TEXT_PDF.pages);
     await menuClick(handle.app, 'file.exportText');
     await expect(handle.page.getByTestId('notices')).toContainText('verbieten das Kopieren');
+    await handle.close();
+  });
+});
+
+test.describe('Komprimieren', () => {
+  test('verkleinert ein PDF mit großem Bild, Rückgängig und Speichern', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+    tempDirs.push(dir);
+    const file = path.join(dir, 'foto.pdf');
+    const { PDFDocument } = await import('@cantoo/pdf-lib');
+    const jpeg = (await import('jpeg-js')).default;
+    const width = 2400;
+    const height = 1800;
+    const data = new Uint8Array(width * height * 4);
+    for (let i = 0; i < width * height; i++) {
+      const x = i % width;
+      const y = Math.floor(i / width);
+      data.set([(x / width) * 255, (y / height) * 255, 128 + 60 * Math.sin(x / 30), 255], i * 4);
+    }
+    const doc = await PDFDocument.create();
+    const image = await doc.embedJpg(jpeg.encode({ width, height, data }, 95).data);
+    doc.addPage([595, 842]).drawImage(image, { x: 20, y: 300, width: 555, height: 416 });
+    writeFileSync(file, await doc.save());
+    const before = statSync(file).size;
+
+    const handle = await launchApp([file], { userData: dir });
+    await waitForDocument(handle.page, 1);
+    await menuClick(handle.app, 'tools.compress');
+    await handle.page.getByTestId('compress-strong').check();
+    await handle.page.getByTestId('compress-confirm').click();
+    await expect(handle.page.getByTestId('notices')).toContainText('kleiner');
+    await waitForDocument(handle.page, 1);
+    await expect(handle.page.getByTestId('tab-dirty')).toHaveCount(1);
+    await menuClick(handle.app, 'file.save');
+    await expect(handle.page.getByTestId('tab-dirty')).toHaveCount(0);
+    expect(statSync(file).size).toBeLessThan(before / 3);
+    await handle.close();
+  });
+
+  test('verschlüsselte Dokumente: Hinweis auf den Kennwortschutz', async () => {
+    const { dir, file } = copyOf('verschluesselt.pdf');
+    const handle = await launchApp([file], { userData: dir });
+    await handle.page.getByTestId('password-input').fill(PASSWORDS.owner);
+    await handle.page.keyboard.press('Enter');
+    await waitForDocument(handle.page, TEXT_PDF.pages);
+    await menuClick(handle.app, 'tools.compress');
+    await expect(handle.page.getByTestId('notices')).toContainText('Kennwortschutz');
+    await expect(handle.page.getByTestId('compress-dialog')).toHaveCount(0);
     await handle.close();
   });
 });

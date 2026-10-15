@@ -36,7 +36,7 @@ const NAME = {
 // Texte im Strukturbaum (barrierefreie PDFs), die Inhalte beschreiben oder ersetzen
 const DESCRIPTIONS = ['Alt', 'ActualText', 'E'].map((key) => PDFName.of(key));
 
-const refKey = (ref: PDFRef) => `${ref.objectNumber} ${ref.generationNumber}`;
+export const refKey = (ref: PDFRef) => `${ref.objectNumber} ${ref.generationNumber}`;
 
 async function load(bytes: Uint8Array, forIncrementalUpdate: boolean): Promise<PDFDocument> {
   const doc = await PDFDocument.load(bytes, {
@@ -157,7 +157,7 @@ function removeOrphanFields(doc: PDFDocument): void {
 }
 
 // Alle Objekte, die vom Dateiende (Katalog, Dokumentinformationen) aus erreichbar sind
-function reachable(doc: PDFDocument): Set<string> {
+export function reachable(doc: PDFDocument): Set<string> {
   const seen = new Set<string>();
   const stack: PDFObject[] = [];
   const { Root, Info } = doc.context.trailerInfo;

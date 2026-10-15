@@ -8,6 +8,7 @@ import { PageOperationError } from './pages';
 import type { PageOperation } from '../../shared/pages';
 import type { ImageFormat, ProcessRequest, WorkerErrorCode, WorkerRequest, WorkerResponse } from './protocol';
 import type { RenderedPage } from './render';
+import type { ImageCodec } from './compress';
 
 let enginePromise: Promise<PdfiumEngine> | null = null;
 
@@ -29,6 +30,24 @@ class VerifyError extends Error {}
 
 // Größte Seite beim Zeichnen (Bildpunkte); darüber wird verkleinert. Etwa A3 mit 600 dpi.
 const MAX_RENDER_PIXELS = 70_000_000;
+
+// JPEG lesen und schreiben über den Browser (Komprimieren)
+const browserCodec: ImageCodec = {
+  decodeJpeg: async (bytes) => {
+    const bitmap = await createImageBitmap(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'image/jpeg' }));
+    try {
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Kein Zeichenbereich');
+      context.drawImage(bitmap, 0, 0);
+      const data = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
+      return { width: bitmap.width, height: bitmap.height, rgba: new Uint8Array(data.buffer, data.byteOffset, data.byteLength) };
+    } finally {
+      bitmap.close();
+    }
+  },
+  encodeJpeg: async (image, quality) => new Uint8Array(await encodeImage({ ...image, dpi: 0 }, 'jpeg', quality)),
+};
 
 // PNG oder JPEG über die Bildkodierung des Browsers (OffscreenCanvas)
 async function encodeImage(page: RenderedPage, format: ImageFormat, quality: number): Promise<ArrayBuffer> {
@@ -60,6 +79,7 @@ const loadImported = () => import('./imported');
 const loadRedaction = () => import('./redaction');
 const loadStamping = () => import('./stamping');
 const loadProtection = () => import('./protection');
+const loadCompress = () => import('./compress');
 
 const NO_CHANGES = { upserts: [], deletions: [] };
 
@@ -104,6 +124,7 @@ function isFieldError(error: unknown): error is FieldOperationError {
 function errorCode(error: unknown): WorkerErrorCode {
   if (isFieldError(error)) return error.code;
   if (error instanceof Error && error.name === 'SanitizeError') return 'redact-encrypted';
+  if (error instanceof Error && error.name === 'CompressError') return 'compress-encrypted';
   if (error instanceof Error && (error.name === 'StampError' || error.name === 'ContentError')) return (error as Error & { code: WorkerErrorCode }).code;
   if (error instanceof PageOperationError) return error.code;
   if (error instanceof FormValueError) return 'form';
@@ -187,6 +208,13 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
           pdfium.sessions.close(request.session);
           reply({ id: request.id, ok: true, kind: 'done' });
           return;
+        case 'compress': {
+          const full = pdfium.process(new Uint8Array(request.bytes), request.password, request.changes, [], { incremental: false }, request.formValues);
+          const { compressDocument } = await loadCompress();
+          const result = await compressDocument(full, request.level, browserCodec);
+          replyBytes(request.id, result.bytes, pdfium, request.password);
+          return;
+        }
         case 'inspect':
           reply({ id: request.id, ok: true, kind: 'inspect', result: pdfium.inspect(new Uint8Array(request.bytes), request.password) });
           return;

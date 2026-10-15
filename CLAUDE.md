@@ -16,7 +16,7 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | 3 | Seiten organisieren | erledigt ([Bericht](docs/phasen/phase-3.md)) |
 | 4 | Formulare und Unterschrift | erledigt ([Bericht](docs/phasen/phase-4.md)) |
 | 5 | Bearbeiten (inkl. Schwärzen) | erledigt ([Bericht](docs/phasen/phase-5.md)) |
-| 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | in Arbeit: Kennwortschutz und Export fertig; Komprimieren, OCR, Vergleich offen |
+| 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | in Arbeit: Kennwortschutz, Export, Komprimieren fertig; OCR, Vergleich offen |
 | 7 | Profi (PAdES, PDF/A, Tags) | offen |
 
 Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig.
@@ -71,6 +71,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Inhalt bearbeiten** ([ADR 0010](docs/entscheidungen/0010-inhalt-bearbeiten.md)): `TabState.contentEditing`, Ebene `features/content-edit/ContentEditOverlay.tsx`, Zustand `content-edit-store`. Objekte listet PDFium je Seite (`listObjects`, Index gilt nur für einen Stand); Textstücke einer Zeile und Zeilen eines Absatzes fasst `editUnits` zu einer Einheit zusammen (Absätze setzt der Worker mit `editParagraph` neu um); Änderungen sind `ContentOperation` (`content.ts`, PDFium schreibt den Seiteninhalt neu).
 - **Kennwortschutz** ([ADR 0011](docs/entscheidungen/0011-kennwortschutz.md)): PDFium entfernt den Schutz (`FPDF_REMOVE_SECURITY`), pdf-lib verschlüsselt neu (AES-256, `protection.ts`). Neuer Dokumentstand; jeder Stand merkt sich sein Kennwort (`DocState.password`). `TabState.ownerAccess` (PDFium erkennt das Berechtigungskennwort) hebt Einschränkungen auf. Nur ASCII-Kennwörter (Apple Vorschau).
 - **Export** ([ADR 0012](docs/entscheidungen/0012-export.md)): PDFium-Sitzungen im Worker (`render.ts`, `openSession`/`renderPage`/`pageText` im Client), Bilder Seite für Seite über `export:write-image` in einen gewählten Ordner, Text über `export:save-text`. Kein Word-Export (begründet im ADR).
+- **Komprimieren** ([ADR 0013](docs/entscheidungen/0013-komprimieren.md)): PDFium schreibt vollständig, pdf-lib verkleinert Bilder (JPEG über `ImageCodec`, im Worker der Browser, in Tests `jpeg-js`), packt Ströme, verwirft Unerreichbares (`compress.ts`).
 - Es ist immer höchstens ein Bearbeitungsmodus aktiv (Kommentieren, Schwärzen, Formular bearbeiten, Inhalt bearbeiten, Seiten organisieren).
 - Dieses Verfahren (Snapshot der Dokumentbytes) gilt für Seiten-, Feld-, Wasserzeichen- und Inhaltsänderungen sowie für das Schwärzen. Nach dem Speichern beginnt der Verlauf neu.
 
@@ -106,7 +107,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0012)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0013)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
@@ -121,7 +122,7 @@ src/
                             pages (Seitenraster, Seiten-Dialoge, Abläufe für Seiten und neue Dokumente),
                             forms (Ausfüllen), form-edit (Formular bearbeiten), signatures (Unterschrift),
                             redaction (Schwärzen), stamping (Wasserzeichen, Kopf-/Fußzeilen), content-edit (Inhalt bearbeiten),
-                            security (Kennwortschutz), export (Bilder, Text), progress (Fortschritt mit Abbrechen)
+                            security (Kennwortschutz), export (Bilder, Text), compress, progress (Fortschritt mit Abbrechen)
     components/             generische UI-Bausteine (IconButton, Dialog)
     state/                  zustand-Stores (documents, ui, annotations, history, forms, form-edit, content-edit), dirty.ts
     engine/                 pdf.js-Einrichtung, Laden, Range-Transport, Laufzeit je Dokument, Befehle (session.ts),
@@ -129,7 +130,7 @@ src/
     styles/                 Design-Tokens, hell/dunkel
     public/                 beim Build kopierte pdf.js-Ressourcen (nicht eingecheckt)
   workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, pages, forms, redact, text-search, content, render, memory,
-                            protocol, worker), mit pdf-lib: fields, imported, sanitize + redaction, stamping, protection
+                            protocol, worker), mit pdf-lib: fields, imported, sanitize + redaction, stamping, protection, compress
 resources/icon.svg          eigenes App-Symbol (Quelle)
 build/                      icon.png (aus resources/icon.svg erzeugt), after-pack.cjs
 scripts/                    build, dev, generate-fixtures, check-licenses, dist-mac-local, smoke-packaged, make-icon, dev-env.sh
@@ -156,6 +157,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 | Bearbeiten/Speichern | @embedpdf/pdfium | 2.15.1 | MIT + BSD-3 |
 | Formularstruktur, Schwärzen, Wasserzeichen, Test-PDFs | @cantoo/pdf-lib | 2.11.1 | MIT |
 | Tests (Teilschriften) | @cantoo/fontkit | 2.0.12 (nur Entwicklung) | MIT |
+| Tests (JPEG) | jpeg-js | 0.4.4 (nur Entwicklung) | BSD-3-Clause |
 | Zustand | zustand | 5.0.15 | MIT |
 | Virtualisierung | @tanstack/react-virtual | 3.14.15 | MIT |
 | i18n | i18next, react-i18next | 26.4.4, 17.0.16 | MIT |

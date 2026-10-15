@@ -238,7 +238,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
   // Werkzeuge (Phase 6)
   const toolsMenu: MenuItemConstructorOptions = {
     label: t('menu.tools.title'),
-    submenu: [cmd('tools.security', t('menu.tools.security'), { enabled: viewing })],
+    submenu: [cmd('tools.compress', t('menu.tools.compress'), { enabled: viewing }), cmd('tools.security', t('menu.tools.security'), { enabled: viewing })],
   };
 
   const navMenu: MenuItemConstructorOptions = {

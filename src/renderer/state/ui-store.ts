@@ -65,6 +65,8 @@ interface UiState {
   securityDialogOpen: boolean;
   // Export als Bilder (Phase 6)
   exportImagesOpen: boolean;
+  // Komprimieren (Phase 6)
+  compressOpen: boolean;
   settingsOpen: boolean;
   // Offene Rückfrage (ungespeicherte Änderungen, von außen geänderte Datei)
   prompt: Prompt | null;
@@ -98,6 +100,7 @@ interface UiState {
   setStampDialog: (dialog: 'watermark' | 'headerFooter' | 'pageNumbers' | null) => void;
   setSecurityDialogOpen: (open: boolean) => void;
   setExportImagesOpen: (open: boolean) => void;
+  setCompressOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setPrompt: (prompt: Prompt | null) => void;
   setPageDialog: (dialog: PageDialog | null) => void;
@@ -137,6 +140,7 @@ export const useUi = create<UiState>((set) => ({
   stampDialog: null,
   securityDialogOpen: false,
   exportImagesOpen: false,
+  compressOpen: false,
   settingsOpen: false,
   prompt: null,
   pageDialog: null,
@@ -168,6 +172,7 @@ export const useUi = create<UiState>((set) => ({
   setStampDialog: (stampDialog) => set({ stampDialog }),
   setSecurityDialogOpen: (securityDialogOpen) => set({ securityDialogOpen }),
   setExportImagesOpen: (exportImagesOpen) => set({ exportImagesOpen }),
+  setCompressOpen: (compressOpen) => set({ compressOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPrompt: (prompt) => set({ prompt }),
   setPageDialog: (pageDialog) => set({ pageDialog }),

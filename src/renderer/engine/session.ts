@@ -19,6 +19,7 @@ import { useContentEdit } from '../state/content-edit-store';
 import { useFormEdit } from '../state/form-edit-store';
 import { useForms } from '../state/forms-store';
 import type { SecuritySettings } from '../../shared/security';
+import type { CompressionLevel } from '../../shared/compress';
 import { historyDirty, tabHistory, useHistory, type DocState, type Leaving } from '../state/history-store';
 import type { AnnotationChanges } from '../../shared/annotations';
 import { exportText } from '../features/export/actions';
@@ -32,7 +33,7 @@ import type { PageOperation } from '../../shared/pages';
 import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
 import { useUi, type PromptAnswer } from '../state/ui-store';
 import { openTemporary, startLoading } from './document-loader';
-import { PdfiumClientError, processDocument, protectDocument, readSecurity, redactDocument } from './pdfium-client';
+import { compressDocument, PdfiumClientError, processDocument, protectDocument, readSecurity, redactDocument } from './pdfium-client';
 import { pdfjs } from './pdfjs';
 import { createRuntime, destroyRuntime, dispatchFind, getRuntime, rememberScroll, setRuntimeDocument } from './runtime';
 
@@ -526,6 +527,51 @@ export function applyProtection(tabId: string, settings: SecuritySettings | null
   return enqueue(tabId, () => runProtection(tabId, settings, ownerPassword));
 }
 
+// PDF verkleinern (Phase 6, ADR 0013): neuer, vollständig neu geschriebener Stand, nur wenn er kleiner ist
+export function applyCompression(tabId: string, level: CompressionLevel): Promise<boolean> {
+  commitPendingEdits();
+  if (findTab(tabId)?.working) return Promise.resolve(false);
+  return enqueue(tabId, () => runCompression(tabId, level));
+}
+
+async function runCompression(tabId: string, level: CompressionLevel): Promise<boolean> {
+  const tab = findTab(tabId);
+  const runtime = getRuntime(tabId);
+  if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf) return false;
+  if (tab.encrypted) {
+    useUi.getState().notify(t('errors.pages.compress-encrypted'));
+    return false;
+  }
+  const pdf = runtime.pdf;
+  const ui = useUi.getState();
+  ui.setBusy('compress.busy');
+  try {
+    const pending = await pendingChanges(tabId);
+    const before = await pdf.getData();
+    const size = before.length;
+    const bytes = await compressDocument(before, runtime.password, { ...pending, level });
+    if (getRuntime(tabId)?.pdf !== pdf) return false;
+    if (bytes.length >= size * 0.98) {
+      ui.confirm(t('compress.notSmaller'));
+      return false;
+    }
+    const next = { bytes, annotations: null, page: tab.currentPage, selection: [], password: runtime.password };
+    useHistory.getState().push(tabId, leavingState(tabId, tab, false), next);
+    rememberScroll(tabId);
+    await showState(tabId, next);
+    ui.confirm(t('compress.done', { before: formatSize(size), after: formatSize(bytes.length), percent: Math.round((1 - bytes.length / size) * 100) }));
+    return true;
+  } catch (error) {
+    ui.notify(operationErrorMessage(error, 'compress.failed'), errorMessage(error));
+    return false;
+  } finally {
+    ui.setBusy(null);
+  }
+}
+
+const formatSize = (bytes: number) =>
+  bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
 // Prüft das Berechtigungskennwort eines geöffneten Dokuments
 export async function checkOwnerPassword(tabId: string, password: string): Promise<boolean> {
   const pdf = getRuntime(tabId)?.pdf;
@@ -735,6 +781,13 @@ export function executeCommand(command: CommandId): void {
     if (active?.status !== 'ready' || active.working || isProgressRunning()) return;
     if (command === 'file.exportImages') ui.setExportImagesOpen(true);
     else void exportText(active);
+    return;
+  }
+  if (command === 'tools.compress') {
+    const active = getActiveTab();
+    if (active?.status !== 'ready' || active.working) return;
+    if (active.encrypted) ui.notify(t('errors.pages.compress-encrypted'));
+    else ui.setCompressOpen(true);
     return;
   }
   if (command === 'tools.security') {

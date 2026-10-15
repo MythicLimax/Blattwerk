@@ -109,7 +109,8 @@
     },
     "tools": {
       "title": "Werkzeuge",
-      "security": "Kennwortschutz …"
+      "security": "Kennwortschutz …",
+      "compress": "Komprimieren …"
     }
   },
   "dialog": {
@@ -192,7 +193,8 @@
       "stamp-nothing": "Das Dokument enthält nichts davon, das {{appName}} hinzugefügt hat.",
       "stamp-image": "Das Bild konnte nicht eingebettet werden.",
       "content-missing": "Das Objekt wurde nicht gefunden. Bitte erneut versuchen.",
-      "content-characters": "Diese Zeichen kann keine verfügbare Schrift darstellen: {{detail}}"
+      "content-characters": "Diese Zeichen kann keine verfügbare Schrift darstellen: {{detail}}",
+      "compress-encrypted": "Verschlüsselte Dokumente lassen sich nicht komprimieren. Entfernen Sie zuerst den Kennwortschutz (Werkzeuge → Kennwortschutz)."
     }
   },
   "start": {
@@ -861,5 +863,22 @@
     "noText": "Das Dokument enthält keinen auslesbaren Text, vermutlich gescannte Seiten.",
     "notAllowed": "Die Berechtigungen dieses Dokuments verbieten das Kopieren von Inhalten und damit auch den Export.",
     "failed": "Der Export ist fehlgeschlagen."
+  },
+  "compress": {
+    "title": "PDF komprimieren",
+    "message": "Große Bilder werden verkleinert und neu gespeichert, Seiteninhalte gepackt und Überflüssiges entfernt. Text, Kommentare und Formulare bleiben unverändert.",
+    "levels": {
+      "light": "Leicht: Bilder bis 300 dpi, fast keine Qualitätsverluste",
+      "medium": "Mittel: Bilder bis 150 dpi, gut für Bildschirm und Druck im Büro",
+      "strong": "Stark: Bilder bis 100 dpi, möglichst klein zum Verschicken"
+    },
+    "hint": "Die Datei wird vollständig neu geschrieben und erst mit „Sichern“ ersetzt. Rückgängig ist bis dahin möglich.",
+    "signedWarning": "Das Dokument enthält digitale Signaturen. Sie werden durch das Neuschreiben ungültig.",
+    "cancel": "Abbrechen",
+    "apply": "Komprimieren",
+    "busy": "PDF wird komprimiert …",
+    "done": "Von {{before}} auf {{after}} verkleinert ({{percent}} % kleiner). Zum Übernehmen speichern.",
+    "notSmaller": "Das Dokument ist bereits kompakt; Komprimieren würde es nicht nennenswert verkleinern. Es bleibt unverändert.",
+    "failed": "Das Komprimieren ist fehlgeschlagen."
   }
 }

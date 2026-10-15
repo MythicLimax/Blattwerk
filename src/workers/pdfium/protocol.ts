@@ -6,6 +6,7 @@ import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } fr
 import type { StampOperation } from '../../shared/stamping';
 import type { ContentOperation, PageObjects } from '../../shared/content';
 import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
+import type { CompressionLevel } from '../../shared/compress';
 
 // Kommentaränderungen, Formularwerte und (optional) Seiten- oder Feldoperationen anwenden, neue Bytes liefern
 export interface ProcessRequest {
@@ -90,6 +91,17 @@ export interface ProtectRequest {
   settings: SecuritySettings | null;
 }
 
+// Verkleinern: Kommentare und Formularwerte übernehmen, Bilder neu kodieren, vollständig neu schreiben
+export interface CompressRequest {
+  id: number;
+  type: 'compress';
+  bytes: ArrayBuffer;
+  password: string | null;
+  changes: AnnotationChanges;
+  formValues: FormFieldValue[];
+  level: CompressionLevel;
+}
+
 // Sitzung: Dokument für mehrere Seiten geöffnet halten (Export, Texterkennung, Vergleich)
 export interface OpenSessionRequest {
   id: number;
@@ -139,7 +151,8 @@ export type WorkerRequest =
   | OpenSessionRequest
   | RenderPageRequest
   | PageTextRequest
-  | CloseSessionRequest;
+  | CloseSessionRequest
+  | CompressRequest;
 
 export type InspectResult = { ok: true; pageCount: number } | { ok: false; reason: 'password' | 'invalid' };
 
@@ -162,6 +175,7 @@ export type WorkerErrorCode =
   | 'stamp-image'
   | 'content-missing'
   | 'content-characters'
+  | 'compress-encrypted'
   | 'verify'
   | 'failed';
 

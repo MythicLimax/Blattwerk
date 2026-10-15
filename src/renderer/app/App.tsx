@@ -11,6 +11,7 @@ import { HeaderFooterDialog, PageNumbersDialog, WatermarkDialog } from '../featu
 import { TooltipHost } from '../components/Tooltip';
 import { SecurityDialog } from '../features/security/SecurityDialog';
 import { ExportImagesDialog } from '../features/export/ExportImagesDialog';
+import { CompressDialog } from '../features/compress/CompressDialog';
 import { ProgressDialog } from '../features/progress/ProgressDialog';
 import { BusyOverlay } from '../features/pages/BusyOverlay';
 import { ChooseSignatureDialog, CreateSignatureDialog } from '../features/signatures/SignatureDialogs';
@@ -53,6 +54,7 @@ export function App() {
   const stampDialog = useUi((s) => s.stampDialog);
   const securityDialogOpen = useUi((s) => s.securityDialogOpen);
   const exportImagesOpen = useUi((s) => s.exportImagesOpen);
+  const compressOpen = useUi((s) => s.compressOpen);
   const pageDialog = useUi((s) => s.pageDialog);
   const combine = useUi((s) => s.combine);
   const signatureDialog = useUi((s) => s.signatureDialog);
@@ -127,6 +129,7 @@ export function App() {
       {stampDialog === 'pageNumbers' && active?.status === 'ready' && <PageNumbersDialog tab={active} />}
       {securityDialogOpen && active?.status === 'ready' && <SecurityDialog tab={active} />}
       {exportImagesOpen && active?.status === 'ready' && <ExportImagesDialog tab={active} />}
+      {compressOpen && active?.status === 'ready' && <CompressDialog tab={active} />}
       <ProgressDialog />
       <SourcePasswordDialog />
       <BusyOverlay />
