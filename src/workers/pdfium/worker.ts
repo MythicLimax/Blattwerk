@@ -80,6 +80,7 @@ const loadRedaction = () => import('./redaction');
 const loadStamping = () => import('./stamping');
 const loadProtection = () => import('./protection');
 const loadCompress = () => import('./compress');
+const loadCompare = () => import('./compare');
 
 const NO_CHANGES = { upserts: [], deletions: [] };
 
@@ -213,6 +214,25 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
           const { compressDocument } = await loadCompress();
           const result = await compressDocument(full, request.level, browserCodec);
           replyBytes(request.id, result.bytes, pdfium, request.password);
+          return;
+        }
+        case 'compare': {
+          // Ohne Schutz (nur für den Bericht), dann Wörter je Seite
+          const plain = (bytes: ArrayBuffer, password: string | null) =>
+            pdfium.process(new Uint8Array(bytes), password, NO_CHANGES, [], { incremental: false, removeSecurity: true });
+          const words = (bytes: Uint8Array) => {
+            const { id, pageCount } = pdfium.sessions.open(bytes, null);
+            try {
+              return Array.from({ length: pageCount }, (_, i) => pdfium.sessions.words(id, i));
+            } finally {
+              pdfium.sessions.close(id);
+            }
+          };
+          const oldBytes = plain(request.oldBytes, request.oldPassword);
+          const newBytes = plain(request.newBytes, request.newPassword);
+          const { buildCompareReport } = await loadCompare();
+          const report = await buildCompareReport({ oldBytes, newBytes, oldWords: words(oldBytes), newWords: words(newBytes), names: request.names, labels: request.labels });
+          replyBytes(request.id, report.bytes, pdfium, null);
           return;
         }
         case 'inspect':

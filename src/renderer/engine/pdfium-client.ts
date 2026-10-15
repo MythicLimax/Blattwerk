@@ -4,6 +4,7 @@
 import type { AnnotationChanges } from '../../shared/annotations';
 import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
 import type { CompressionLevel } from '../../shared/compress';
+import type { CompareLabels } from '../../shared/compare';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
@@ -246,4 +247,18 @@ export function compressDocument(
 ): Promise<Uint8Array> {
   const buffer = ownBuffer(bytes);
   return bytesOf(send({ type: 'compress', bytes: buffer, password, ...input }, [buffer]));
+}
+
+// Zwei Dokumente vergleichen: liefert den Vergleichsbericht als neues PDF. Die Bytes gehen an den Worker.
+export function compareDocuments(
+  oldDoc: { bytes: Uint8Array; password: string | null },
+  newDoc: { bytes: Uint8Array; password: string | null },
+  names: { old: string; new: string },
+  labels: CompareLabels,
+): Promise<Uint8Array> {
+  const oldBytes = ownBuffer(oldDoc.bytes);
+  const newBytes = oldDoc.bytes === newDoc.bytes ? newDoc.bytes.slice().buffer as ArrayBuffer : ownBuffer(newDoc.bytes);
+  return bytesOf(
+    send({ type: 'compare', oldBytes, oldPassword: oldDoc.password, newBytes, newPassword: newDoc.password, names, labels }, [oldBytes, newBytes]),
+  );
 }

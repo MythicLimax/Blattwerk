@@ -23,6 +23,7 @@ import type { CompressionLevel } from '../../shared/compress';
 import { historyDirty, tabHistory, useHistory, type DocState, type Leaving } from '../state/history-store';
 import type { AnnotationChanges } from '../../shared/annotations';
 import { exportText } from '../features/export/actions';
+import { compareWithFile } from '../features/compare/actions';
 import { isRunning as isProgressRunning } from '../features/progress/progress';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { RedactionOptions } from '../../shared/redaction';
@@ -781,6 +782,11 @@ export function executeCommand(command: CommandId): void {
     if (active?.status !== 'ready' || active.working || isProgressRunning()) return;
     if (command === 'file.exportImages') ui.setExportImagesOpen(true);
     else void exportText(active);
+    return;
+  }
+  if (command === 'tools.compare') {
+    const active = getActiveTab();
+    if (active?.status === 'ready' && !active.working) void compareWithFile(active);
     return;
   }
   if (command === 'tools.compress') {

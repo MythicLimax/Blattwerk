@@ -7,6 +7,7 @@ import type { StampOperation } from '../../shared/stamping';
 import type { ContentOperation, PageObjects } from '../../shared/content';
 import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
 import type { CompressionLevel } from '../../shared/compress';
+import type { CompareLabels } from '../../shared/compare';
 
 // Kommentaränderungen, Formularwerte und (optional) Seiten- oder Feldoperationen anwenden, neue Bytes liefern
 export interface ProcessRequest {
@@ -102,6 +103,18 @@ export interface CompressRequest {
   level: CompressionLevel;
 }
 
+// Zwei Dokumente vergleichen und einen Bericht als neues PDF liefern
+export interface CompareRequest {
+  id: number;
+  type: 'compare';
+  oldBytes: ArrayBuffer;
+  oldPassword: string | null;
+  newBytes: ArrayBuffer;
+  newPassword: string | null;
+  names: { old: string; new: string };
+  labels: CompareLabels;
+}
+
 // Sitzung: Dokument für mehrere Seiten geöffnet halten (Export, Texterkennung, Vergleich)
 export interface OpenSessionRequest {
   id: number;
@@ -152,7 +165,8 @@ export type WorkerRequest =
   | RenderPageRequest
   | PageTextRequest
   | CloseSessionRequest
-  | CompressRequest;
+  | CompressRequest
+  | CompareRequest;
 
 export type InspectResult = { ok: true; pageCount: number } | { ok: false; reason: 'password' | 'invalid' };
 

@@ -49,6 +49,7 @@ export const COMMANDS = [
   'stamp.pageNumbers',
   'tools.security',
   'tools.compress',
+  'tools.compare',
   'file.exportImages',
   'file.exportText',
   'file.combine',

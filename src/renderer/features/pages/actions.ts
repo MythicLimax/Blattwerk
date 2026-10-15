@@ -49,7 +49,7 @@ export function askPassword(name: string, incorrect: boolean): Promise<string | 
 }
 
 // Führt eine längere Aufgabe mit Hinweis „… läuft“ aus.
-async function busy<T>(messageKey: string, task: () => Promise<T>): Promise<T> {
+export async function busy<T>(messageKey: string, task: () => Promise<T>): Promise<T> {
   useUi.getState().setBusy(messageKey);
   try {
     return await task();
@@ -188,7 +188,7 @@ export function insertSources(tab: TabState, sources: SourceFile[], at: number):
 }
 
 // Aktueller Stand des Dokuments als Bytes, inklusive ungespeicherter Kommentare.
-async function currentBytes(tab: TabState): Promise<{ bytes: Uint8Array; password: string | null }> {
+export async function currentBytes(tab: TabState): Promise<{ bytes: Uint8Array; password: string | null }> {
   commitPendingEdits();
   const runtime = getRuntime(tab.id);
   if (!runtime?.pdf) throw new Error('kein Dokument');
@@ -203,7 +203,7 @@ async function currentBytes(tab: TabState): Promise<{ bytes: Uint8Array; passwor
   return { bytes, password: runtime.password };
 }
 
-function reportSaveNew(result: SaveNewResult): boolean {
+export function reportSaveNew(result: SaveNewResult): boolean {
   if (result.ok) {
     if (result.open) void handleOpenResult(result.open);
     return true;

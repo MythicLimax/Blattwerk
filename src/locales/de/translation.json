@@ -110,7 +110,8 @@
     "tools": {
       "title": "Werkzeuge",
       "security": "Kennwortschutz …",
-      "compress": "Komprimieren …"
+      "compress": "Komprimieren …",
+      "compare": "Mit Datei vergleichen …"
     }
   },
   "dialog": {
@@ -882,5 +883,23 @@
     "done": "Von {{before}} auf {{after}} verkleinert ({{percent}} % kleiner). Zum Übernehmen speichern.",
     "notSmaller": "Das Dokument ist bereits kompakt; Komprimieren würde es nicht nennenswert verkleinern. Es bleibt unverändert.",
     "failed": "Das Komprimieren ist fehlgeschlagen."
+  },
+  "compare": {
+    "busy": "Dokumente werden verglichen …",
+    "failed": "Der Vergleich ist fehlgeschlagen.",
+    "fileName": "Vergleich {{old}} – {{new}}",
+    "report": {
+      "title": "Vergleich zweier PDF-Dokumente",
+      "oldFile": "Alt",
+      "newFile": "Neu",
+      "summary": "Geänderte Seiten: {{pages}} · entfernte Wörter: {{removed}} · neue Wörter: {{added}}",
+      "noChanges": "Keine Unterschiede im Text gefunden.",
+      "page": "Seite",
+      "noPage": "Diese Seite gibt es hier nicht.",
+      "pageLine": "Seite {{page}} – entfernt: {{removed}}, neu: {{added}}",
+      "pagesAdded": "Seite {{page}} ist neu",
+      "pagesRemoved": "Seite {{page}} fehlt in der neuen Fassung",
+      "legend": "Rot markiert: in der neuen Fassung entfernt. Grün markiert: neu. Verglichen wird der Text, Seite für Seite in der Reihenfolge."
+    }
   }
 }

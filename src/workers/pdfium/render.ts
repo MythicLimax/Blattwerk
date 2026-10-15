@@ -1,5 +1,6 @@
 // Seiten zeichnen und Text auslesen (Phase 6: Export, Texterkennung, Vergleich). Ein Dokument bleibt für mehrere
 // Seiten geöffnet (Sitzung), damit große Dateien nicht für jede Seite neu geladen werden.
+import type { PageWord } from '../../shared/compare';
 import { withBuffer, type Pdfium } from './memory';
 
 const RENDER_ANNOTATIONS = 0x01;
@@ -125,6 +126,45 @@ export class DocumentSessions {
           m.FPDFText_GetText(textPage, 0, count, ptr);
           return m.pdfium.UTF16ToString(ptr).replace(/\r\n?/g, '\n');
         });
+      } finally {
+        m.FPDFText_ClosePage(textPage);
+      }
+    });
+  }
+
+  // Wörter einer Seite mit ihrer Lage (Vergleich). Getrennt wird an Leerraum und Zeilenenden.
+  words(id: number, pageIndex: number): PageWord[] {
+    const m = this.#m;
+    return this.#withPage(id, pageIndex, (page) => {
+      const textPage = m.FPDFText_LoadPage(page);
+      if (!textPage) return [];
+      try {
+        const count = m.FPDFText_CountChars(textPage);
+        const words: PageWord[] = [];
+        let text = '';
+        let rect: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+        const flush = () => {
+          if (text) words.push({ text, rect });
+          text = '';
+          rect = [Infinity, Infinity, -Infinity, -Infinity];
+        };
+        withBuffer(m, 32, (box) => {
+          for (let i = 0; i < count; i++) {
+            const code = m.FPDFText_GetUnicode(textPage, i);
+            const char = code > 0 && code < 0x110000 ? String.fromCodePoint(code) : ' ';
+            if (/\s/.test(char) || code === 0xfffe) {
+              flush();
+              continue;
+            }
+            if (m.FPDFText_GetCharBox(textPage, i, box, box + 8, box + 16, box + 24)) {
+              const [left, right, bottom, top] = [0, 8, 16, 24].map((offset) => m.pdfium.getValue(box + offset, 'double') as number) as [number, number, number, number];
+              rect = [Math.min(rect[0], left), Math.min(rect[1], bottom), Math.max(rect[2], right), Math.max(rect[3], top)];
+            }
+            text += char;
+          }
+        });
+        flush();
+        return words.filter((word) => Number.isFinite(word.rect[0]));
       } finally {
         m.FPDFText_ClosePage(textPage);
       }

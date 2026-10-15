@@ -215,3 +215,30 @@ test.describe('Komprimieren', () => {
     await handle.close();
   });
 });
+
+test.describe('Vergleichen', () => {
+  test('mit einer geänderten Fassung: Bericht als neues Dokument', async () => {
+    const { dir, file } = copyOf('text.pdf');
+    const { PDFDocument, StandardFonts } = await import('@cantoo/pdf-lib');
+    const changed = await PDFDocument.load(readFileSync(file));
+    const font = await changed.embedFont(StandardFonts.Helvetica);
+    changed.getPage(1).drawText('Dieser Satz ist neu hinzugekommen.', { x: 72, y: 120, size: 12, font });
+    const newer = path.join(dir, 'text-neu.pdf');
+    writeFileSync(newer, await changed.save());
+    const report = path.join(dir, 'vergleich.pdf');
+
+    const handle = await launchApp([file], { userData: dir });
+    await waitForDocument(handle.page, TEXT_PDF.pages);
+    await stubDialogs(handle.app, newer, report);
+    // Auswahl einer Datei läuft über showOpenDialog mit Dateipfaden
+    await handle.app.evaluate(({ dialog }, picked) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [picked] })) as typeof dialog.showOpenDialog;
+    }, newer);
+    await menuClick(handle.app, 'tools.compare');
+    await expect(handle.page.getByTestId('tab')).toHaveCount(2);
+    await waitForDocument(handle.page, 2);
+    await expect(handle.page.getByTestId('tab').nth(1)).toContainText('vergleich.pdf');
+    expect(readFileSync(report).subarray(0, 5).toString()).toBe('%PDF-');
+    await handle.close();
+  });
+});
