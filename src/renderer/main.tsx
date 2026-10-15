@@ -6,6 +6,9 @@ import './styles/global.css';
 import './i18n';
 import { App } from './app/App';
 
+// macOS: Fenstertitel und Werkzeugleiste sind eins (Ampelknöpfe in der Leiste, siehe window.ts)
+document.documentElement.dataset.platform = navigator.userAgent.includes('Macintosh') ? 'mac' : 'other';
+
 const root = document.getElementById('root');
 if (root) {
   createRoot(root).render(

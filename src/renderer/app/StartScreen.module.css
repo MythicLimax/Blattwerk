@@ -1,5 +1,5 @@
-/* Startseite: Kopf mit Wortmarke, links Öffnen, Neu erstellen und Farblegende, rechts zuletzt geöffnete Dateien.
-   Flache Flächen, feine Linien, keine Verläufe. */
+/* Startseite nach den Apple-Richtlinien: großer Titel, gruppierte Listen mit feinen Trennlinien statt umrahmter
+   Karten, Symbole in farbigen abgerundeten Quadraten (wie in den Systemeinstellungen). */
 .screen {
   flex: 1;
   display: flex;
@@ -9,29 +9,23 @@
 }
 
 .inner {
-  width: min(980px, 100% - 64px);
-  padding: 8vh 0 var(--space-8);
+  width: min(940px, 100% - 64px);
+  padding: 7vh 0 40px;
 }
 
 .masthead {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding-bottom: var(--space-6);
-  margin-bottom: var(--space-6);
-  border-bottom: 1px solid var(--color-border-strong);
+  gap: 16px;
+  margin-bottom: 28px;
 }
 
 .mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-lg);
-  background: var(--color-brand);
-  color: var(--color-surface);
+  width: 64px;
+  height: 64px;
   flex: none;
+  /* Das Symbol bringt seinen eigenen Rand mit; optisch an den Titel heranrücken */
+  margin: -6px -4px -6px -6px;
 }
 
 .title {
@@ -39,20 +33,20 @@
   font-family: var(--font-display);
   font-size: 30px;
   font-weight: 600;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.022em;
   line-height: 1.15;
 }
 
 .tagline {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: var(--color-text-muted);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-md);
 }
 
 .columns {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  gap: var(--space-8);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 32px;
   align-items: start;
 }
 
@@ -65,28 +59,29 @@
 .main {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: 26px;
 }
 
 .openRow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
+  gap: 8px 14px;
 }
 
 .openButton {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  height: 42px;
-  padding: 0 var(--space-6) 0 var(--space-4);
+  gap: 8px;
+  height: 36px;
+  padding: 0 18px 0 14px;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-brand);
-  color: var(--color-surface);
-  font-size: var(--font-size-lg);
+  color: var(--color-text-inverse);
+  font-size: var(--font-size-md);
   font-weight: 600;
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.35), 0 1px 3px rgba(40, 30, 10, 0.18);
 }
 
 .openButton:hover {
@@ -98,53 +93,70 @@
   color: var(--color-text-muted);
 }
 
+/* Abschnittstitel: normale Schreibweise, leicht hervorgehoben */
 .sectionTitle {
-  margin: 0 0 var(--space-2);
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  margin: 0 0 8px 4px;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text);
 }
 
-.tiles {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
+/* Gruppierte Liste: eine Fläche, Zeilen durch feine Linien getrennt (eingerückt bis zum Text) */
+.tiles,
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-edge), var(--glass-outline);
+  overflow: hidden;
 }
 
-/* Kachel: Farbkante links in der Farbe des Arbeitsbereichs */
 .tile {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--tone);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
   text-align: left;
 }
 
-.tile:hover {
-  background: color-mix(in srgb, var(--tone-soft) 55%, var(--color-surface));
-  border-color: color-mix(in srgb, var(--tone) 35%, var(--color-border));
-  border-left-color: var(--tone);
+.tile + .tile::before,
+.item + .item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 52px;
+  right: 0;
+  height: 0.5px;
+  background: var(--separator);
 }
 
+.tile:hover {
+  background: var(--color-hover);
+}
+
+/* Symbol in farbigem, abgerundetem Quadrat (konzentrisch zur Gruppe: 14 − 8 = 6 … 7) */
 .tileIcon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-md);
-  background: var(--tone-soft);
-  color: var(--tone);
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--tone);
+  color: #ffffff;
   flex: none;
 }
 
 .tileText {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -152,20 +164,31 @@
 }
 
 .tileTitle {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .tileDetail {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
-  line-height: 1.35;
+}
+
+.chevron {
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  flex: none;
+}
+
+/* Farblegende: ruhige Zeile mit Farbpunkten, ohne Rahmen */
+.legend .sectionTitle {
+  color: var(--color-text-muted);
+  font-weight: 500;
 }
 
 .legendList {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
-  margin: 0;
+  gap: 6px 16px;
+  margin: 0 0 0 4px;
   padding: 0;
   list-style: none;
 }
@@ -174,18 +197,14 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
-  padding: 0 10px 0 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
   font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 
 .swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
   background: var(--tone);
 }
 
@@ -203,8 +222,8 @@
   border: none;
   background: none;
   color: var(--color-brand);
-  padding: 0;
-  font-size: var(--font-size-sm);
+  padding: 0 4px;
+  font-size: var(--font-size-md);
 }
 
 .linkButton:hover {
@@ -213,30 +232,16 @@
 
 .empty {
   margin: 0;
-  padding: var(--space-4);
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--color-hover);
   color: var(--color-text-muted);
 }
 
-.list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  overflow: hidden;
-}
-
 .item {
+  position: relative;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.item:last-child {
-  border-bottom: none;
 }
 
 .itemButton {
@@ -244,8 +249,9 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 12px;
   border: none;
   background: transparent;
   text-align: left;
@@ -256,6 +262,7 @@
 }
 
 .itemIcon {
+  width: 28px;
   color: var(--color-brand);
   flex: none;
 }
@@ -265,6 +272,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 1px;
 }
 
 .itemName,
@@ -290,19 +298,26 @@
 }
 
 .remove {
+  position: absolute;
+  right: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-right: var(--space-2);
+  width: 24px;
+  height: 24px;
   border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg-strong);
   color: var(--color-text-muted);
+  opacity: 0;
+}
+
+.item:hover .remove,
+.remove:focus-visible {
+  opacity: 1;
 }
 
 .remove:hover {
-  background: var(--color-hover);
+  background: var(--color-active);
   color: var(--color-text);
 }

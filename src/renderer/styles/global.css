@@ -28,9 +28,28 @@ select {
   color: inherit;
 }
 
+:root {
+  accent-color: var(--color-brand);
+}
+
+/* Fokusring wie in macOS: weich, folgt der Rundung des Elements */
 :focus-visible {
-  outline: 2px solid var(--color-focus);
+  outline: 3px solid color-mix(in srgb, var(--color-focus) 50%, transparent);
   outline-offset: 1px;
+}
+
+input[type='radio'] {
+  border-radius: 50%;
+}
+
+/* Native Optionsfelder und Kästchen: Fokus als weicher Schein statt eckigem Rahmen */
+input:is([type='radio'], [type='checkbox']):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus) 45%, transparent);
+}
+
+input[type='checkbox'] {
+  border-radius: 4px;
 }
 
 /* Text im Dokument muss auswählbar bleiben, obwohl die Oberfläche es nicht ist. */
@@ -103,4 +122,19 @@ select {
     max-height: 100%;
     object-fit: contain;
   }
+}
+
+/* macOS: Werkzeugleiste ist zugleich Titelleiste. Leere Flächen ziehen das Fenster, Bedienelemente nicht. */
+[data-platform='mac'] [data-drag-region] {
+  -webkit-app-region: drag;
+}
+
+[data-platform='mac'] [data-drag-region] :is(button, input, select, a, [role='tab'], [data-no-drag]) {
+  -webkit-app-region: no-drag;
+}
+
+input:not([type='checkbox'], [type='radio'], [type='range'], [type='color']),
+select,
+textarea {
+  border-radius: var(--radius-md);
 }

@@ -1,62 +1,82 @@
+/* Werkzeugleiste nach macOS 26: zugleich Titelleiste (Zugfläche), Knopfgruppen als Liquid-Glass-Kapseln */
 .toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: 10px;
   height: var(--toolbar-height);
-  padding: 0 var(--space-2);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  padding: 0 10px;
+  background: var(--color-bg);
   flex: none;
+  position: relative;
+  z-index: 2;
+}
+
+/* Platz für die Ampelknöpfe */
+:global([data-platform='mac']) .toolbar {
+  padding-left: 84px;
 }
 
 .group {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
+  height: 36px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge), var(--glass-outline), 0 2px 10px rgba(40, 30, 10, 0.06);
 }
 
 .center {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
   min-width: 0;
   overflow: hidden;
+  padding: 4px 2px;
 }
 
 .separator {
-  width: 1px;
-  height: 20px;
-  background: var(--color-border);
+  display: none;
 }
 
 .pageGroup {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  margin-left: var(--space-1);
+  gap: 4px;
+  margin: 0 8px 0 2px;
   white-space: nowrap;
 }
 
 .pageInput {
-  width: 48px;
+  width: 44px;
   height: 26px;
-  padding: 0 var(--space-1);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-sunken);
+  padding: 0 4px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--fill-selected);
+  box-shadow: inset 0 0 0 0.5px var(--separator);
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .pageCount {
   color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .select {
-  height: 26px;
-  max-width: 190px;
-  padding: 0 var(--space-1);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  height: 30px;
+  max-width: 230px;
+  padding: 0 6px 0 10px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+}
+
+.select:hover {
+  background: var(--color-hover);
 }

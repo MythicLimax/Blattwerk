@@ -210,6 +210,7 @@ test.describe('Wasserzeichen, Kopf- und Fußzeilen, Seitenzahlen', () => {
     let texts = await pageTexts(file);
     for (const text of texts) expect(text).toContain('VERTRAULICH');
     if (process.platform === 'darwin') expect(inspectWithPdfKit(file).ok).toBe(true);
+    await waitForDocument(page, TEXT_PDF.pages);
 
     await menuClick(app, 'stamp.removeWatermark');
     await expect(page.getByTestId('notices')).toContainText('Wasserzeichen entfernt');
@@ -348,7 +349,8 @@ test.describe('Inhalt bearbeiten', () => {
     await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2 + 60, { steps: 4 });
     await page.mouse.up();
     await expect.poll(async () => (await whole.boundingBox())?.y ?? 0).toBeGreaterThan(before.y + 40);
-    await expect.poll(async () => Math.round((await whole.boundingBox())?.width ?? 0)).toBe(Math.round(before.width));
+    // Breite bleibt gleich (bis auf Rundung an Bildpunktgrenzen)
+    await expect.poll(async () => Math.abs(((await whole.boundingBox())?.width ?? 0) - before.width)).toBeLessThan(1);
     await whole.dblclick();
     const editor = page.getByTestId('content-text-editor');
     await expect(editor).toHaveValue('Dieser Satz besteht aus Stücken');

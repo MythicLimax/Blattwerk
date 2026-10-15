@@ -1,4 +1,5 @@
-import { Combine, FileText, FileType2, FolderOpen, Images, Leaf, X, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Combine, FileText, FileType2, FolderOpen, Images, X, type LucideIcon } from 'lucide-react';
+import appIcon from '../../../resources/icon.svg?url';
 import { useTranslation } from 'react-i18next';
 import type { CommandId } from '../../shared/commands';
 import { api } from '../api';
@@ -28,9 +29,7 @@ export function StartScreen() {
     <div className={styles.screen} data-testid="start-screen">
       <div className={styles.inner}>
         <header className={styles.masthead}>
-          <span className={styles.mark} aria-hidden="true">
-            <Leaf size={22} strokeWidth={1.75} />
-          </span>
+          <img className={styles.mark} src={appIcon} alt="" aria-hidden="true" />
           <div>
             <h1 className={styles.title}>{t('start.title')}</h1>
             <p className={styles.tagline}>{t('start.tagline')}</p>
@@ -61,6 +60,7 @@ export function StartScreen() {
                       <span className={styles.tileTitle}>{t(`start.tiles.${key}.title`)}</span>
                       <span className={styles.tileDetail}>{t(`start.tiles.${key}.detail`)}</span>
                     </span>
+                    <ChevronRight size={15} strokeWidth={2} className={styles.chevron} aria-hidden="true" />
                   </button>
                 ))}
               </div>

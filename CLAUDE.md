@@ -113,7 +113,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0020)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0021)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
@@ -185,7 +185,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 - Dateinamen: React-Komponenten `PascalCase.tsx`, alles andere `kebab-case.ts`.
 - **Keine UI-Texte im Code:** immer `t('bereich.schluessel')`. Neue Schlüssel zuerst in `src/locales/de/`. ESLint erzwingt das.
 - Icons nur aus `lucide-react`. Styling mit CSS Modules und Design-Tokens (CSS-Variablen) für hell und dunkel nach `prefers-color-scheme`.
-- **Gestaltung** ([ADR 0020](docs/entscheidungen/0020-gestaltung.md)): Papierton, Flaschengrün (`--color-brand`), je Arbeitsbereich ein Ton (`data-tone`, `IconButton tone`, `ModeBadge`). Neue Modi bekommen einen Ton und ein Namensschild. Keine Verläufe, kein Glas, keine violetten Akzente.
+- **Gestaltung** (Farben [ADR 0020](docs/entscheidungen/0020-gestaltung.md), Formen [ADR 0021](docs/entscheidungen/0021-liquid-glass.md)): wie eine native macOS-26-App mit Liquid Glass (CSS-Variablen `--glass-*`), Systemschrift, konzentrische Rundungen, Kapseln für Leistenknöpfe und Tabs, keine umrahmten Karten und keine Großbuchstaben-Beschriftungen. Farben: Papierton, Flaschengrün (`--color-brand`), je Arbeitsbereich ein Ton (`data-tone`, `IconButton tone`, `ModeBadge`); neue Modi bekommen einen Ton und ein Namensschild. Unter macOS ist die Werkzeugleiste zugleich Titelleiste (`hiddenInset`, `data-drag-region`).
 - Tastenkürzel nur über die zentrale Tabelle in `src/shared/shortcuts.ts` (`CmdOrCtrl`). Menü und Renderer lesen dieselbe Tabelle.
 - Fehler aus Engines als typisierte Ergebnisse, nicht als nackte Exceptions über Prozessgrenzen. Meldungen an Nutzer immer übersetzt.
 - Commits: `typ(bereich): Beschreibung auf Deutsch`, z. B. `feat(viewer): Miniaturen erst bei Sichtbarkeit rendern`. Am Phasenende ein Commit `Phase N abgeschlossen`.

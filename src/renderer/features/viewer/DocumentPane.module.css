@@ -59,7 +59,7 @@
 .button {
   height: 28px;
   padding: 0 var(--space-4);
-  border: 1px solid var(--color-border-strong);
+  border: 0.5px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
 }

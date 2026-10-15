@@ -1,16 +1,19 @@
+/* Sheet nach macOS 26: Liquid Glass, große konzentrische Rundung, Knöpfe als Kapseln */
 .dialog {
   max-width: calc(100vw - 48px);
   max-height: calc(100vh - 48px);
   padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-raised);
+  border: none;
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   color: var(--color-text);
-  box-shadow: var(--shadow-popover);
+  box-shadow: var(--glass-edge), var(--glass-outline), 0 24px 70px rgba(40, 30, 10, 0.22), 0 2px 8px rgba(40, 30, 10, 0.08);
 }
 
 .dialog::backdrop {
-  background: rgba(30, 24, 12, 0.32);
+  background: rgba(30, 24, 12, 0.18);
 }
 
 .form {
@@ -21,15 +24,15 @@
 
 .title {
   margin: 0;
-  padding: var(--space-4) var(--space-4) var(--space-2);
+  padding: 20px 22px 6px;
   font-family: var(--font-display);
   font-size: 17px;
   font-weight: 600;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.01em;
 }
 
 .body {
-  padding: var(--space-2) var(--space-4);
+  padding: 6px 22px;
   overflow: auto;
   user-select: text;
 }
@@ -37,24 +40,26 @@
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4) var(--space-4);
+  gap: 10px;
+  padding: 14px 16px 16px;
 }
 
 .primary,
 .secondary {
-  min-width: 84px;
-  height: 28px;
-  padding: 0 var(--space-3);
+  min-width: 88px;
+  height: 30px;
+  padding: 0 16px;
+  border: none;
   border-radius: var(--radius-md);
   font-size: var(--font-size-md);
+  font-weight: 500;
   cursor: default;
 }
 
 .primary {
-  border: 1px solid var(--color-accent);
   background: var(--color-accent);
   color: var(--color-text-inverse);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.35), 0 1px 2px rgba(40, 30, 10, 0.15);
 }
 
 .primary:hover:not(:disabled) {
@@ -62,15 +67,15 @@
 }
 
 .secondary {
-  border: 1px solid var(--color-border-strong);
-  background: var(--color-surface);
+  background: var(--color-hover);
+  box-shadow: inset 0 0 0 0.5px var(--separator);
 }
 
 .secondary:hover:not(:disabled) {
-  background: var(--color-hover);
+  background: var(--color-active);
 }
 
 .primary:disabled,
 .secondary:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
 }

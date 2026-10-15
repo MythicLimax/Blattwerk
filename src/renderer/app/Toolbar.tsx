@@ -165,6 +165,7 @@ export function Toolbar() {
     <header
       className={styles.toolbar}
       data-testid="toolbar"
+      data-drag-region
       // Klicks auf Schaltflächen nehmen dem Dokument nicht den Tastaturfokus (Pfeile, Bild auf/ab scrollen weiter).
       // Per Tab-Taste bleiben die Schaltflächen erreichbar.
       onMouseDown={(event) => {

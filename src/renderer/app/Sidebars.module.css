@@ -1,34 +1,48 @@
+/* Seitenleisten nach macOS 26: schwebende Liquid-Glass-Flächen mit großer Rundung, eingerückt vom Fensterrand */
 .left,
 .right {
   display: flex;
   flex-direction: column;
-  background: var(--color-surface);
+  margin: 0 8px 8px;
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge), var(--glass-outline), var(--glass-shadow);
   flex: none;
   min-height: 0;
+  overflow: hidden;
 }
 
 .left {
   width: var(--sidebar-width);
-  border-right: 1px solid var(--color-border);
+  margin-right: 0;
 }
 
 .right {
   width: var(--rightpanel-width);
-  border-left: 1px solid var(--color-border);
+  margin-left: 0;
 }
 
+/* Umschalter als Kapsel-Segmente */
 .switcher {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--color-border);
+  margin: 8px 8px 4px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+}
+
+.switcher > button {
+  flex: 1;
+  width: auto;
+  height: 26px;
 }
 
 .switcherTitle {
-  margin-left: var(--space-2);
-  font-weight: 600;
-  color: var(--color-text-muted);
+  display: none;
 }
 
 .content {
@@ -41,12 +55,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
-  border-bottom: 1px solid var(--color-border);
+  padding: 10px 10px 6px 16px;
 }
 
 .panelTitle {
   margin: 0;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-lg);
   font-weight: 600;
+  letter-spacing: -0.01em;
 }

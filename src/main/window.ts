@@ -75,7 +75,9 @@ export function createMainWindow(options: CreateWindowOptions): BrowserWindow {
     minHeight: 480,
     show: false,
     title: PRODUCT_NAME,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1f1f1f' : '#f3f3f3',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1d1a' : '#f3efe6',
+    // macOS: Titelleiste und Werkzeugleiste in einem (wie Vorschau); die Leiste ist Zugfläche (global.css)
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 18 } } : {}),
     webPreferences: {
       preload: options.preloadPath,
       contextIsolation: true,

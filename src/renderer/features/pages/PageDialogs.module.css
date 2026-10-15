@@ -7,7 +7,7 @@
 .select {
   height: 28px;
   padding: 0 var(--space-1);
-  border: 1px solid var(--color-border-strong);
+  border: 0.5px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
 }
@@ -29,7 +29,7 @@
   padding: 0;
   max-height: 260px;
   overflow: auto;
-  border: 1px solid var(--color-border);
+  border: 0.5px solid var(--separator);
   border-radius: var(--radius-md);
 }
 
@@ -41,7 +41,7 @@
 }
 
 .fileRow + .fileRow {
-  border-top: 1px solid var(--color-border);
+  border-top: 0.5px solid var(--separator);
 }
 
 .fileName {
