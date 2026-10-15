@@ -6,12 +6,15 @@ import { useAnnotations } from '../../state/annotations-store';
 import type { TabState } from '../../state/documents-store';
 import styles from './DocumentPane.module.css';
 import { ViewerHost } from './ViewerHost';
+import { useCertify } from '../certify/certify-store';
+import { SignaturesBar } from '../certify/Signatures';
 
 // Inhalt eines Tabs: Ladeanzeige, Fehlermeldung oder die Seitenansicht.
 // Alle Tabs bleiben eingehängt, damit Scrollposition und gerenderte Seiten beim Wechseln erhalten bleiben.
 export function DocumentPane({ tab, active }: { tab: TabState; active: boolean }) {
   const { t } = useTranslation();
   const placingSignature = useAnnotations((s) => s.tool === 'signature' && s.pendingSignature !== null);
+  const placingCertificate = useCertify((s) => s.placement?.tabId === tab.id);
   return (
     <section
       className={[styles.pane, active ? styles.active : styles.hidden].join(' ')}
@@ -24,6 +27,12 @@ export function DocumentPane({ tab, active }: { tab: TabState; active: boolean }
           {t('signatures.placeHint')}
         </div>
       )}
+      {active && placingCertificate && tab.status === 'ready' && tab.mode === 'view' && (
+        <div className={styles.hint} role="status" data-testid="certify-hint">
+          {t('certify.placeHint')}
+        </div>
+      )}
+      {active && !placingCertificate && tab.status === 'ready' && tab.mode === 'view' && <SignaturesBar tab={tab} />}
       {tab.working && (
         <div className={styles.working} role="status" data-testid="pages-working">
           <Loader2 size={22} className={styles.spin} aria-hidden="true" />

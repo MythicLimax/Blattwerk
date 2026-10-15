@@ -239,6 +239,9 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
   const toolsMenu: MenuItemConstructorOptions = {
     label: t('menu.tools.title'),
     submenu: [
+      cmd('tools.certify', t('menu.tools.certify'), { enabled: viewing }),
+      cmd('tools.signatures', t('menu.tools.signatures'), { enabled: viewing }),
+      { type: 'separator' },
       cmd('tools.ocr', t('menu.tools.ocr'), { enabled: viewing }),
       cmd('tools.compare', t('menu.tools.compare'), { enabled: viewing }),
       cmd('tools.compress', t('menu.tools.compress'), { enabled: viewing }),

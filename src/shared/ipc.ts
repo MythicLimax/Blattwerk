@@ -33,6 +33,10 @@ export const IPC = {
   exportWriteImage: 'export:write-image',
   exportEnd: 'export:end',
   exportSaveText: 'export:save-text',
+  // Phase 7: digitale ID (.p12) wählen, zuletzt verwendete laden, neu erstellte speichern
+  signingPickId: 'signing:pick-id',
+  signingLastId: 'signing:last-id',
+  signingSaveId: 'signing:save-id',
   // Renderer → Hauptprozess (send)
   menuState: 'app:menu-state',
   rendererReady: 'app:renderer-ready',
@@ -191,3 +195,7 @@ export type ExportFolderResult = { ok: true; token: string; folder: string } | {
 export type ExportWriteResult = { ok: true; name: string } | { ok: false; error: 'invalid-data' | 'unknown-folder' | 'write-failed'; detail?: string };
 
 export type ExportTextResult = { ok: true; name: string } | { ok: false; error: SaveNewErrorCode; detail?: string };
+
+// Phase 7: digitale ID (PKCS#12)
+export type IdFileResult = { ok: true; name: string; bytes: Uint8Array } | { ok: false; error: 'cancelled' | 'unreadable' | 'invalid' };
+export type SaveIdResult = { ok: true; name: string } | { ok: false; error: SaveNewErrorCode; detail?: string };

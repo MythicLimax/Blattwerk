@@ -183,3 +183,9 @@ export function isImageBytes(value: unknown, kind: unknown): value is Uint8Array
 export function isExportText(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 256 * 1024 * 1024;
 }
+
+// Digitale ID (PKCS#12): DER-Struktur (beginnt mit SEQUENCE), höchstens 1 MB
+export const MAX_ID_BYTES = 1024 * 1024;
+export function isP12Bytes(value: unknown): value is Uint8Array {
+  return value instanceof Uint8Array && value.length >= 16 && value.length <= MAX_ID_BYTES && value[0] === 0x30;
+}

@@ -81,6 +81,9 @@ const loadStamping = () => import('./stamping');
 const loadProtection = () => import('./protection');
 const loadCompress = () => import('./compress');
 const loadCompare = () => import('./compare');
+const loadSigning = () => import('./signing');
+const loadSignatures = () => import('./signatures');
+const loadIdentity = () => import('./identity');
 
 const NO_CHANGES = { upserts: [], deletions: [] };
 
@@ -126,6 +129,7 @@ function errorCode(error: unknown): WorkerErrorCode {
   if (isFieldError(error)) return error.code;
   if (error instanceof Error && error.name === 'SanitizeError') return 'redact-encrypted';
   if (error instanceof Error && error.name === 'CompressError') return 'compress-encrypted';
+  if (error instanceof Error && error.name === 'SignError') return (error as Error & { code: WorkerErrorCode }).code;
   if (error instanceof Error && (error.name === 'StampError' || error.name === 'ContentError')) return (error as Error & { code: WorkerErrorCode }).code;
   if (error instanceof PageOperationError) return error.code;
   if (error instanceof FormValueError) return 'form';
@@ -233,6 +237,25 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
           const { buildCompareReport } = await loadCompare();
           const report = await buildCompareReport({ oldBytes, newBytes, oldWords: words(oldBytes), newWords: words(newBytes), names: request.names, labels: request.labels });
           replyBytes(request.id, report.bytes, pdfium, null);
+          return;
+        }
+        case 'sign': {
+          const pending = request.changes.upserts.length > 0 || request.changes.deletions.length > 0 || request.formValues.length > 0;
+          const input = new Uint8Array(request.bytes);
+          const current = pending ? pdfium.process(input, request.password, request.changes, [], { incremental: true }, request.formValues) : input;
+          const { signDocument } = await loadSigning();
+          replyBytes(request.id, await signDocument(current, request.input), pdfium, request.password);
+          return;
+        }
+        case 'verifySignatures': {
+          const { verifySignatures } = await loadSignatures();
+          reply({ id: request.id, ok: true, kind: 'signatures', checks: await verifySignatures(new Uint8Array(request.bytes)) });
+          return;
+        }
+        case 'createIdentity': {
+          const { createIdentity } = await loadIdentity();
+          const bytes = ownBuffer(await createIdentity(request));
+          reply({ id: request.id, ok: true, kind: 'raw', bytes }, [bytes]);
           return;
         }
         case 'inspect':

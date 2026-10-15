@@ -6,6 +6,8 @@ import { MARKUP_TOOLS, useAnnotations, useTabAnnotations, type Tool } from '../.
 import { useDocuments } from '../../state/documents-store';
 import { geometryFromViewport, type PageGeometry } from '../../engine/coords';
 import { ContentEditOverlay } from '../content-edit/ContentEditOverlay';
+import { CertifyPlacement } from '../certify/CertifyPlacement';
+import { useCertify } from '../certify/certify-store';
 import { useContentEditInput } from '../content-edit/hooks';
 import { FormEditOverlay } from '../form-edit/FormEditOverlay';
 import { useFormEditInput } from '../form-edit/hooks';
@@ -65,6 +67,7 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
   // Modus „Formular bearbeiten“: Kommentare bleiben sichtbar, reagieren aber nicht auf die Maus.
   const formEditing = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.formEditing ?? false);
   const contentEditing = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.contentEditing ?? false);
+  const placingCertificate = useCertify((s) => s.placement?.tabId === tabId);
   const [visible, setVisible] = useState<number[]>([]);
   const [geometries, setGeometries] = useState<Map<number, PageGeometry>>(new Map());
   const [pagesReady, setPagesReady] = useState(0);
@@ -266,6 +269,7 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
             />
             {formEditing && <FormEditOverlay tabId={tabId} pageIndex={pageIndex} geometry={geometry} scale={scale} />}
             {contentEditing && <ContentEditOverlay tabId={tabId} pageIndex={pageIndex} geometry={geometry} scale={scale} />}
+            {placingCertificate && <CertifyPlacement tabId={tabId} pageIndex={pageIndex} geometry={geometry} />}
           </>,
           host,
           `page-${pageIndex}`,

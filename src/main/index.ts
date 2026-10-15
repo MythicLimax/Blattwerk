@@ -203,7 +203,7 @@ function isTrustedSender(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
 
 const settingsStore = createSettingsStore(app.getPath('userData'));
 let windowState: WindowState = { bounds: null, maximized: false };
-let settings: SettingsData = { version: 1, window: windowState, authorName: null };
+let settings: SettingsData = { version: 1, window: windowState, authorName: null, lastIdPath: null };
 
 function saveSettings(patch: Partial<SettingsData>): void {
   settings = { ...settings, ...patch };
@@ -357,6 +357,8 @@ void app.whenReady().then(async () => {
       saveSettings({ authorName: name });
       return currentSettings();
     },
+    getLastIdPath: () => settings.lastIdPath,
+    setLastIdPath: (filePath) => saveSettings({ lastIdPath: filePath }),
     onCloseConfirmed: (win) => {
       if (win !== mainWindow) return;
       allowClose = true;

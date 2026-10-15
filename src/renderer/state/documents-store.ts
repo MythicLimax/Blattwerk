@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { SignatureCheck } from '../../shared/signing';
 import type { ViewMode } from '../../shared/ipc';
 
 export type TabStatus = 'loading' | 'password' | 'ready' | 'error';
@@ -51,6 +52,8 @@ export interface TabState {
   canModify: boolean;
   // Unverschlüsselt oder mit dem Berechtigungskennwort geöffnet: Kennwortschutz darf geändert werden
   ownerAccess: boolean;
+  // Geprüfte digitale Signaturen (Phase 7); null = keine oder noch nicht geprüft
+  signatures: SignatureCheck[] | null;
   // Modus „Inhalt bearbeiten“ (Phase 5): Text und Bilder der Seite
   contentEditing: boolean;
   // Modus „Formular bearbeiten“: Felder anlegen, verschieben, ändern, löschen (statt ausfüllen)
@@ -116,6 +119,7 @@ export const useDocuments = create<DocumentsState>((set) => ({
           encrypted: false,
           canModify: true,
           ownerAccess: true,
+          signatures: null,
           contentEditing: false,
           formEditing: false,
           saving: false,

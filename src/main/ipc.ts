@@ -9,6 +9,8 @@ import {
   type ExportFolderResult,
   type ExportTextResult,
   type ExportWriteResult,
+  type IdFileResult,
+  type SaveIdResult,
   type MenuState,
   type OpenResult,
   type PickKind,
@@ -24,6 +26,8 @@ import {
   isExportText,
   isFileId,
   isImageBytes,
+  isP12Bytes,
+  MAX_ID_BYTES,
   isPdfBytes,
   isPickKind,
   isSignatureInput,
@@ -58,6 +62,8 @@ export interface IpcContext {
   onCloseConfirmed: (win: BrowserWindow) => void;
   onCloseCancelled: (win: BrowserWindow) => void;
   signatures: SignatureStore;
+  getLastIdPath: () => string | null;
+  setLastIdPath: (filePath: string | null) => void;
 }
 
 export async function showOpenDialog(win: BrowserWindow | null): Promise<string[]> {
@@ -363,6 +369,59 @@ export function registerIpc(ctx: IpcContext): void {
     } catch (error) {
       return { ok: false, error: 'write-failed', detail: String(error) };
     }
+    return { ok: true, name: path.basename(target) };
+  });
+
+  // Digitale ID (Phase 7): Datei lesen (höchstens 1 MB, DER), Pfad für das nächste Mal merken
+  const readId = async (filePath: string): Promise<IdFileResult> => {
+    try {
+      const stat = await fsp.stat(filePath);
+      if (!stat.isFile() || stat.size > MAX_ID_BYTES) return { ok: false, error: 'invalid' };
+      const bytes = new Uint8Array(await fsp.readFile(filePath));
+      return isP12Bytes(bytes) ? { ok: true, name: path.basename(filePath), bytes } : { ok: false, error: 'invalid' };
+    } catch {
+      return { ok: false, error: 'unreadable' };
+    }
+  };
+
+  handle(IPC.signingPickId, async (event): Promise<IdFileResult> => {
+    const win = windowOf(event);
+    if (!win) return { ok: false, error: 'cancelled' };
+    const result = await dialog.showOpenDialog(win, {
+      title: t('dialog.pickIdTitle'),
+      properties: ['openFile'],
+      filters: [{ name: t('dialog.filterId'), extensions: ['p12', 'pfx'] }],
+    });
+    const filePath = result.filePaths[0];
+    if (result.canceled || !filePath) return { ok: false, error: 'cancelled' };
+    const read = await readId(filePath);
+    if (read.ok) ctx.setLastIdPath(filePath);
+    return read;
+  });
+
+  handle(IPC.signingLastId, async (): Promise<IdFileResult> => {
+    const filePath = ctx.getLastIdPath();
+    return filePath ? readId(filePath) : { ok: false, error: 'cancelled' };
+  });
+
+  handle(IPC.signingSaveId, async (event, bytes: unknown, suggestedName: unknown): Promise<SaveIdResult> => {
+    const win = windowOf(event);
+    if (!win) return { ok: false, error: 'cancelled' };
+    if (!isP12Bytes(bytes)) return { ok: false, error: 'invalid-data' };
+    const result = await dialog.showSaveDialog(win, {
+      title: t('dialog.saveIdTitle'),
+      defaultPath: path.join(app.getPath('documents'), sanitizeFileName(suggestedName, 'Digitale ID', '.p12')),
+      filters: [{ name: t('dialog.filterId'), extensions: ['p12'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+    if (result.canceled || !result.filePath) return { ok: false, error: 'cancelled' };
+    const target = /\.(p12|pfx)$/i.test(result.filePath) ? result.filePath : `${result.filePath}.p12`;
+    try {
+      await atomicWrite(target, bytes);
+    } catch (error) {
+      return { ok: false, error: 'write-failed', detail: String(error) };
+    }
+    ctx.setLastIdPath(target);
     return { ok: true, name: path.basename(target) };
   });
 

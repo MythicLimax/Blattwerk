@@ -18,6 +18,9 @@ export interface RenderedPage {
 interface Session {
   doc: number;
   data: number;
+  // Formular-Umgebung: Ohne sie zeichnet PDFium in Dokumenten mit Formular keine Felder (auch keine Unterschriften)
+  formInfo: number;
+  form: number;
 }
 
 export class RenderError extends Error {
@@ -47,7 +50,9 @@ export class DocumentSessions {
       throw new RenderError(`Dokument lässt sich nicht öffnen (Fehler ${m.FPDF_GetLastError()})`);
     }
     const id = this.#next++;
-    this.#sessions.set(id, { doc, data });
+    const formInfo = m.PDFiumExt_OpenFormFillInfo();
+    const form = m.PDFiumExt_InitFormFillEnvironment(doc, formInfo);
+    this.#sessions.set(id, { doc, data, formInfo, form });
     return { id, pageCount: m.FPDF_GetPageCount(doc) };
   }
 
@@ -55,6 +60,8 @@ export class DocumentSessions {
     const session = this.#sessions.get(id);
     if (!session) return;
     this.#sessions.delete(id);
+    if (session.form) this.#m.PDFiumExt_ExitFormFillEnvironment(session.form);
+    if (session.formInfo) this.#m.PDFiumExt_CloseFormFillInfo(session.formInfo);
     this.#m.FPDF_CloseDocument(session.doc);
     this.#m.pdfium.wasmExports.free(session.data);
   }
@@ -63,14 +70,16 @@ export class DocumentSessions {
     for (const id of [...this.#sessions.keys()]) this.close(id);
   }
 
-  #withPage<T>(id: number, pageIndex: number, fn: (page: number) => T): T {
+  #withPage<T>(id: number, pageIndex: number, fn: (page: number, form: number) => T): T {
     const session = this.#sessions.get(id);
     if (!session) throw new RenderError('Sitzung beendet');
     const page = this.#m.FPDF_LoadPage(session.doc, pageIndex);
     if (!page) throw new RenderError(`Seite ${pageIndex + 1} lässt sich nicht laden`);
+    if (session.form) this.#m.FORM_OnAfterLoadPage(page, session.form);
     try {
-      return fn(page);
+      return fn(page, session.form);
     } finally {
+      if (session.form) this.#m.FORM_OnBeforeClosePage(page, session.form);
       this.#m.FPDF_ClosePage(page);
     }
   }
@@ -79,7 +88,7 @@ export class DocumentSessions {
   // verkleinert.
   render(id: number, pageIndex: number, dpi: number, maxPixels: number): RenderedPage {
     const m = this.#m;
-    return this.#withPage(id, pageIndex, (page) => {
+    return this.#withPage(id, pageIndex, (page, form) => {
       const widthPt = m.FPDF_GetPageWidthF(page);
       const heightPt = m.FPDF_GetPageHeightF(page);
       let scale = dpi / 72;
@@ -92,6 +101,8 @@ export class DocumentSessions {
       try {
         m.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xffffffff);
         m.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, RENDER_ANNOTATIONS);
+        // Formularfelder und Unterschriften zeichnet die Formular-Umgebung darüber
+        if (form) m.FPDF_FFLDraw(form, bitmap, page, 0, 0, width, height, 0, RENDER_ANNOTATIONS);
         const stride = m.FPDFBitmap_GetStride(bitmap);
         const buffer = m.FPDFBitmap_GetBuffer(bitmap);
         const heap = m.pdfium.HEAPU8;

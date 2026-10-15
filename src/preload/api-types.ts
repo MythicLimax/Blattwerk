@@ -7,6 +7,8 @@ import type {
   ExportImageKind,
   ExportTextResult,
   ExportWriteResult,
+  IdFileResult,
+  SaveIdResult,
   MenuState,
   NamedBytes,
   OpenResult,
@@ -53,6 +55,12 @@ export interface BlattwerkApi {
   };
   // Export als Text über den Sichern-Dialog (UTF-8)
   exportText(text: string, suggestedName: string, referenceFileId: string | null): Promise<ExportTextResult>;
+  // Digitale ID (Phase 7): wählen, zuletzt verwendete laden, neu erstellte speichern
+  digitalId: {
+    pick(): Promise<IdFileResult>;
+    last(): Promise<IdFileResult>;
+    save(bytes: Uint8Array, suggestedName: string): Promise<SaveIdResult>;
+  };
   signatures: {
     list(): Promise<SavedSignature[]>;
     add(input: SignatureInput): Promise<SavedSignature[]>;

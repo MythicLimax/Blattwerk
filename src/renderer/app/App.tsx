@@ -13,6 +13,9 @@ import { SecurityDialog } from '../features/security/SecurityDialog';
 import { ExportImagesDialog } from '../features/export/ExportImagesDialog';
 import { CompressDialog } from '../features/compress/CompressDialog';
 import { OcrDialog } from '../features/ocr/OcrDialog';
+import { CertifyDialog, CreateIdDialog } from '../features/certify/CertifyDialogs';
+import { useCertify } from '../features/certify/certify-store';
+import { SignaturesDialog } from '../features/certify/Signatures';
 import { ProgressDialog } from '../features/progress/ProgressDialog';
 import { BusyOverlay } from '../features/pages/BusyOverlay';
 import { ChooseSignatureDialog, CreateSignatureDialog } from '../features/signatures/SignatureDialogs';
@@ -57,6 +60,9 @@ export function App() {
   const exportImagesOpen = useUi((s) => s.exportImagesOpen);
   const compressOpen = useUi((s) => s.compressOpen);
   const ocrOpen = useUi((s) => s.ocrOpen);
+  const certifyOpen = useCertify((s) => s.dialogOpen);
+  const createIdOpen = useCertify((s) => s.createOpen);
+  const signaturesOpen = useCertify((s) => s.detailsOpen);
   const pageDialog = useUi((s) => s.pageDialog);
   const combine = useUi((s) => s.combine);
   const signatureDialog = useUi((s) => s.signatureDialog);
@@ -133,6 +139,9 @@ export function App() {
       {exportImagesOpen && active?.status === 'ready' && <ExportImagesDialog tab={active} />}
       {compressOpen && active?.status === 'ready' && <CompressDialog tab={active} />}
       {ocrOpen && active?.status === 'ready' && <OcrDialog tab={active} />}
+      {certifyOpen && active?.status === 'ready' && <CertifyDialog tab={active} />}
+      {createIdOpen && <CreateIdDialog />}
+      {signaturesOpen && active?.status === 'ready' && <SignaturesDialog tab={active} />}
       <ProgressDialog />
       <SourcePasswordDialog />
       <BusyOverlay />

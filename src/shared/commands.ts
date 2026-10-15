@@ -51,6 +51,8 @@ export const COMMANDS = [
   'tools.compress',
   'tools.compare',
   'tools.ocr',
+  'tools.certify',
+  'tools.signatures',
   'file.exportImages',
   'file.exportText',
   'file.combine',

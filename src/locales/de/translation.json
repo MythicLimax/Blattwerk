@@ -112,7 +112,9 @@
       "security": "Kennwortschutz …",
       "compress": "Komprimieren …",
       "compare": "Mit Datei vergleichen …",
-      "ocr": "Text erkennen (OCR) …"
+      "ocr": "Text erkennen (OCR) …",
+      "certify": "Mit Zertifikat unterschreiben …",
+      "signatures": "Signaturen prüfen …"
     }
   },
   "dialog": {
@@ -152,7 +154,10 @@
     "chooseFolderButton": "Hier speichern",
     "exportFolderTitle": "Ordner für die Bilder wählen",
     "exportTextTitle": "Text exportieren",
-    "filterText": "Textdatei"
+    "filterText": "Textdatei",
+    "pickIdTitle": "Digitale ID wählen",
+    "saveIdTitle": "Digitale ID speichern",
+    "filterId": "Digitale ID (PKCS#12)"
   },
   "errors": {
     "open": {
@@ -196,7 +201,10 @@
       "stamp-image": "Das Bild konnte nicht eingebettet werden.",
       "content-missing": "Das Objekt wurde nicht gefunden. Bitte erneut versuchen.",
       "content-characters": "Diese Zeichen kann keine verfügbare Schrift darstellen: {{detail}}",
-      "compress-encrypted": "Verschlüsselte Dokumente lassen sich nicht komprimieren. Entfernen Sie zuerst den Kennwortschutz (Werkzeuge → Kennwortschutz)."
+      "compress-encrypted": "Verschlüsselte Dokumente lassen sich nicht komprimieren. Entfernen Sie zuerst den Kennwortschutz (Werkzeuge → Kennwortschutz).",
+      "sign-password": "Das Kennwort der digitalen ID ist falsch.",
+      "sign-certificate": "Die digitale ID lässt sich nicht verwenden: {{detail}}",
+      "sign-encrypted": "Verschlüsselte Dokumente lassen sich nicht mit Zertifikat unterschreiben. Entfernen Sie zuerst den Kennwortschutz (Werkzeuge → Kennwortschutz)."
     }
   },
   "start": {
@@ -923,5 +931,76 @@
     "allHaveText": "Alle gewählten Seiten enthalten bereits Text; es gibt nichts zu erkennen.",
     "nothingFound": "Auf den gewählten Seiten wurde kein Text erkannt.",
     "failed": "Die Texterkennung ist fehlgeschlagen."
+  },
+  "certify": {
+    "title": "Mit Zertifikat unterschreiben",
+    "message": "Eine digitale Signatur belegt, wer unterschrieben hat und dass das Dokument danach nicht verändert wurde (PAdES).",
+    "noIdYet": "Keine digitale ID gewählt",
+    "pickId": "ID wählen …",
+    "createId": "Neue ID …",
+    "noId": "Bitte zuerst eine digitale ID wählen oder erstellen.",
+    "password": "Kennwort der ID",
+    "reason": "Grund (optional)",
+    "reasonPlaceholder": "z. B. Freigabe",
+    "location": "Ort (optional)",
+    "visible": "Sichtbare Unterschrift auf der Seite (Feld aufziehen)",
+    "hint": "Danach wird das Dokument gespeichert. Änderungen nach dem Unterschreiben zeigen Prüfprogramme an.",
+    "placeField": "Feld aufziehen",
+    "sign": "Unterschreiben",
+    "cancel": "Abbrechen",
+    "close": "Schließen",
+    "placeHint": "Ziehen Sie auf der Seite ein Rechteck für die Unterschrift auf (Esc bricht ab).",
+    "busy": "Dokument wird unterschrieben …",
+    "failed": "Das Unterschreiben ist fehlgeschlagen.",
+    "noSignatures": "Dieses Dokument enthält keine digitalen Signaturen.",
+    "idErrors": {
+      "unreadable": "Die Datei lässt sich nicht lesen.",
+      "invalid": "Das ist keine digitale ID im Format PKCS#12 (.p12 oder .pfx)."
+    },
+    "appearance": {
+      "signedBy": "Digital unterschrieben von",
+      "date": "Datum:",
+      "reason": "Grund:"
+    },
+    "summary": {
+      "valid_one": "Unterschrieben von {{signers}} – Signatur gültig",
+      "valid_other": "Unterschrieben von {{signers}} – alle {{count}} Signaturen gültig",
+      "changed": "Unterschrieben von {{signers}} – danach wurde das Dokument geändert",
+      "invalid": "Mindestens eine Signatur ist ungültig"
+    },
+    "details": "Details",
+    "detailsTitle": "Digitale Signaturen",
+    "unknownSigner": "Unbekannt",
+    "noDate": "ohne Datum",
+    "signedAt": "Unterschrieben am {{date}}",
+    "onPage": "Seite {{page}}",
+    "invisible": "unsichtbar",
+    "reasonValue": "Grund: {{value}}",
+    "locationValue": "Ort: {{value}}",
+    "verdict": {
+      "valid": "Die Signatur ist gültig. Das Dokument wurde seitdem nicht geändert.",
+      "changed": "Die Signatur ist für den damaligen Stand gültig. Danach wurde das Dokument geändert (zum Beispiel Kommentare oder weitere Unterschriften).",
+      "invalid": "Die Signatur passt nicht zum Dokument: Es wurde verändert oder die Signatur ist beschädigt.",
+      "malformed": "Die Angaben der Signatur sind fehlerhaft; sie lässt sich nicht prüfen.",
+      "unsupported": "Dieses ältere Signaturverfahren wird nicht geprüft."
+    },
+    "certificateInvalid": "Das Zertifikat war zum Zeitpunkt der Unterschrift nicht gültig.",
+    "selfSigned": "Selbst ausgestelltes Zertifikat: Die Identität ist nicht von einer Zertifizierungsstelle bestätigt.",
+    "issuedBy": "Ausgestellt von {{issuer}}. Ob diese Stelle vertrauenswürdig ist, prüft {{appName}} nicht.",
+    "create": {
+      "title": "Neue digitale ID",
+      "message": "Die ID besteht aus einem Schlüssel und einem selbst ausgestellten Zertifikat und wird als .p12-Datei gespeichert. Bewahren Sie Datei und Kennwort gut auf.",
+      "name": "Name",
+      "organization": "Organisation (optional)",
+      "email": "E-Mail (optional)",
+      "repeat": "Kennwort wiederholen",
+      "save": "Erstellen und speichern …",
+      "hint": "Selbst ausgestellte IDs bestätigen keine Identität; für rechtsverbindliche Unterschriften braucht es eine ID einer Zertifizierungsstelle. Gültig 5 Jahre.",
+      "noName": "Bitte einen Namen eingeben.",
+      "short": "Das Kennwort muss mindestens 6 Zeichen haben.",
+      "mismatch": "Die Kennwörter stimmen nicht überein.",
+      "saveFailed": "Die ID ließ sich nicht speichern.",
+      "done": "Digitale ID „{{name}}“ gespeichert."
+    }
   }
 }

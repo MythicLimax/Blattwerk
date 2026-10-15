@@ -6,7 +6,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ALLOWED = new Set(['MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'ISC', '0BSD']);
+// Zlib (pako) und BlueOak-1.0.0 (lru-cache, über @libpdf/core) sind ebenso freizügig; begründet in
+// docs/entscheidungen/0016-digitale-signaturen.md.
+const ALLOWED = new Set(['MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'ISC', '0BSD', 'Zlib', 'BlueOak-1.0.0']);
 
 const tree = JSON.parse(
   execFileSync('npm', ['ls', '--omit=dev', '--all', '--json', '--long'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }),
@@ -29,13 +31,14 @@ const seen = new Map();
   }
 })(tree);
 
-// "(MIT OR Apache-2.0)" ist erlaubt, wenn mindestens eine Alternative erlaubt ist.
+// "(MIT OR Apache-2.0)" ist erlaubt, wenn mindestens eine Alternative erlaubt ist; bei "MIT AND Zlib" müssen alle
+// Teile erlaubt sein.
 const isAllowed = (license) =>
   typeof license === 'string' &&
   license
     .replace(/[()]/g, '')
     .split(/\s+OR\s+/)
-    .some((part) => ALLOWED.has(part.trim()));
+    .some((option) => option.split(/\s+AND\s+/).every((part) => ALLOWED.has(part.trim())));
 
 const problems = [...seen.values()].filter((p) => !isAllowed(p.license));
 for (const p of [...seen.values()].sort((a, b) => a.name.localeCompare(b.name))) {

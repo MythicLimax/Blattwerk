@@ -8,6 +8,7 @@ import type { ContentOperation, PageObjects } from '../../shared/content';
 import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
 import type { CompressionLevel } from '../../shared/compress';
 import type { CompareLabels } from '../../shared/compare';
+import type { SignatureCheck, SignRequestInput } from '../../shared/signing';
 
 // Kommentaränderungen, Formularwerte und (optional) Seiten- oder Feldoperationen anwenden, neue Bytes liefern
 export interface ProcessRequest {
@@ -115,6 +116,35 @@ export interface CompareRequest {
   labels: CompareLabels;
 }
 
+// Mit Zertifikat unterschreiben (PAdES): ungespeicherte Kommentare und Formularwerte zuerst, dann inkrementell
+export interface SignRequest {
+  id: number;
+  type: 'sign';
+  bytes: ArrayBuffer;
+  password: string | null;
+  changes: AnnotationChanges;
+  formValues: FormFieldValue[];
+  input: SignRequestInput;
+}
+
+// Signaturen eines Dokuments prüfen
+export interface VerifySignaturesRequest {
+  id: number;
+  type: 'verifySignatures';
+  bytes: ArrayBuffer;
+}
+
+// Eigene digitale ID (.p12) erstellen
+export interface CreateIdentityRequest {
+  id: number;
+  type: 'createIdentity';
+  name: string;
+  organization: string | null;
+  email: string | null;
+  password: string;
+  years: number;
+}
+
 // Sitzung: Dokument für mehrere Seiten geöffnet halten (Export, Texterkennung, Vergleich)
 export interface OpenSessionRequest {
   id: number;
@@ -166,7 +196,10 @@ export type WorkerRequest =
   | PageTextRequest
   | CloseSessionRequest
   | CompressRequest
-  | CompareRequest;
+  | CompareRequest
+  | SignRequest
+  | VerifySignaturesRequest
+  | CreateIdentityRequest;
 
 export type InspectResult = { ok: true; pageCount: number } | { ok: false; reason: 'password' | 'invalid' };
 
@@ -190,6 +223,9 @@ export type WorkerErrorCode =
   | 'content-missing'
   | 'content-characters'
   | 'compress-encrypted'
+  | 'sign-password'
+  | 'sign-certificate'
+  | 'sign-encrypted'
   | 'verify'
   | 'failed';
 
@@ -203,4 +239,7 @@ export type WorkerResponse =
   | { id: number; ok: true; kind: 'image'; bytes: ArrayBuffer; width: number; height: number; dpi: number }
   | { id: number; ok: true; kind: 'text'; text: string }
   | { id: number; ok: true; kind: 'done' }
+  | { id: number; ok: true; kind: 'signatures'; checks: SignatureCheck[] }
+  // Bytes, die kein PDF sind (z. B. eine .p12-Datei)
+  | { id: number; ok: true; kind: 'raw'; bytes: ArrayBuffer }
   | { id: number; ok: false; code: WorkerErrorCode; error: string };

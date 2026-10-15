@@ -50,6 +50,11 @@ const api: BlattwerkApi = {
     end: (token) => ipcRenderer.invoke(IPC.exportEnd, token),
   },
   exportText: (text, suggestedName, referenceFileId) => ipcRenderer.invoke(IPC.exportSaveText, text, suggestedName, referenceFileId),
+  digitalId: {
+    pick: () => ipcRenderer.invoke(IPC.signingPickId),
+    last: () => ipcRenderer.invoke(IPC.signingLastId),
+    save: (bytes, suggestedName) => ipcRenderer.invoke(IPC.signingSaveId, bytes, suggestedName),
+  },
   signatures: {
     list: () => ipcRenderer.invoke(IPC.signaturesList),
     add: (input) => ipcRenderer.invoke(IPC.signaturesAdd, input),

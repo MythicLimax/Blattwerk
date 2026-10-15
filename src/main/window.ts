@@ -13,6 +13,8 @@ export interface SettingsData {
   window: WindowState;
   // Name, der als Autor in Kommentaren steht; null = Benutzername des Systems
   authorName: string | null;
+  // Zuletzt verwendete digitale ID (.p12) zum Unterschreiben; nur der Pfad, nie das Kennwort
+  lastIdPath: string | null;
 }
 
 function isRect(value: unknown): value is Rectangle {
@@ -23,7 +25,7 @@ function isRect(value: unknown): value is Rectangle {
 
 function validateSettings(raw: unknown): SettingsData | null {
   if (typeof raw !== 'object' || raw === null) return null;
-  const data = raw as { version?: unknown; window?: { bounds?: unknown; maximized?: unknown }; authorName?: unknown };
+  const data = raw as { version?: unknown; window?: { bounds?: unknown; maximized?: unknown }; authorName?: unknown; lastIdPath?: unknown };
   if (data.version !== 1 || typeof data.window !== 'object' || data.window === null) return null;
   const author = typeof data.authorName === 'string' ? data.authorName.trim().slice(0, 200) : '';
   return {
@@ -33,13 +35,14 @@ function validateSettings(raw: unknown): SettingsData | null {
       maximized: data.window.maximized === true,
     },
     authorName: author || null,
+    lastIdPath: typeof data.lastIdPath === 'string' && path.isAbsolute(data.lastIdPath) && data.lastIdPath.length < 4096 ? data.lastIdPath : null,
   };
 }
 
 export function createSettingsStore(userDataDir: string): JsonStore<SettingsData> {
   return new JsonStore(
     path.join(userDataDir, 'settings.json'),
-    () => ({ version: 1, window: { bounds: null, maximized: false }, authorName: null }),
+    () => ({ version: 1, window: { bounds: null, maximized: false }, authorName: null, lastIdPath: null }),
     validateSettings,
   );
 }

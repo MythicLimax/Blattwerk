@@ -5,6 +5,7 @@ import type { AnnotationChanges } from '../../shared/annotations';
 import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
 import type { CompressionLevel } from '../../shared/compress';
 import type { CompareLabels } from '../../shared/compare';
+import type { SignatureCheck, SignRequestInput } from '../../shared/signing';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, RedactionOptions, TextMatch, TextSearchOptions } from '../../shared/redaction';
@@ -261,4 +262,29 @@ export function compareDocuments(
   return bytesOf(
     send({ type: 'compare', oldBytes, oldPassword: oldDoc.password, newBytes, newPassword: newDoc.password, names, labels }, [oldBytes, newBytes]),
   );
+}
+
+// Mit Zertifikat unterschreiben; liefert das unterschriebene Dokument. Die Bytes gehen an den Worker.
+export function signWithCertificate(
+  bytes: Uint8Array,
+  password: string | null,
+  input: { changes: AnnotationChanges; formValues: FormFieldValue[]; sign: SignRequestInput },
+): Promise<Uint8Array> {
+  const buffer = ownBuffer(bytes);
+  return bytesOf(send({ type: 'sign', bytes: buffer, password, changes: input.changes, formValues: input.formValues, input: input.sign }, [buffer, input.sign.p12]));
+}
+
+// Signaturen prüfen. Die Bytes bleiben beim Aufrufer nutzbar.
+export async function checkSignatures(bytes: Uint8Array): Promise<SignatureCheck[]> {
+  const buffer = bytes.slice().buffer as ArrayBuffer;
+  const response = await send({ type: 'verifySignatures', bytes: buffer }, [buffer]);
+  if (response.kind !== 'signatures') throw new PdfiumClientError('failed', 'unerwartete Antwort');
+  return response.checks;
+}
+
+// Eigene digitale ID erstellen; liefert die .p12-Datei
+export async function createIdentity(input: { name: string; organization: string | null; email: string | null; password: string; years: number }): Promise<Uint8Array> {
+  const response = await send({ type: 'createIdentity', ...input }, []);
+  if (response.kind !== 'raw') throw new PdfiumClientError('failed', 'unerwartete Antwort');
+  return new Uint8Array(response.bytes);
 }

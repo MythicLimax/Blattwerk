@@ -19,11 +19,13 @@ import { useContentEdit } from '../state/content-edit-store';
 import { useFormEdit } from '../state/form-edit-store';
 import { useForms } from '../state/forms-store';
 import type { SecuritySettings } from '../../shared/security';
+import type { SignRequestInput } from '../../shared/signing';
 import type { CompressionLevel } from '../../shared/compress';
 import { historyDirty, tabHistory, useHistory, type DocState, type Leaving } from '../state/history-store';
 import type { AnnotationChanges } from '../../shared/annotations';
 import { exportText } from '../features/export/actions';
 import { compareWithFile } from '../features/compare/actions';
+import { useCertify } from '../features/certify/certify-store';
 import { isRunning as isProgressRunning } from '../features/progress/progress';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
 import type { RedactionOptions } from '../../shared/redaction';
@@ -34,7 +36,7 @@ import type { PageOperation } from '../../shared/pages';
 import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
 import { useUi, type PromptAnswer } from '../state/ui-store';
 import { openTemporary, startLoading } from './document-loader';
-import { compressDocument, PdfiumClientError, processDocument, protectDocument, readSecurity, redactDocument } from './pdfium-client';
+import { checkSignatures, compressDocument, PdfiumClientError, processDocument, protectDocument, readSecurity, redactDocument, signWithCertificate } from './pdfium-client';
 import { pdfjs } from './pdfjs';
 import { createRuntime, destroyRuntime, dispatchFind, getRuntime, rememberScroll, setRuntimeDocument } from './runtime';
 
@@ -134,6 +136,7 @@ async function loadIntoTab(tabId: string, file: FileInfo, knownPassword: string 
     });
     if (options.annotations) useAnnotations.getState().restore(tabId, options.annotations);
     else void loadAnnotations(tabId);
+    void refreshSignatures(tabId);
   } catch (error) {
     if (!tabExists(tabId)) return;
     useDocuments.getState().updateTab(tabId, {
@@ -573,6 +576,60 @@ async function runCompression(tabId: string, level: CompressionLevel): Promise<b
 const formatSize = (bytes: number) =>
   bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
+// Digitale Signaturen prüfen (Phase 7, ADR 0016), sobald ein Dokument mit Signaturfeldern geladen ist
+export async function refreshSignatures(tabId: string): Promise<void> {
+  const runtime = getRuntime(tabId);
+  const pdf = runtime?.pdf;
+  if (!pdf) return;
+  try {
+    const fields = (await pdf.getFieldObjects()) as unknown as Map<string, Array<{ type?: string }>> | null;
+    const signed = [...(fields?.values() ?? [])].some((list) => list.some((field) => field.type === 'signature'));
+    const checks = signed ? await checkSignatures(await pdf.getData()) : [];
+    if (getRuntime(tabId)?.pdf !== pdf) return;
+    useDocuments.getState().updateTab(tabId, { signatures: checks.length > 0 ? checks : null });
+  } catch {
+    if (getRuntime(tabId)?.pdf === pdf) useDocuments.getState().updateTab(tabId, { signatures: null });
+  }
+}
+
+// Mit Zertifikat unterschreiben: neuer Stand, danach gleich speichern (Sichern unter), damit nichts Ungespeichertes die
+// Signatur nachträglich „ändert“
+export async function applyDigitalSignature(tabId: string, input: SignRequestInput): Promise<boolean> {
+  commitPendingEdits();
+  if (findTab(tabId)?.working) return false;
+  const done = await enqueue(tabId, () => runDigitalSignature(tabId, input));
+  if (done) await saveTab(tabId, 'saveAs');
+  return done;
+}
+
+async function runDigitalSignature(tabId: string, input: SignRequestInput): Promise<boolean> {
+  const tab = findTab(tabId);
+  const runtime = getRuntime(tabId);
+  if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf) return false;
+  if (tab.encrypted) {
+    useUi.getState().notify(t('errors.pages.sign-encrypted'));
+    return false;
+  }
+  const pdf = runtime.pdf;
+  const ui = useUi.getState();
+  ui.setBusy('certify.busy');
+  try {
+    const pending = await pendingChanges(tabId);
+    const bytes = await signWithCertificate(await pdf.getData(), runtime.password, { ...pending, sign: input });
+    if (getRuntime(tabId)?.pdf !== pdf) return false;
+    const next = { bytes, annotations: null, page: tab.currentPage, selection: [], password: runtime.password };
+    useHistory.getState().push(tabId, leavingState(tabId, tab, false), next);
+    rememberScroll(tabId);
+    await showState(tabId, next);
+    return true;
+  } catch (error) {
+    ui.notify(operationErrorMessage(error, 'certify.failed'), errorMessage(error));
+    return false;
+  } finally {
+    ui.setBusy(null);
+  }
+}
+
 // Prüft das Berechtigungskennwort eines geöffneten Dokuments
 export async function checkOwnerPassword(tabId: string, password: string): Promise<boolean> {
   const pdf = getRuntime(tabId)?.pdf;
@@ -782,6 +839,16 @@ export function executeCommand(command: CommandId): void {
     if (active?.status !== 'ready' || active.working || isProgressRunning()) return;
     if (command === 'file.exportImages') ui.setExportImagesOpen(true);
     else void exportText(active);
+    return;
+  }
+  if (command === 'tools.certify' || command === 'tools.signatures') {
+    const active = getActiveTab();
+    if (active?.status !== 'ready' || active.working) return;
+    if (command === 'tools.signatures') {
+      if (active.signatures?.length) useCertify.getState().setDetailsOpen(true);
+      else ui.confirm(t('certify.noSignatures'));
+    } else if (active.encrypted) ui.notify(t('errors.pages.sign-encrypted'));
+    else useCertify.getState().setDialogOpen(true);
     return;
   }
   if (command === 'tools.ocr') {
