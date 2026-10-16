@@ -183,7 +183,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
         checked: viewing && state.commentToolsVisible,
         enabled: viewing,
       }),
-      cmd('tools.highlight', t('menu.view.highlight'), { enabled: viewing }),
+      cmd('tools.highlight', t('menu.view.highlight'), { type: 'checkbox', checked: viewing && state.markToolsVisible, enabled: viewing && !state.formEditing }),
       { type: 'separator' },
       { role: 'togglefullscreen', label: t('menu.view.fullscreen') },
       ...(ctx.devTools ? [{ role: 'toggleDevTools' as const, label: t('menu.view.devTools') }] : []),

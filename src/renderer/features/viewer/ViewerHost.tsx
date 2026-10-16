@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { attachViewer, getRuntime } from '../../engine/runtime';
 import { AnnotationLayer } from '../annotations/AnnotationLayer';
-import { SelectionPopover } from '../annotations/SelectionPopover';
 import { syncFormChanges } from '../forms/form-sync';
 import type { TabState } from '../../state/documents-store';
 import styles from './ViewerHost.module.css';
@@ -128,7 +127,6 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
     >
       <div ref={viewerRef} className="pdfViewer" />
       <AnnotationLayer tabId={tab.id} active={active} />
-      {active && <SelectionPopover tab={tab} containerRef={containerRef} />}
     </div>
   );
 }

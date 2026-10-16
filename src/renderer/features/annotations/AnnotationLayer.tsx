@@ -4,6 +4,7 @@ import type { Annotation } from '../../../shared/annotations';
 import { getRuntime } from '../../engine/runtime';
 import { MARKUP_TOOLS, useAnnotations, useTabAnnotations, type Tool } from '../../state/annotations-store';
 import { useDocuments } from '../../state/documents-store';
+import { useUi } from '../../state/ui-store';
 import { geometryFromViewport, type PageGeometry } from '../../engine/coords';
 import { ContentEditOverlay } from '../content-edit/ContentEditOverlay';
 import { CertifyPlacement } from '../certify/CertifyPlacement';
@@ -46,8 +47,38 @@ export function markupSelection(tabId: string, tool: Tool, geometryOf: (page: nu
     addAnnotation(tabId, tool === 'redactText' ? createRedaction(base, [0, 0, 0, 0], quads, color) : createMarkup(base, tool as 'highlight', quads, color));
     created = true;
   }
-  if (created) selection?.removeAllRanges();
+  if (created) {
+    selection?.removeAllRanges();
+    // Modus „Markieren“: neue Markierungen bleiben unausgewählt; Farbe und Art gelten dann für die nächste, und die
+    // Anfasser stören das Weitermarkieren nicht. Ein Klick auf eine Markierung wählt sie zum Ändern aus.
+    if (useUi.getState().markToolsVisible) useAnnotations.getState().select(tabId, null);
+  }
   return created;
+}
+
+// Textmarkierung (Hervorheben, Unterstreichen, Durchstreichen) an einem Bildschirmpunkt; die oberste gewinnt
+function markupAt(tabId: string, container: HTMLElement, clientX: number, clientY: number): string | null {
+  const items = useAnnotations.getState().tabs[tabId]?.items ?? [];
+  for (const svg of container.querySelectorAll<SVGSVGElement>('[data-annotation-overlay]')) {
+    const box = svg.getBoundingClientRect();
+    if (clientX < box.left || clientX > box.right || clientY < box.top || clientY > box.bottom) continue;
+    const pageIndex = Number(svg.dataset.annotationOverlay);
+    const geometry = cachedGeometry(tabId, pageIndex);
+    if (!geometry) return null;
+    const at = geometry.toPdf(((clientX - box.left) / box.width) * geometry.width, ((clientY - box.top) / box.height) * geometry.height);
+    const hit = items.findLast(
+      (a) =>
+        a.pageIndex === pageIndex &&
+        (a.kind === 'highlight' || a.kind === 'underline' || a.kind === 'strikeout' || a.kind === 'squiggly') &&
+        a.quads.some((q) => {
+          const xs = q.map((p) => p.x);
+          const ys = q.map((p) => p.y);
+          return at.x >= Math.min(...xs) - 1 && at.x <= Math.max(...xs) + 1 && at.y >= Math.min(...ys) - 1 && at.y <= Math.max(...ys) + 1;
+        }),
+    );
+    return hit?.id ?? null;
+  }
+  return null;
 }
 
 // Seitengeometrie (Maßstab 1, mit Drehung) für Markierungen aus der Textauswahl, auch ohne gerenderte Ebene.
@@ -179,9 +210,22 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
     if (!active || !canAnnotate || !MARKUP_TOOLS.includes(tool)) return;
     const container = getRuntime(tabId)?.container;
     if (!container) return;
-    const onPointerUp = () => {
+    const onPointerUp = (event: PointerEvent) => {
+      // Ziehen an einem Anfasser (der Zeiger bleibt bei ihm) ändert eine Markierung und legt keine neue an
+      if ((event.target as Element | null)?.closest('[data-handle]')) {
+        window.getSelection()?.removeAllRanges();
+        return;
+      }
+      const { clientX, clientY } = event;
       // Die Auswahl steht erst nach dem Ereignis fest.
-      setTimeout(() => markupSelection(tabId, tool, (page) => cachedGeometry(tabId, page)), 0);
+      setTimeout(() => {
+        if (markupSelection(tabId, tool, (page) => cachedGeometry(tabId, page))) return;
+        // Nur geklickt (nichts ausgewählt): eine vorhandene Textmarkierung an dieser Stelle auswählen
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) return;
+        const hit = markupAt(tabId, container, clientX, clientY);
+        if (hit) useAnnotations.getState().select(tabId, hit);
+      }, 0);
     };
     container.addEventListener('pointerup', onPointerUp);
     return () => container.removeEventListener('pointerup', onPointerUp);

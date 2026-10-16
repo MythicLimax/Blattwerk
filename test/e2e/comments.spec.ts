@@ -398,7 +398,7 @@ test.describe('Farbauswahl beim Kommentieren', () => {
   });
 });
 
-test('Text markieren: normal auswählen, Farbe aus der Palette wählen, bleibt nach dem Speichern', async () => {
+test('Markieren: eigener Modus, Markierung auswählen, Farbe ändern, kürzen und löschen', async () => {
   const userData = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
   tempDirs.push(userData);
   const file = path.join(userData, 'kopie-markieren.pdf');
@@ -407,39 +407,59 @@ test('Text markieren: normal auswählen, Farbe aus der Palette wählen, bleibt n
   await waitForDocument(page, TEXT_PDF.pages);
   await page.getByTestId('sidebar-comments').click();
 
-  // Ohne Werkzeug: Text auswählen → kleine Leiste über der Auswahl
+  // Ohne den Modus bleibt Auswählen ein normales Auswählen
   await selectText(page, 'Testdokument für Blattwerk');
-  const popover = page.getByTestId('selection-popover');
-  await expect(popover).toBeVisible();
-  await page.getByTestId('selection-highlight').click();
-  await expect(popover).toHaveCount(0);
-  await expect(cards(page)).toHaveCount(1);
+  await page.waitForTimeout(200);
+  await expect(cards(page)).toHaveCount(0);
 
-  // Farbe aus der großen Palette: Auswahl bleibt erhalten, obwohl in die Farbauswahl geklickt wird
-  await selectText(page, 'Die Umlaute');
-  await page.getByTestId('selection-color-more').click();
-  await page.getByTestId('selection-color-palette').nth(40).click();
-  await expect(cards(page)).toHaveCount(2);
-  await expect(page.getByTestId('comment-toolbar')).toHaveCount(0);
-
-  // Textmarker in der Werkzeugleiste: jede Auswahl wird sofort hervorgehoben
+  // Modus „Markieren“: die schon ausgewählte Stelle wird gleich hervorgehoben, jede weitere Auswahl ebenso
   await page.getByTestId('highlight-button').click();
-  await expect(page.getByTestId('tool-highlight')).toHaveAttribute('aria-pressed', 'true');
-  await selectText(page, 'Ein PDF besteht');
-  await expect(cards(page)).toHaveCount(3);
-  await expect(popover).toHaveCount(0);
+  await expect(page.getByTestId('mark-toolbar')).toBeVisible();
+  await expect(page.getByTestId('mark-highlight')).toHaveAttribute('aria-pressed', 'true');
+  await expect(cards(page)).toHaveCount(1);
+  await expect(page.getByTestId('annotation-selection')).toHaveCount(0);
+  await page.getByTestId('mark-underline').click();
+  await selectText(page, 'Die Umlaute');
+  await expect(cards(page)).toHaveCount(2);
 
+  // Klick auf die erste Markierung wählt sie aus: andere Farbe, Anfasser an den Enden
+  const span = page.locator('[data-page-number="1"] .textLayer span', { hasText: 'Testdokument für Blattwerk' }).first();
+  const box = await span.boundingBox();
+  if (!box) throw new Error('Text fehlt');
+  await page.mouse.click(box.x + 20, box.y + box.height / 2);
+  const frame = page.getByTestId('annotation-selection');
+  await expect(frame).toBeVisible();
+  await expect(cards(page)).toHaveCount(2);
+  await expect(page.getByTestId('mark-delete')).toBeEnabled();
+  await page.getByTestId('mark-color-more').click();
+  await page.getByTestId('mark-color-palette').nth(30).click();
+  await page.keyboard.press('Escape');
+  await expect(cards(page)).toHaveCount(2);
+  await expect(frame).toBeVisible();
+
+  // Ende nach links ziehen: Markierung wird kürzer
+  const before = await frame.locator('rect').first().boundingBox();
+  const end = await page.locator('[data-handle="markup-end"]').boundingBox();
+  if (!before || !end) throw new Error('Anfasser fehlt');
+  await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.4, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(frame).toBeVisible();
+  await expect.poll(async () => (await frame.locator('rect').first().boundingBox())?.width ?? before.width).toBeLessThan(before.width * 0.7);
+  await page.waitForTimeout(300);
+  await expect(cards(page)).toHaveCount(2);
+
+  // Löschen
+  await page.getByTestId('mark-delete').click();
+  await expect(cards(page)).toHaveCount(1);
+  await expect(frame).toHaveCount(0);
+
+  await page.getByTestId('mark-done').click();
+  await expect(page.getByTestId('mark-toolbar')).toHaveCount(0);
   await save(page, app);
   const saved = readFileSync(file).toString('latin1');
-  // Farbe (/C) steht im selben Objekt wie /Subtype /Highlight, davor oder danach
-  const colors = new Set(
-    [...saved.matchAll(/\/Subtype\s*\/Highlight/g)].map((m) => {
-      const start = saved.lastIndexOf(' obj', m.index);
-      const end = saved.indexOf('endobj', m.index);
-      return /\/C\s*\[([^\]]*)\]/.exec(saved.slice(start, end))?.[1]?.trim();
-    }),
-  );
-  expect((saved.match(/\/Subtype\s*\/Highlight/g) ?? []).length).toBe(3);
-  expect(colors.size).toBeGreaterThan(1);
+  expect((saved.match(/\/Subtype\s*\/Highlight/g) ?? []).length).toBe(0);
+  expect((saved.match(/\/Subtype\s*\/Underline/g) ?? []).length).toBe(1);
   await close();
 });

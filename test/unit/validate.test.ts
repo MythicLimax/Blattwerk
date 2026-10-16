@@ -109,6 +109,7 @@ describe('validateMenuState', () => {
     formEditing: false,
     canEditForms: true,
     redactToolsVisible: false,
+    markToolsVisible: false,
     hasRedactionMarks: true,
     contentEditing: false,
   };

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Annotation, FreeTextAnnotation, InkAnnotation, Point, Rect } from '../../../shared/annotations';
+import type { Annotation, FreeTextAnnotation, InkAnnotation, MarkupAnnotation, Point, Quad, Rect } from '../../../shared/annotations';
 import { boundsOf, normalizeRect } from '../../../shared/annotations';
 import { DRAWING_TOOLS as STORE_DRAWING_TOOLS, useAnnotations, type Tool } from '../../state/annotations-store';
 import { useUi } from '../../state/ui-store';
@@ -29,7 +29,9 @@ import {
   SHAPE_SIZE,
   simplifyPath,
 } from './create';
-import { dragRect, isMovable, isResizable, lineRect, resizeFrom, translate } from './geometry';
+import { dragRect, isMovable, isResizable, lineRect, quadsFromRects, rectOfQuads, resizeFrom, translate } from './geometry';
+import { caretAt, rangeBetween, type Caret } from './text-caret';
+import { rangeTextRects } from './text-selection';
 import styles from './PageOverlay.module.css';
 
 // Laufende Mausaktion auf der Seite
@@ -39,7 +41,9 @@ type Gesture =
   | { kind: 'ink'; points: Point[] }
   | { kind: 'move'; id: string; origin: Point; dx: number; dy: number }
   | { kind: 'resize'; id: string; fixed: Point; to: Point }
-  | { kind: 'endpoint'; id: string; which: 'start' | 'end'; to: Point };
+  | { kind: 'endpoint'; id: string; which: 'start' | 'end'; to: Point }
+  // Anfang oder Ende einer Textmarkierung ziehen: das andere Ende bleibt fest, die Markierung folgt dem Text
+  | { kind: 'markup'; id: string; fixed: Caret; quads: Quad[] | null };
 
 // Freihandstriche, die kurz nacheinander entstehen, bilden eine Zeichnung (wie Handschrift).
 const INK_MERGE_MS = 1500;
@@ -73,7 +77,22 @@ function preview(a: Annotation, gesture: Gesture | null): Annotation {
       const end = gesture.which === 'end' ? gesture.to : a.end;
       return { ...a, start, end, rect: lineRect(start, end, a.width) };
     }
+    case 'markup':
+      if (!gesture.quads || gesture.quads.length === 0 || !isTextMarkup(a)) return a;
+      return { ...a, quads: gesture.quads, rect: rectOfQuads(gesture.quads) };
   }
+}
+
+const isTextMarkup = (a: Annotation): a is MarkupAnnotation =>
+  a.kind === 'highlight' || a.kind === 'underline' || a.kind === 'strikeout' || a.kind === 'squiggly';
+
+// Mitte der linken Kante des ersten bzw. der rechten Kante des letzten Vierecks (Lesereihenfolge)
+function markupEnds(a: MarkupAnnotation): { start: Point; end: Point; height: number } | null {
+  const first = a.quads[0];
+  const last = a.quads.at(-1);
+  if (!first || !last) return null;
+  const mid = (p: Point, q: Point): Point => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+  return { start: mid(first[0], first[2]), end: mid(last[1], last[3]), height: Math.abs(first[0].y - first[2].y) };
 }
 
 interface PageOverlayProps {
@@ -210,6 +229,61 @@ export function PageOverlay({
     setGesture({ kind: 'endpoint', id: a.id, which, to: toPdf(event) });
   };
 
+  // Bildschirmpunkt zu einer Stelle in PDF-Punkten
+  const toClient = (p: Point): { x: number; y: number } | null => {
+    const box = svgRef.current?.getBoundingClientRect();
+    if (!box || box.width === 0) return null;
+    const [vx, vy] = geometry.toView(p);
+    return { x: box.left + (vx / geometry.width) * box.width, y: box.top + (vy / geometry.height) * box.height };
+  };
+  const textLayer = () => svgRef.current?.closest('.page')?.querySelector('.textLayer') ?? null;
+
+  const onMarkupHandleDown = (event: ReactPointerEvent, a: MarkupAnnotation, which: 'start' | 'end') => {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    event.preventDefault();
+    const ends = markupEnds(a);
+    const layer = textLayer();
+    const other = ends ? toClient(which === 'start' ? ends.end : ends.start) : null;
+    if (!ends || !layer || !other) return;
+    // Etwas nach innen, damit die feste Stelle sicher im markierten Text liegt
+    const inward = which === 'start' ? -2 : 2;
+    const fixed = caretAt(layer, other.x + inward, other.y);
+    if (!fixed) return;
+    setGesture({ kind: 'markup', id: a.id, fixed, quads: null });
+    // Am ganzen Fenster verfolgen: pdf.js hängt Seitenteile beim Neuzeichnen um, dabei ginge ein Festhalten des
+    // Zeigers am Anfasser verloren, und das Loslassen über dem Text würde eine neue Markierung anlegen
+    const onMove = (move: PointerEvent) => {
+      const current = gestureRef.current;
+      if (current?.kind !== 'markup') return;
+      move.preventDefault();
+      window.getSelection()?.removeAllRanges();
+      setGesture({ ...current, quads: markupQuads(current.fixed, move.clientX, move.clientY) ?? current.quads });
+    };
+    const onUp = (up: PointerEvent) => {
+      up.stopPropagation();
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onUp, true);
+      window.getSelection()?.removeAllRanges();
+      finish(up.timeStamp);
+    };
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onUp, true);
+  };
+
+  const markupQuads = (fixed: Caret, clientX: number, clientY: number): Quad[] | null => {
+    const layer = textLayer();
+    const page = svgRef.current?.closest<HTMLElement>('.page');
+    const moving = layer ? caretAt(layer, clientX, clientY) : null;
+    if (!layer || !page || !moving) return null;
+    const range = rangeBetween(fixed, moving);
+    const rects = rangeTextRects([range], page, (index) => (index === pageIndex ? geometry : undefined)).find((entry) => entry.pageIndex === pageIndex)?.rects ?? [];
+    const quads = quadsFromRects(rects);
+    return quads.length > 0 ? quads : null;
+  };
+
   const onPointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
     const current = gestureRef.current;
     if (!current) return;
@@ -231,6 +305,9 @@ export function PageOverlay({
       case 'resize':
       case 'endpoint':
         setGesture({ ...current, to: at });
+        return;
+      case 'markup':
+        // Läuft über die Fenster-Ereignisse (onMarkupHandleDown)
         return;
     }
   };
@@ -290,6 +367,7 @@ export function PageOverlay({
         const before = items.find((a) => a.id === current.id);
         if (!before) return;
         const after = preview(before, current);
+        if (after === before) return;
         if (current.kind === 'resize') {
           const [l, b, r, t] = after.rect;
           if (r - l < 6 || t - b < 6) return;
@@ -332,7 +410,7 @@ export function PageOverlay({
       onPointerUp={(event) => finish(event.timeStamp)}
       onPointerCancel={() => setGesture(null)}
       data-testid={`annotation-overlay-${pageIndex}`}
-      data-annotation-overlay=""
+      data-annotation-overlay={pageIndex}
     >
       {items.map((original) => {
         const a = preview(original, gesture);
@@ -372,6 +450,7 @@ export function PageOverlay({
               readOnly={readOnly || drawing}
               onCornerDown={(event, corner) => onHandlePointerDown(event, original, corner)}
               onEndpointDown={(event, which) => onEndpointPointerDown(event, original, which)}
+              onMarkupDown={(event, which) => isTextMarkup(original) && onMarkupHandleDown(event, original, which)}
             />
           );
         })}
@@ -509,9 +588,10 @@ interface SelectionFrameProps {
   readOnly: boolean;
   onCornerDown: (event: ReactPointerEvent, corner: number) => void;
   onEndpointDown: (event: ReactPointerEvent, which: 'start' | 'end') => void;
+  onMarkupDown: (event: ReactPointerEvent, which: 'start' | 'end') => void;
 }
 
-function SelectionFrame({ annotation: a, geometry, handleSize, readOnly, onCornerDown, onEndpointDown }: SelectionFrameProps) {
+function SelectionFrame({ annotation: a, geometry, handleSize, readOnly, onCornerDown, onEndpointDown, onMarkupDown }: SelectionFrameProps) {
   const isLine = a.kind === 'line' || a.kind === 'arrow';
   const frame = geometry.rectToView(isLine ? boundsOf([a.start, a.end]) : a.rect);
   const handle = (p: Point, key: string, onDown: (event: ReactPointerEvent) => void, cursor: string) => {
@@ -541,6 +621,7 @@ function SelectionFrame({ annotation: a, geometry, handleSize, readOnly, onCorne
           handle(a.start, 'start', (event) => onEndpointDown(event, 'start'), 'crosshair'),
           handle(a.end, 'end', (event) => onEndpointDown(event, 'end'), 'crosshair'),
         ]}
+      {!readOnly && isTextMarkup(a) && <MarkupHandles annotation={a} geometry={geometry} size={handleSize} onDown={onMarkupDown} />}
     </g>
   );
 }
@@ -605,5 +686,42 @@ function FreeTextEditor({ tabId, annotation: a, geometry }: { tabId: string; ann
         onPointerDown={(event) => event.stopPropagation()}
       />
     </foreignObject>
+  );
+}
+
+// Anfasser an Anfang und Ende einer Textmarkierung (wie bei einer Textauswahl): Ziehen kürzt oder verlängert sie
+function MarkupHandles({
+  annotation,
+  geometry,
+  size,
+  onDown,
+}: {
+  annotation: MarkupAnnotation;
+  geometry: PageGeometry;
+  size: number;
+  onDown: (event: ReactPointerEvent, which: 'start' | 'end') => void;
+}) {
+  const ends = markupEnds(annotation);
+  if (!ends) return null;
+  // Höhe der Zeile in Ansichtseinheiten (bei gedrehten Seiten über zwei umgerechnete Punkte)
+  const [ax, ay] = geometry.toView({ x: ends.start.x, y: ends.start.y - ends.height / 2 });
+  const [bx, by] = geometry.toView({ x: ends.start.x, y: ends.start.y + ends.height / 2 });
+  const length = Math.hypot(bx - ax, by - ay);
+  const angle = (Math.atan2(by - ay, bx - ax) * 180) / Math.PI - 90;
+  const knob = (p: Point, which: 'start' | 'end') => {
+    const [x, y] = geometry.toView(p);
+    return (
+      <g key={which} transform={`translate(${x} ${y}) rotate(${angle})`} className={styles.markupHandle} onPointerDown={(event) => onDown(event, which)} data-handle={`markup-${which}`}>
+        <rect x={-size} y={-length / 2 - size} width={size * 2} height={length + size * 2} fill="transparent" />
+        <line x1={0} y1={-length / 2} x2={0} y2={length / 2} />
+        <circle cx={0} cy={which === 'start' ? -length / 2 : length / 2} r={size / 2} />
+      </g>
+    );
+  };
+  return (
+    <>
+      {knob(ends.start, 'start')}
+      {knob(ends.end, 'end')}
+    </>
   );
 }

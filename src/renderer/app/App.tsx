@@ -5,6 +5,7 @@ import { UpdateBanner } from '../features/update/UpdateBanner';
 import { api } from '../api';
 import { handleCloseRequest, handleOpenResult, executeCommand } from '../engine/session';
 import { CommentToolbar } from '../features/annotations/CommentToolbar';
+import { MarkToolbar } from '../features/annotations/MarkToolbar';
 import { ContentEditToolbar } from '../features/content-edit/ContentEditToolbar';
 import { FieldDialog } from '../features/form-edit/FieldDialog';
 import { FormEditToolbar } from '../features/form-edit/FormEditToolbar';
@@ -60,6 +61,7 @@ export function App() {
   const prompt = useUi((s) => s.prompt);
   const settingsOpen = useUi((s) => s.settingsOpen);
   const commentToolsVisible = useUi((s) => s.commentToolsVisible);
+  const markToolsVisible = useUi((s) => s.markToolsVisible);
   const redactToolsVisible = useUi((s) => s.redactToolsVisible);
   const redactDialog = useUi((s) => s.redactDialog);
   const stampDialog = useUi((s) => s.stampDialog);
@@ -118,6 +120,7 @@ export function App() {
       {commentToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <CommentToolbar tab={active} />}
       {active?.status === 'ready' && active.mode === 'view' && active.formEditing && <FormEditToolbar tab={active} />}
       {active?.status === 'ready' && active.mode === 'view' && active.contentEditing && <ContentEditToolbar tab={active} />}
+      {markToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <MarkToolbar tab={active} />}
       {redactToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <RedactToolbar tab={active} />}
       <div className={styles.workspace} data-glass-workspace>
         {!showDocumentChrome ? (

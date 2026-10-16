@@ -67,7 +67,7 @@
       "fullscreen": "Vollbild",
       "devTools": "Entwicklerwerkzeuge",
       "toggleCommentTools": "Kommentieren",
-      "highlight": "Text markieren"
+      "highlight": "Markieren"
     },
     "nav": {
       "title": "Gehe zu",
@@ -289,7 +289,7 @@
     "redact": "Schwärzen",
     "editContent": "Text und Bilder bearbeiten",
     "more": "Weitere Werkzeuge",
-    "highlight": "Textmarker"
+    "highlight": "Markieren"
   },
   "viewMode": {
     "single": "Einzelne Seite",
@@ -1221,11 +1221,14 @@
       "location": "Die App läuft nicht aus dem Programme-Ordner (z. B. direkt vom Disk-Image). Bitte einmal in „Programme“ ziehen."
     }
   },
-  "selection": {
-    "toolbar": "Auswahl markieren",
-    "highlight": "Hervorheben",
-    "color": "Farbe zum Hervorheben",
-    "underline": "Unterstreichen",
-    "strikeout": "Durchstreichen"
+  "mark": {
+    "title": "Markieren",
+    "toolbar": "Markieren",
+    "color": "Farbe der Markierung",
+    "delete": "Markierung löschen",
+    "done": "Fertig",
+    "notAllowed": "Dieses Dokument erlaubt keine Kommentare und Markierungen.",
+    "hint": "Text auswählen, um ihn zu markieren. Ein Klick auf eine Markierung wählt sie aus.",
+    "selectedHint": "Farbe oder Art wählen, löschen oder an den Enden ziehen, um die Markierung zu kürzen oder zu verlängern."
   }
 }

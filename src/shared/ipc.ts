@@ -172,6 +172,8 @@ export interface MenuState {
   redactToolsVisible: boolean;
   hasRedactionMarks: boolean;
   contentEditing: boolean;
+  // Leiste „Markieren“ offen
+  markToolsVisible: boolean;
 }
 
 export type SaveErrorCode = 'changed-externally' | 'cancelled' | 'write-failed' | 'unknown-file' | 'invalid-data';

@@ -95,3 +95,23 @@
 .svg.inert * {
   pointer-events: none !important;
 }
+
+/* Anfasser einer Textmarkierung: senkrechter Strich mit rundem Knopf, wie bei einer Textauswahl */
+.svg .markupHandle,
+.svg .markupHandle * {
+  pointer-events: all;
+  cursor: ew-resize;
+}
+
+.markupHandle line {
+  stroke: var(--color-accent);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
+.markupHandle circle {
+  fill: var(--color-accent);
+  stroke: #fff;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}

@@ -89,6 +89,9 @@
   --tone-sign-soft: #f3e4d3;
   --tone-tools: #4d5866;
   --tone-tools-soft: #e3e6ea;
+  /* Markieren: Textmarker-Pink */
+  --tone-mark: #b02c74;
+  --tone-mark-soft: #f8dcea;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -140,6 +143,8 @@
     --tone-sign-soft: #3c2d1f;
     --tone-tools: #a9b3c0;
     --tone-tools-soft: #2c3036;
+    --tone-mark: #f07ab8;
+    --tone-mark-soft: #43222f;
   }
 }
 
@@ -171,6 +176,10 @@
 [data-tone='tools'] {
   --tone: var(--tone-tools);
   --tone-soft: var(--tone-tools-soft);
+}
+[data-tone='mark'] {
+  --tone: var(--tone-mark);
+  --tone-soft: var(--tone-mark-soft);
 }
 
 /* Liquid-Glass-Fläche: für schwebende Leisten, Seitenleisten, Dialoge, Hinweise */

@@ -79,6 +79,7 @@ let menuState: MenuState = {
   redactToolsVisible: false,
   hasRedactionMarks: false,
   contentEditing: false,
+  markToolsVisible: false,
 };
 // Schließen mit ungespeicherten Änderungen: Der Renderer fragt nach und bestätigt dann.
 let allowClose = false;

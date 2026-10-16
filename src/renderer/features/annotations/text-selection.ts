@@ -23,10 +23,20 @@ export function selectedTextRects(
   geometryOf: (pageIndex: number) => PageGeometry | undefined,
 ): SelectedRects[] {
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) return [];
+  const ranges: Range[] = [];
+  for (let r = 0; r < selection.rangeCount; r++) ranges.push(selection.getRangeAt(r));
+  return rangeTextRects(ranges, root, geometryOf);
+}
+
+// Wie oben, für beliebige Textbereiche (z. B. beim Ziehen am Ende einer Markierung)
+export function rangeTextRects(
+  ranges: Range[],
+  root: HTMLElement,
+  geometryOf: (pageIndex: number) => PageGeometry | undefined,
+): SelectedRects[] {
   const byPage = new Map<number, Rect[]>();
-  for (let r = 0; r < selection.rangeCount; r++) {
-    const range = selection.getRangeAt(r);
-    if (!root.contains(range.commonAncestorContainer)) continue;
+  for (const range of ranges) {
+    if (range.collapsed || !root.contains(range.commonAncestorContainer)) continue;
     const ancestor = range.commonAncestorContainer;
     const textNodes: Text[] = [];
     if (ancestor instanceof Text) {

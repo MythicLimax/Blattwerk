@@ -6,6 +6,7 @@ import { deleteAnnotation, loadAnnotations } from '../features/annotations/contr
 import { deleteSelectedObject, toggleContentEditing } from '../features/content-edit/actions';
 import { deleteSelectedField, toggleFormEditing } from '../features/form-edit/actions';
 import { openRedactApply, openRedactFind, toggleRedactTools } from '../features/redaction/actions';
+import { toggleMarkTools } from '../features/annotations/mark-actions';
 import { openStampDialog, removeArtifacts } from '../features/stamping/actions';
 import { deletePages, targetPages } from '../features/pages/actions';
 import { runPageCommand } from '../features/pages/commands';
@@ -948,18 +949,8 @@ export function executeCommand(command: CommandId): void {
     return;
   }
   if (command === 'tools.highlight') {
-    // Textmarker: Leiste „Kommentieren“ mit dem Werkzeug „Text hervorheben“; nochmals wählen beendet es
     const active = getActiveTab();
-    if (active?.status !== 'ready' || active.mode !== 'view' || !active.canAnnotate) return;
-    const annotations = useAnnotations.getState();
-    if (ui.commentToolsVisible && annotations.tool === 'highlight') {
-      annotations.setTool('select');
-      return;
-    }
-    if (active.contentEditing) toggleContentEditing(active);
-    if (active.formEditing) toggleFormEditing(active);
-    useUi.getState().setCommentToolsVisible(true);
-    annotations.setTool('highlight');
+    if (active) toggleMarkTools(active);
     return;
   }
   if (command === 'forms.edit') {

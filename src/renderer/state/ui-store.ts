@@ -58,6 +58,8 @@ interface UiState {
   commentToolsVisible: boolean;
   // Leiste „Schwärzen“ (Phase 5) und ihre Dialoge
   redactToolsVisible: boolean;
+  // Leiste „Markieren“ (Text hervorheben, unterstreichen, durchstreichen)
+  markToolsVisible: boolean;
   redactDialog: 'apply' | 'find' | null;
   // Wasserzeichen, Kopf- und Fußzeile, Seitenzahlen (Phase 5)
   stampDialog: 'watermark' | 'headerFooter' | 'pageNumbers' | null;
@@ -98,6 +100,7 @@ interface UiState {
   setAuthorName: (name: string) => void;
   setCommentToolsVisible: (visible: boolean) => void;
   setRedactToolsVisible: (visible: boolean) => void;
+  setMarkToolsVisible: (visible: boolean) => void;
   setRedactDialog: (dialog: 'apply' | 'find' | null) => void;
   setStampDialog: (dialog: 'watermark' | 'headerFooter' | 'pageNumbers' | null) => void;
   setSecurityDialogOpen: (open: boolean) => void;
@@ -138,6 +141,7 @@ export const useUi = create<UiState>((set) => ({
   searchFocusHandled: 0,
   authorName: '',
   commentToolsVisible: false,
+  markToolsVisible: false,
   redactToolsVisible: false,
   redactDialog: null,
   stampDialog: null,
@@ -170,8 +174,13 @@ export const useUi = create<UiState>((set) => ({
   markSearchFocusHandled: (request) => set({ searchFocusHandled: request }),
   setAuthorName: (authorName) => set({ authorName }),
   // Kommentieren und Schwärzen nutzen dieselbe Ebene; es ist immer nur eine der beiden Leisten offen.
-  setCommentToolsVisible: (commentToolsVisible) => set((state) => ({ commentToolsVisible, redactToolsVisible: commentToolsVisible ? false : state.redactToolsVisible })),
-  setRedactToolsVisible: (redactToolsVisible) => set((state) => ({ redactToolsVisible, commentToolsVisible: redactToolsVisible ? false : state.commentToolsVisible })),
+  // Höchstens eine der Leisten „Kommentieren“, „Schwärzen“ und „Markieren“ ist offen
+  setCommentToolsVisible: (commentToolsVisible) =>
+    set((state) => (commentToolsVisible ? { commentToolsVisible, redactToolsVisible: false, markToolsVisible: false } : { ...state, commentToolsVisible })),
+  setRedactToolsVisible: (redactToolsVisible) =>
+    set((state) => (redactToolsVisible ? { redactToolsVisible, commentToolsVisible: false, markToolsVisible: false } : { ...state, redactToolsVisible })),
+  setMarkToolsVisible: (markToolsVisible) =>
+    set((state) => (markToolsVisible ? { markToolsVisible, commentToolsVisible: false, redactToolsVisible: false } : { ...state, markToolsVisible })),
   setRedactDialog: (redactDialog) => set({ redactDialog }),
   setStampDialog: (stampDialog) => set({ stampDialog }),
   setSecurityDialogOpen: (securityDialogOpen) => set({ securityDialogOpen }),

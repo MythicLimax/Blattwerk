@@ -76,7 +76,7 @@ describe('Menü und Tastenkürzel', () => {
     for (const platform of ['darwin', 'win32'] as const) {
       const template = buildMenuTemplate({
         platform,
-        state: { hasDocument: true, canPrint: true, viewMode: 'continuous', sidebarVisible: true, rightPanelVisible: false, tabCount: 2, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true, formEditing: false, canEditForms: true, redactToolsVisible: false, hasRedactionMarks: false, contentEditing: false },
+        state: { hasDocument: true, canPrint: true, viewMode: 'continuous', sidebarVisible: true, rightPanelVisible: false, tabCount: 2, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true, formEditing: false, canEditForms: true, redactToolsVisible: false, hasRedactionMarks: false, contentEditing: false, markToolsVisible: false },
         recent: [],
         devTools: false,
         sendCommand: () => undefined,
@@ -105,7 +105,7 @@ describe('Menü und Tastenkürzel', () => {
       setDefaultApp: () => undefined,
     chooseUpdateFolder: () => undefined,
     };
-    const state = { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true, formEditing: false, canEditForms: false, redactToolsVisible: false, hasRedactionMarks: false, contentEditing: false };
+    const state = { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true, formEditing: false, canEditForms: false, redactToolsVisible: false, hasRedactionMarks: false, contentEditing: false, markToolsVisible: false };
     const flatten = (items: Electron.MenuItemConstructorOptions[]): Electron.MenuItemConstructorOptions[] =>
       items.flatMap((item) => [item, ...(Array.isArray(item.submenu) ? flatten(item.submenu) : [])]);
 
@@ -123,7 +123,7 @@ describe('Menü und Tastenkürzel', () => {
     const { buildMenuTemplate } = await import('../../src/main/menu');
     const template = buildMenuTemplate({
       platform: 'win32',
-      state: { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, tabCount: 0, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true, formEditing: false, canEditForms: false, redactToolsVisible: false, hasRedactionMarks: false, contentEditing: false },
+      state: { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, tabCount: 0, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true, formEditing: false, canEditForms: false, redactToolsVisible: false, hasRedactionMarks: false, contentEditing: false, markToolsVisible: false },
       recent: [{ path: 'C:\\A & B\\AGB & Datenschutz.pdf', name: 'AGB & Datenschutz.pdf', dir: 'C:\\A & B', openedAt: 1 }],
       devTools: false,
       sendCommand: () => undefined,

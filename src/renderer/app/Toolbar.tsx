@@ -31,8 +31,6 @@ import { executeCommand, goToPage, openWithDialog, printTab, setScaleValue, setV
 import { useTabDirty } from '../state/dirty';
 import { VIEW_MODES } from '../features/viewer/view-modes';
 import { isPresetScaleValue, scaleToPercent, ZOOM_MENU_PERCENTS } from '../features/viewer/zoom';
-import { cachedGeometry, markupSelection } from '../features/annotations/AnnotationLayer';
-import { useAnnotations } from '../state/annotations-store';
 import { useActiveTab, type TabState } from '../state/documents-store';
 import { useUi } from '../state/ui-store';
 import styles from './Toolbar.module.css';
@@ -256,7 +254,7 @@ export function Toolbar() {
   const rightPanelVisible = useUi((s) => s.rightPanelVisible);
   const commentToolsVisible = useUi((s) => s.commentToolsVisible);
   const redactToolsVisible = useUi((s) => s.redactToolsVisible);
-  const annotationTool = useAnnotations((s) => s.tool);
+  const markToolsVisible = useUi((s) => s.markToolsVisible);
   const tabDirty = useTabDirty(tab?.id);
   const headerRef = useRef<HTMLElement | null>(null);
   const level = useCollapseLevel(headerRef);
@@ -360,12 +358,9 @@ export function Toolbar() {
           icon={Highlighter}
           tone="comment"
           label={t('toolbar.highlight')}
-          pressed={commentToolsVisible && viewing && annotationTool === 'highlight' && !tab.formEditing && !tab.contentEditing}
+          pressed={markToolsVisible && viewing && !tab.formEditing && !tab.contentEditing}
           disabled={!viewing || !tab.canAnnotate}
-          onClick={() => {
-            // Text schon ausgewählt? Dann gleich markieren, sonst den Textmarker einschalten.
-            if (!markupSelection(tab.id, 'highlight', (page) => cachedGeometry(tab.id, page))) executeCommand('tools.highlight');
-          }}
+          onClick={() => executeCommand('tools.highlight')}
           data-testid="highlight-button"
         />
         <IconButton
