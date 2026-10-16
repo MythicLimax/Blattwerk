@@ -4,7 +4,7 @@
 // Aufruf: node scripts/smoke-update.mjs <Pfad zu Blattwerk.app>
 import { chromium } from '@playwright/test';
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
