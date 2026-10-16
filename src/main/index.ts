@@ -17,6 +17,7 @@ import { handleAppScheme, registerAppScheme } from './protocol';
 import { hardenSession, hardenWebContents, isTrustedAppUrl } from './security';
 import { createMainWindow, createSettingsStore, type SettingsData, type WindowState } from './window';
 import { removeBlankDocuments } from './files/blank-document';
+import { defaultUpdateFolder, runPendingInstall, setCustomUpdateFolder } from './update/updater';
 import { attachNativeGlass, describeNativeGlass, nativeGlassAvailable } from './native-glass';
 
 // Testschalter wirken nur beim Entwickeln, nie in der installierten App.
@@ -181,6 +182,23 @@ async function openFileDialogFromMenu(): Promise<void> {
   for (const p of paths) requestOpen(p);
 }
 
+// Eigener Update-Ordner (ADR 0025): z. B. ein Ordner in iCloud Drive oder OneDrive, den mehrere Rechner sehen
+async function chooseUpdateFolderFromMenu(): Promise<void> {
+  const win = mainWindow;
+  const options = {
+    title: t('dialog.updateFolderTitle'),
+    message: t('dialog.updateFolderMessage'),
+    buttonLabel: t('dialog.chooseFolderButton'),
+    defaultPath: settings.updateFolder ?? defaultUpdateFolder(),
+    properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>,
+  };
+  const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+  const folder = result.filePaths[0];
+  if (result.canceled || !folder) return;
+  saveSettings({ updateFolder: folder === defaultUpdateFolder() ? null : folder });
+  sendCommand('app.checkUpdates');
+}
+
 function refreshMenu(): void {
   void recent.list().then((list) =>
     applyMenu({
@@ -193,6 +211,7 @@ function refreshMenu(): void {
       openRecent: (p) => requestOpen(p),
       clearRecent: () => void clearRecentEverywhere(),
       setDefaultApp: () => void setAsDefaultPdfApp(mainWindow),
+      chooseUpdateFolder: () => void chooseUpdateFolderFromMenu(),
     }),
   );
 }
@@ -205,7 +224,7 @@ function isTrustedSender(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
 
 const settingsStore = createSettingsStore(app.getPath('userData'));
 let windowState: WindowState = { bounds: null, maximized: false };
-let settings: SettingsData = { version: 1, window: windowState, authorName: null, lastIdPath: null };
+let settings: SettingsData = { version: 1, window: windowState, authorName: null, lastIdPath: null, updateFolder: null };
 
 function saveSettings(patch: Partial<SettingsData>): void {
   settings = { ...settings, ...patch };
@@ -303,7 +322,11 @@ async function createWindow(): Promise<BrowserWindow> {
 
 app.on('web-contents-created', (_event, contents) => hardenWebContents(contents, devServerOrigin));
 
-app.on('will-quit', () => removeBlankDocuments());
+app.on('will-quit', () => {
+  removeBlankDocuments();
+  // Vorgemerktes Update: Hilfsskript tauscht die App nach dem Beenden aus (ADR 0025)
+  runPendingInstall();
+});
 
 app.on('before-quit', () => {
   quitting = true;
@@ -326,6 +349,7 @@ void app.whenReady().then(async () => {
   recent = new RecentFiles(path.join(app.getPath('userData'), 'recent-files.json'));
   signatures = new SignatureStore(path.join(app.getPath('userData'), 'signatures.json'));
   settings = await settingsStore.read();
+  setCustomUpdateFolder(() => settings.updateFolder);
   windowState = settings.window;
   if (process.platform === 'darwin') {
     app.setAboutPanelOptions({ applicationName: PRODUCT_NAME, applicationVersion: app.getVersion() });

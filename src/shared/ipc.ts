@@ -29,6 +29,9 @@ export const IPC = {
   // Schriften des Rechners für neuen Text (ADR 0024): Liste, Daten einer Schrift
   fontsList: 'fonts:list',
   fontsRead: 'fonts:read',
+  // Updates ohne Internet (ADR 0025): Stand prüfen, bereitliegendes Update beim Beenden einspielen
+  updateStatus: 'update:status',
+  updateInstall: 'update:install',
   // Phase 4: gespeicherte Unterschriften
   signaturesList: 'signatures:list',
   signaturesAdd: 'signatures:add',

@@ -1,6 +1,7 @@
 // Typen der Schnittstelle, die der Preload dem Renderer als window.blattwerk bereitstellt.
 import type { CommandId } from '../shared/commands';
 import type { SystemFont } from '../shared/fonts';
+import type { UpdateStatus } from '../shared/update';
 import type {
   ConvertResult,
   GlassRegion,
@@ -49,6 +50,11 @@ export interface BlattwerkApi {
   registerDroppedFile(file: File): Promise<OpenResult>;
   // Neues leeres Dokument (eine A4-Seite, unbenannt) anlegen und öffnen
   newBlankDocument(): Promise<OpenResult>;
+  // Updates ohne Internet: Stand prüfen, „Jetzt aktualisieren“ (schließt die App, tauscht sie aus, öffnet sie neu)
+  update: {
+    status(): Promise<UpdateStatus>;
+    install(): Promise<boolean>;
+  };
   // Schriften des Rechners (Aptos, Arial, Times New Roman …), nur einbettbare
   fonts: {
     list(): Promise<SystemFont[]>;

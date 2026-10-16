@@ -80,6 +80,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Barrierefreiheit** ([ADR 0018](docs/entscheidungen/0018-barrierefreiheit.md)): `accessibility.ts` (Tags lesen, prüfen, Sprache/Titel/Tab-Reihenfolge setzen); Seitenleiste „Tags“ und Prüfdialog in `features/accessibility/`, Ergebnis je Stand in `report.ts`.
 - **Textdokumente → PDF** ([ADR 0019](docs/entscheidungen/0019-textdokumente-umwandeln.md)): im Hauptprozess, `src/main/convert/` (eigene Leser für DOCX, ODT, RTF, Text, Markdown → `model.ts` → `html.ts`; `pdf.ts` setzt mit `printToPDF` in einem unsichtbaren Fenster mit eigener Sitzung ohne Netz und ohne JavaScript). IPC `convert:pick`, `convert:dropped`; abgelegte Textdokumente erkennt `isDocumentFileName` (`src/shared/convert.ts`).
 - **Leeres Dokument** („Unbenannt“, ⌘N, Startseite): `src/main/files/blank-document.ts` legt eine A4-Seite im temporären Ordner an (wird beim Beenden gelöscht, nicht in „Zuletzt geöffnet“). `TabState.untitled`: Sichern wird zu Sichern unter (Vorschlag im Ordner Dokumente); danach normales Dokument. Öffnet gleich im Modus „Text und Bilder bearbeiten“.
+- **Updates** ([ADR 0025](docs/entscheidungen/0025-updates.md)): ohne Internet aus einem Update-Ordner (`userData/Updates`, optional eigener Ordner `updateFolder`). macOS: `Blattwerk.app` (App-ID, höhere Version, gültige Signatur), Windows: `Blattwerk-Setup-<Version>.exe`. `src/main/update/` (prüfen, beim `will-quit` Hilfsskript starten), Leiste `features/update/`. `dist:mac:local` legt die neue App in den Update-Ordner.
 - Es ist immer höchstens ein Bearbeitungsmodus aktiv (Kommentieren, Schwärzen, Formular bearbeiten, Inhalt bearbeiten, Seiten organisieren).
 - Dieses Verfahren (Snapshot der Dokumentbytes) gilt für Seiten-, Feld-, Wasserzeichen- und Inhaltsänderungen sowie für das Schwärzen. Nach dem Speichern beginnt der Verlauf neu.
 
@@ -115,7 +116,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0024)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0025)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
@@ -142,7 +143,7 @@ src/
 resources/icon.svg          eigenes App-Symbol (Quelle)
 build/                      icon.png (aus resources/icon.svg erzeugt), after-pack.cjs
 native/macos-glass/        native Erweiterung für Apples Liquid Glass (Objective-C++, Node-API), gebaut von scripts/build-native.mjs
-scripts/                    build, build-native, dev, generate-fixtures, check-licenses, dist-mac-local, smoke-packaged, make-icon, dev-env.sh
+scripts/                    build, build-native, dev, generate-fixtures, check-licenses, dist-mac-local, smoke-packaged, smoke-update, make-icon, dev-env.sh
 test/
   fixtures/pdfs/            kleine Test-PDFs (eingecheckt), expectations.ts mit den erwarteten Eigenschaften
   fixtures/images/          Testbilder (JPEG, PNG, PNG mit Transparenz; eingecheckt)
@@ -197,7 +198,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 
 - **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js; PDFium-WASM und pdf-lib laufen ebenfalls in Node (`test/integration/pdfium-*.test.ts`, `fields.test.ts`, `redaction.test.ts`, `stamping.test.ts`, `content.test.ts`). Das Test-PDF zum Schwärzen erzeugt `test/fixtures/redaction.ts` im Test (Geheimnisse an allen bekannten Verstecken).
 - **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt), `test/e2e/forms.spec.ts` (Phase 4), `test/e2e/edit.spec.ts` (Phase 5), `test/e2e/tools.spec.ts` (Phase 6), `test/e2e/pro.spec.ts` (Phase 7; getaggtes Test-PDF aus `test/fixtures/tagged.ts`) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. **Unsichtbar:** Im Testmodus bleibt das Fenster verborgen (ohne Drosselung) und die App ohne Dock-Symbol, damit die Tests den Auftraggeber nicht stören; `BLATTWERK_E2E_SHOW=1` zeigt das Fenster zum Zuschauen. **Verbindlich (Auftraggeber, 2026-10-15): Alle Tests laufen unsichtbar, auch der Rauchtest der fertigen App. Nichts darf ein Fenster öffnen oder den Fokus nehmen; der Auftraggeber arbeitet nebenher am Mac.** Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
-- **Fertige App:** `node scripts/smoke-packaged.mjs <Pfad zur .app>` startet das Paket, prüft die Anzeige und speichert einen Kommentar (PDFium aus dem Paket).
+- **Fertige App:** `node scripts/smoke-packaged.mjs <Pfad zur .app>` startet das Paket, prüft die Anzeige und speichert einen Kommentar (PDFium aus dem Paket). `node scripts/smoke-update.mjs <Pfad zur .app>` spielt in einem Testordner ein Update (Version 99.0.0) ein.
 - **Ausgabeprüfung für jede gespeicherte Datei:** `qpdf --check` (in CI installiert, lokal übersprungen, wenn nicht vorhanden), Öffnen mit pdf.js, PDFium und `@cantoo/pdf-lib`, Annotationen haben /AP. Unter macOS zusätzlich mit PDFKit (die Engine von Apple Vorschau): `test/e2e/pdfkit.ts` (JavaScript for Automation). Acrobat Reader: manuelle Checkliste im Phasenbericht.
 - **Test-PDFs** (`test/fixtures/pdfs/`): Text, Scan (nur Bild), Formular (AcroForm), verschlüsselt (Benutzer- und Besitzerpasswort), eingeschränkt, beschädigt (kaputte xref, abgeschnitten), mit Links und Lesezeichen, mit Kommentaren (`kommentare.pdf`: Antwort, Prüfstatus). Signiert folgt mit PAdES in Phase 7. „Sehr groß“ (600 Seiten, mehr als 100 MB) erzeugt `scripts/generate-fixtures.ts` nach `test/fixtures/generated/`.
 

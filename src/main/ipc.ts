@@ -42,6 +42,8 @@ import {
 import { atomicWrite } from './files/atomic-write';
 import { createBlankDocument, isBlankDocumentPath } from './files/blank-document';
 import { listSystemFonts, readSystemFont } from './files/system-fonts';
+import { checkForUpdate, scheduleInstall } from './update/updater';
+import type { UpdateStatus } from '../shared/update';
 import { parseSystemFontKey, type SystemFont } from '../shared/fonts';
 import { DOCUMENT_EXTENSIONS } from '../shared/convert';
 import { ConvertError, MAX_DOCUMENT_BYTES, detectAndConvert } from './convert';
@@ -294,6 +296,17 @@ export function registerIpc(ctx: IpcContext): void {
 
   // Mehrere neue Dokumente in einen gewählten Ordner (Teilen, Extrahieren als einzelne Dateien).
   // Vorhandene Dateien werden nie überschrieben; bei gleichem Namen kommt eine Nummer dazu.
+  handle(IPC.updateStatus, (): UpdateStatus => checkForUpdate());
+
+  // Update vormerken und die App über den normalen Weg schließen (Rückfrage bei ungespeicherten Änderungen);
+  // beim Beenden tauscht ein Hilfsskript die App aus und öffnet sie neu
+  handle(IPC.updateInstall, (event): boolean => {
+    const win = windowOf(event);
+    if (!win || !scheduleInstall()) return false;
+    win.close();
+    return true;
+  });
+
   handle(IPC.fontsList, (): SystemFont[] => listSystemFonts());
 
   handle(IPC.fontsRead, (_event, key: unknown): Uint8Array | null => {

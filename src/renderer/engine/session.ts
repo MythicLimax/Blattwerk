@@ -28,6 +28,7 @@ import { exportText } from '../features/export/actions';
 import { compareWithFile } from '../features/compare/actions';
 import { openPdfACheck } from '../features/pdfa/actions';
 import { useAccessibility } from '../features/accessibility/accessibility-store';
+import { useUpdate } from '../features/update/update-store';
 import { useCertify } from '../features/certify/certify-store';
 import { isRunning as isProgressRunning } from '../features/progress/progress';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
@@ -870,6 +871,18 @@ export function executeCommand(command: CommandId): void {
   const ui = useUi.getState();
   if (command === 'file.open') {
     void openWithDialog();
+    return;
+  }
+  if (command === 'app.checkUpdates') {
+    void useUpdate
+      .getState()
+      .check()
+      .then((status) => {
+        if (!status) return;
+        useUpdate.setState({ dismissed: null });
+        if (status.state === 'current') ui.confirm(t('update.upToDate', { version: status.current }));
+        else if (status.state === 'unsupported') ui.notify(t('update.unsupported'), t(`update.reasons.${status.reason}`));
+      });
     return;
   }
   if (command === 'app.settings') {

@@ -8,6 +8,7 @@ export const COMMANDS = [
   'file.print',
   'file.properties',
   'app.settings',
+  'app.checkUpdates',
   'edit.undo',
   'edit.redo',
   'edit.delete',

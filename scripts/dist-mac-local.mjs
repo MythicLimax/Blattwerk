@@ -2,8 +2,8 @@
 // Grund: Liegt das Projekt in einem iCloud-Ordner, versieht iCloud die Dateien mit Attributen, an denen
 // die Signatur scheitert. Im temporären Ordner passiert das nicht.
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,4 +23,19 @@ for (const name of readdirSync(outDir).filter((n) => n.endsWith('.dmg'))) {
   cpSync(path.join(outDir, name), path.join(releaseDir, name));
   console.log(`release/${name}`);
 }
-console.log(`App-Bundle: ${path.join(outDir, 'mac-arm64', 'Blattwerk.app')}`);
+const bundle = path.join(outDir, 'mac-arm64', 'Blattwerk.app');
+console.log(`App-Bundle: ${bundle}`);
+
+// Update bereitlegen (ADR 0025): Die installierte App findet die neue Version im Ordner „Updates“ ihres Profils und
+// bietet „Jetzt aktualisieren“ an. Erst vollständig kopieren, dann umbenennen (nie eine halbe App im Ordner).
+if (process.platform === 'darwin' && !process.argv.includes('--no-update')) {
+  const updates = path.join(homedir(), 'Library', 'Application Support', 'Blattwerk', 'Updates');
+  mkdirSync(updates, { recursive: true });
+  const staging = path.join(updates, '.Blattwerk.app.neu');
+  const target = path.join(updates, 'Blattwerk.app');
+  rmSync(staging, { recursive: true, force: true });
+  execFileSync('/usr/bin/ditto', [bundle, staging]);
+  if (existsSync(target)) rmSync(target, { recursive: true, force: true });
+  renameSync(staging, target);
+  console.log(`Update bereitgelegt: ${target}`);
+}

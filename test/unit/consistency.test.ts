@@ -84,6 +84,7 @@ describe('Menü und Tastenkürzel', () => {
         openRecent: () => undefined,
         clearRecent: () => undefined,
         setDefaultApp: () => undefined,
+    chooseUpdateFolder: () => undefined,
       });
       const ids = collectIds(template);
       expect(COMMANDS.filter((command) => !ids.includes(command))).toEqual([]);
@@ -102,6 +103,7 @@ describe('Menü und Tastenkürzel', () => {
       openRecent: () => undefined,
       clearRecent: () => undefined,
       setDefaultApp: () => undefined,
+    chooseUpdateFolder: () => undefined,
     };
     const state = { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true, formEditing: false, canEditForms: false, redactToolsVisible: false, hasRedactionMarks: false, contentEditing: false };
     const flatten = (items: Electron.MenuItemConstructorOptions[]): Electron.MenuItemConstructorOptions[] =>
@@ -129,6 +131,7 @@ describe('Menü und Tastenkürzel', () => {
       openRecent: () => undefined,
       clearRecent: () => undefined,
       setDefaultApp: () => undefined,
+    chooseUpdateFolder: () => undefined,
     });
     const text = JSON.stringify(template);
     expect(text).toContain('AGB && Datenschutz.pdf');

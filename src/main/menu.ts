@@ -14,6 +14,7 @@ export interface MenuContext {
   openRecent: (filePath: string) => void;
   clearRecent: () => void;
   setDefaultApp: () => void;
+  chooseUpdateFolder: () => void;
 }
 
 const VIEW_MODE_COMMANDS: Record<ViewMode, CommandId> = {
@@ -120,7 +121,14 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       cmd('edit.find', t('menu.edit.find'), { enabled: viewing }),
       cmd('edit.findNext', t('menu.edit.findNext'), { enabled: viewing }),
       cmd('edit.findPrevious', t('menu.edit.findPrevious'), { enabled: viewing }),
-      ...(isMac ? [] : [{ type: 'separator' as const }, cmd('app.settings', t('menu.app.settings'))]),
+      ...(isMac
+        ? []
+        : [
+            { type: 'separator' as const },
+            cmd('app.settings', t('menu.app.settings')),
+            cmd('app.checkUpdates', t('menu.app.checkUpdates')),
+            { label: t('menu.app.updateFolder'), click: () => ctx.chooseUpdateFolder() },
+          ]),
     ],
   };
 
@@ -284,6 +292,8 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
           role: 'appMenu',
           submenu: [
             { role: 'about', label: t('menu.app.about') },
+            cmd('app.checkUpdates', t('menu.app.checkUpdates')),
+            { label: t('menu.app.updateFolder'), click: () => ctx.chooseUpdateFolder() },
             { type: 'separator' },
             cmd('app.settings', t('menu.app.settings')),
             { type: 'separator' },

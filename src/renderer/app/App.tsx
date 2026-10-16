@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { trackPointerLight } from '../components/glass/liquid-glass';
 import { useNativeGlass } from './native-glass';
+import { UpdateBanner } from '../features/update/UpdateBanner';
 import { api } from '../api';
 import { handleCloseRequest, handleOpenResult, executeCommand } from '../engine/session';
 import { CommentToolbar } from '../features/annotations/CommentToolbar';
@@ -162,6 +163,7 @@ export function App() {
       <BusyOverlay />
       {prompt && <PromptDialog key={`${prompt.kind}-${prompt.tabId}`} prompt={prompt} />}
       <Notices />
+      <UpdateBanner />
       <DropOverlay />
       <TooltipHost />
     </div>

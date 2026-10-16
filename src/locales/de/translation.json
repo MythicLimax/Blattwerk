@@ -7,7 +7,9 @@
       "hideOthers": "Andere ausblenden",
       "showAll": "Alle einblenden",
       "quit": "{{appName}} beenden",
-      "settings": "Einstellungen …"
+      "settings": "Einstellungen …",
+      "checkUpdates": "Nach Updates suchen …",
+      "updateFolder": "Update-Ordner wählen …"
     },
     "file": {
       "title": "Ablage",
@@ -163,7 +165,9 @@
     "saveIdTitle": "Digitale ID speichern",
     "filterId": "Digitale ID (PKCS#12)",
     "convertTitle": "Textdokument in PDF umwandeln",
-    "filterDocuments": "Textdokumente (Word, OpenDocument, RTF, Text, Markdown)"
+    "filterDocuments": "Textdokumente (Word, OpenDocument, RTF, Text, Markdown)",
+    "updateFolderTitle": "Update-Ordner wählen",
+    "updateFolderMessage": "Neue Versionen von {{appName}} werden auch in diesem Ordner gesucht, z. B. in iCloud Drive oder OneDrive, damit mehrere Rechner dieselben Updates sehen."
   },
   "errors": {
     "open": {
@@ -1200,5 +1204,18 @@
   },
   "files": {
     "untitled": "Unbenannt"
+  },
+  "update": {
+    "ready": "Version {{version}} ist bereit",
+    "detail": "Installiert ist {{current}}. Die App schließt sich kurz und öffnet sich neu.",
+    "install": "Jetzt aktualisieren",
+    "later": "Später",
+    "upToDate": "{{appName}} ist auf dem neuesten Stand (Version {{version}}).",
+    "unsupported": "Updates sind hier nicht möglich.",
+    "reasons": {
+      "development": "Das ist die Entwicklungsfassung.",
+      "platform": "Updates in der App gibt es nur unter macOS.",
+      "location": "Die App läuft nicht aus dem Programme-Ordner (z. B. direkt vom Disk-Image). Bitte einmal in „Programme“ ziehen."
+    }
   }
 }
