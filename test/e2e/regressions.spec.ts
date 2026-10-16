@@ -299,3 +299,34 @@ test.describe('Liquid Glass von macOS', () => {
     await doc.close();
   });
 });
+
+test('schmales Fenster: was nicht in die Leiste passt, steht im Menü „Weitere Werkzeuge“', async () => {
+  const { page, app, close } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, TEXT_PDF.pages);
+  const toolbar = page.getByTestId('toolbar');
+  const fits = () => toolbar.evaluate((element) => element.scrollWidth <= element.clientWidth + 1);
+  await expect(page.getByTestId('toolbar-more')).toHaveCount(0);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(780, 700));
+  await expect(page.getByTestId('toolbar-more')).toBeVisible();
+  expect(await fits()).toBe(true);
+  await expect(toolbar.getByTestId('zoom-select')).toHaveCount(0);
+  await page.getByTestId('toolbar-more').click();
+  const panel = page.getByTestId('toolbar-more-panel');
+  await expect(panel.getByTestId('zoom-select')).toBeVisible();
+  await panel.getByTestId('zoom-select').selectOption('2');
+  await expect(panel).toBeVisible();
+  // Menü liegt im Fenster unter dem Knopf
+  const box = await panel.boundingBox();
+  expect(box && box.x >= 0 && box.x + box.width <= 780).toBe(true);
+  // Leisten der Arbeitsbereiche brechen um statt abzuschneiden
+  await page.getByTestId('content-edit-button').click();
+  await expect(panel).toHaveCount(0);
+  const bar = page.getByTestId('content-edit-toolbar');
+  expect(await bar.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  const done = await page.getByTestId('content-edit-done').boundingBox();
+  expect(done && done.x + done.width).toBeLessThanOrEqual(780);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1280, 860));
+  await expect(page.getByTestId('toolbar-more')).toHaveCount(0);
+  await expect(toolbar.getByTestId('zoom-select')).toBeVisible();
+  await close();
+});

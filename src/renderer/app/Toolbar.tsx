@@ -5,6 +5,7 @@ import {
   EyeOff,
   FilePenLine,
   FolderOpen,
+  Ellipsis,
   Info,
   LayoutGrid,
   MessageSquare,
@@ -18,7 +19,8 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { ViewMode } from '../../shared/ipc';
 import { IconButton } from '../components/IconButton';
@@ -159,6 +161,91 @@ function ViewModeSelect({ tab }: { tab: TabState }) {
   );
 }
 
+// Reihenfolge, in der Gruppen bei schmalem Fenster in das Menü „Weitere Werkzeuge“ wandern (unwichtigste zuerst)
+type GroupId = 'view' | 'zoom' | 'pages' | 'info' | 'modes';
+const COLLAPSE_ORDER: GroupId[] = ['view', 'zoom', 'pages', 'info', 'modes'];
+
+// Wie viele Gruppen ins Menü wandern müssen, damit die Leiste ohne Abschneiden passt. Gemessen wird nach jedem
+// Zeichnen; zurückgeholt wird eine Gruppe erst, wenn das Fenster wieder so breit ist wie beim Einklappen nötig.
+function useCollapseLevel(ref: RefObject<HTMLElement | null>): number {
+  const [level, setLevel] = useState(0);
+  const needed = useRef<number[]>([]);
+  // Nur zum Neuzeichnen, wenn sich die Fensterbreite ändert
+  const [, setWidth] = useState(0);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => setWidth(element.clientWidth));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+
+  // Ohne Abhängigkeiten gewollt: auch geänderte Inhalte (Zoomtext, Seitenzahl, Modus) können die Breite ändern. Endet
+  // stets, weil jeder Schritt die Stufe nur in eine Richtung verschiebt, bis die Leiste passt.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const available = element.clientWidth;
+    if (element.scrollWidth > available + 1 && level < COLLAPSE_ORDER.length) {
+      needed.current[level] = element.scrollWidth;
+      setLevel(level + 1);
+    } else if (level > 0 && available >= (needed.current[level - 1] ?? Number.POSITIVE_INFINITY)) {
+      setLevel(level - 1);
+    }
+  });
+  return level;
+}
+
+// Aufklappmenü mit den Gruppen, die nicht mehr in die Leiste passen
+function MorePanel({ anchor, onClose, children }: { anchor: HTMLElement; onClose: () => void; children: ReactNode }) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const glass = useLiquidGlass<HTMLDivElement>(GLASS.panel);
+  const rect = anchor.getBoundingClientRect();
+
+  useEffect(() => {
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!panelRef.current?.contains(target) && !anchor.contains(target)) onClose();
+    };
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('pointerdown', onPointer, true);
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('resize', onClose);
+    return () => {
+      window.removeEventListener('pointerdown', onPointer, true);
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('resize', onClose);
+    };
+  }, [anchor, onClose]);
+
+  return createPortal(
+    <div
+      ref={(element) => {
+        panelRef.current = element;
+        glass(element);
+      }}
+      className={styles.morePanel}
+      style={{ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) }}
+      data-testid="toolbar-more-panel"
+      // Ein Moduswechsel schließt das Menü; Blättern und Zoomen lassen es offen
+      onClick={(event) => {
+        const button = (event.target as HTMLElement).closest('button');
+        if (button && !button.closest('[data-keep-open]')) onClose();
+      }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 export function Toolbar() {
   const { t } = useTranslation();
   const tab = useActiveTab();
@@ -167,13 +254,142 @@ export function Toolbar() {
   const commentToolsVisible = useUi((s) => s.commentToolsVisible);
   const redactToolsVisible = useUi((s) => s.redactToolsVisible);
   const tabDirty = useTabDirty(tab?.id);
+  const headerRef = useRef<HTMLElement | null>(null);
+  const level = useCollapseLevel(headerRef);
+  const [moreAnchor, setMoreAnchor] = useState<HTMLElement | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   const ready = tab?.status === 'ready';
   const dirty = ready && tabDirty;
   // Im Raster „Seiten organisieren“ gibt es keine Hauptansicht: Zoom, Blättern, Suche und Kommentare entfallen.
   const viewing = ready && tab.mode === 'view';
 
+  const collapsed = new Set(COLLAPSE_ORDER.slice(0, level));
+  const groups: Partial<Record<GroupId, ReactNode>> = {};
+  if (viewing) {
+    groups.pages = (
+      <GlassGroup>
+        <IconButton
+          icon={ChevronUp}
+          label={t('toolbar.previousPage')}
+          disabled={tab.currentPage <= 1}
+          onClick={() => executeCommand('nav.previousPage')}
+        />
+        <IconButton
+          icon={ChevronDown}
+          label={t('toolbar.nextPage')}
+          disabled={tab.currentPage >= tab.pageCount}
+          onClick={() => executeCommand('nav.nextPage')}
+        />
+        <PageInput key={tab.id} tab={tab} />
+      </GlassGroup>
+    );
+    groups.zoom = (
+      <GlassGroup>
+        <IconButton icon={ZoomOut} label={t('toolbar.zoomOut')} onClick={() => executeCommand('view.zoomOut')} />
+        <ZoomSelect tab={tab} />
+        <IconButton icon={ZoomIn} label={t('toolbar.zoomIn')} onClick={() => executeCommand('view.zoomIn')} />
+      </GlassGroup>
+    );
+    groups.view = (
+      <GlassGroup>
+        <ViewModeSelect tab={tab} />
+        <IconButton
+          icon={RotateCcw}
+          label={t('toolbar.rotateCounterClockwise')}
+          onClick={() => executeCommand('view.rotateCounterClockwise')}
+        />
+        <IconButton
+          icon={RotateCw}
+          label={t('toolbar.rotateClockwise')}
+          onClick={() => executeCommand('view.rotateClockwise')}
+        />
+      </GlassGroup>
+    );
+  }
+  if (ready) {
+    groups.modes = (
+      <GlassGroup>
+        <IconButton
+          icon={Signature}
+          tone="sign"
+          label={t('toolbar.sign')}
+          disabled={!viewing || !tab.canAnnotate || tab.formEditing}
+          onClick={() => executeCommand('tools.sign')}
+          data-testid="sign-button"
+        />
+        <IconButton
+          icon={EyeOff}
+          tone="redact"
+          label={t('toolbar.redact')}
+          pressed={redactToolsVisible && viewing && !tab.formEditing && !tab.contentEditing}
+          disabled={!viewing}
+          onClick={() => executeCommand('redact.tools')}
+          data-testid="redact-tools-button"
+        />
+        <IconButton
+          icon={FilePenLine}
+          tone="edit"
+          label={t('toolbar.editContent')}
+          pressed={viewing && tab.contentEditing}
+          disabled={!viewing || !tab.canModify}
+          onClick={() => executeCommand('content.edit')}
+          data-testid="content-edit-button"
+        />
+        <IconButton
+          icon={ClipboardPen}
+          tone="forms"
+          label={t('toolbar.editForm')}
+          pressed={viewing && tab.formEditing}
+          disabled={!viewing || !tab.canEditForms}
+          onClick={() => executeCommand('forms.edit')}
+          data-testid="form-edit-button"
+        />
+        <IconButton
+          icon={LayoutGrid}
+          tone="pages"
+          label={t('toolbar.organize')}
+          pressed={tab.mode === 'organize'}
+          onClick={() => executeCommand('pages.organize')}
+          data-testid="organize-button"
+        />
+        <IconButton
+          icon={MessageSquare}
+          tone="comment"
+          label={t('toolbar.comment')}
+          pressed={commentToolsVisible && viewing && !tab.formEditing && !tab.contentEditing}
+          disabled={!viewing}
+          onClick={() => executeCommand('view.toggleCommentTools')}
+          data-testid="comment-tools-button"
+        />
+      </GlassGroup>
+    );
+    groups.info = (
+      <GlassGroup>
+        <IconButton
+          icon={Info}
+          label={t('toolbar.properties')}
+          onClick={() => executeCommand('file.properties')}
+          data-testid="properties-button"
+        />
+        <IconButton
+          icon={Search}
+          label={t('toolbar.search')}
+          pressed={rightPanelVisible && viewing}
+          disabled={!viewing}
+          onClick={() => (rightPanelVisible ? executeCommand('view.toggleRightPanel') : executeCommand('edit.find'))}
+          data-testid="search-button"
+        />
+      </GlassGroup>
+    );
+  }
+  const shown = (id: GroupId) => (collapsed.has(id) ? null : groups[id]);
+  // Im Menü in der Reihenfolge der Leiste
+  const hidden = (['pages', 'zoom', 'view', 'modes', 'info'] as GroupId[]).filter((id) => collapsed.has(id) && groups[id]);
+  const menuOpen = moreOpen && moreAnchor !== null && hidden.length > 0;
+
   return (
     <header
+      ref={headerRef}
       className={styles.toolbar}
       data-testid="toolbar"
       data-drag-region
@@ -216,113 +432,39 @@ export function Toolbar() {
 
       {viewing && (
         <div className={styles.center}>
-          <GlassGroup>
-            <IconButton
-              icon={ChevronUp}
-              label={t('toolbar.previousPage')}
-              disabled={tab.currentPage <= 1}
-              onClick={() => executeCommand('nav.previousPage')}
-            />
-            <IconButton
-              icon={ChevronDown}
-              label={t('toolbar.nextPage')}
-              disabled={tab.currentPage >= tab.pageCount}
-              onClick={() => executeCommand('nav.nextPage')}
-            />
-            <PageInput key={tab.id} tab={tab} />
-          </GlassGroup>
-          <span className={styles.separator} />
-          <GlassGroup>
-            <IconButton icon={ZoomOut} label={t('toolbar.zoomOut')} onClick={() => executeCommand('view.zoomOut')} />
-            <ZoomSelect tab={tab} />
-            <IconButton icon={ZoomIn} label={t('toolbar.zoomIn')} onClick={() => executeCommand('view.zoomIn')} />
-          </GlassGroup>
-          <span className={styles.separator} />
-          <GlassGroup>
-            <ViewModeSelect tab={tab} />
-            <IconButton
-              icon={RotateCcw}
-              label={t('toolbar.rotateCounterClockwise')}
-              onClick={() => executeCommand('view.rotateCounterClockwise')}
-            />
-            <IconButton
-              icon={RotateCw}
-              label={t('toolbar.rotateClockwise')}
-              onClick={() => executeCommand('view.rotateClockwise')}
-            />
-          </GlassGroup>
+          {shown('pages')}
+          {shown('zoom')}
+          {shown('view')}
         </div>
       )}
 
       {ready && (
-        <GlassGroup>
-          <IconButton
-            icon={Signature}
-            tone="sign"
-            label={t('toolbar.sign')}
-            disabled={!viewing || !tab.canAnnotate || tab.formEditing}
-            onClick={() => executeCommand('tools.sign')}
-            data-testid="sign-button"
-          />
-          <IconButton
-            icon={EyeOff}
-            tone="redact"
-            label={t('toolbar.redact')}
-            pressed={redactToolsVisible && viewing && !tab.formEditing && !tab.contentEditing}
-            disabled={!viewing}
-            onClick={() => executeCommand('redact.tools')}
-            data-testid="redact-tools-button"
-          />
-          <IconButton
-            icon={FilePenLine}
-            tone="edit"
-            label={t('toolbar.editContent')}
-            pressed={viewing && tab.contentEditing}
-            disabled={!viewing || !tab.canModify}
-            onClick={() => executeCommand('content.edit')}
-            data-testid="content-edit-button"
-          />
-          <IconButton
-            icon={ClipboardPen}
-            tone="forms"
-            label={t('toolbar.editForm')}
-            pressed={viewing && tab.formEditing}
-            disabled={!viewing || !tab.canEditForms}
-            onClick={() => executeCommand('forms.edit')}
-            data-testid="form-edit-button"
-          />
-          <IconButton
-            icon={LayoutGrid}
-            tone="pages"
-            label={t('toolbar.organize')}
-            pressed={tab.mode === 'organize'}
-            onClick={() => executeCommand('pages.organize')}
-            data-testid="organize-button"
-          />
-          <IconButton
-            icon={MessageSquare}
-            tone="comment"
-            label={t('toolbar.comment')}
-            pressed={commentToolsVisible && viewing && !tab.formEditing && !tab.contentEditing}
-            disabled={!viewing}
-            onClick={() => executeCommand('view.toggleCommentTools')}
-            data-testid="comment-tools-button"
-          />
-          <IconButton
-            icon={Info}
-            label={t('toolbar.properties')}
-            onClick={() => executeCommand('file.properties')}
-            data-testid="properties-button"
-          />
-          <IconButton
-            icon={Search}
-            label={t('toolbar.search')}
-            pressed={rightPanelVisible && viewing}
-            disabled={!viewing}
-            onClick={() => (rightPanelVisible ? executeCommand('view.toggleRightPanel') : executeCommand('edit.find'))}
-            data-testid="search-button"
-          />
-        </GlassGroup>
+        <div className={styles.end}>
+          {shown('modes')}
+          {shown('info')}
+          {hidden.length > 0 && (
+            <GlassGroup>
+              <span ref={setMoreAnchor} className={styles.moreAnchor}>
+                <IconButton
+                  icon={Ellipsis}
+                  label={t('toolbar.more')}
+                  pressed={menuOpen}
+                  onClick={() => setMoreOpen((open) => !open)}
+                  data-testid="toolbar-more"
+                />
+              </span>
+            </GlassGroup>
+          )}
+        </div>
+      )}
+      {menuOpen && (
+        <MorePanel anchor={moreAnchor} onClose={() => setMoreOpen(false)}>
+          {hidden.map((id) => (
+            <div key={id} className={styles.moreRow} data-keep-open={id === 'modes' ? undefined : ''}>
+              {groups[id]}
+            </div>
+          ))}
+        </MorePanel>
       )}
     </header>
   );

@@ -286,7 +286,8 @@
     "sign": "Unterschreiben",
     "editForm": "Formular bearbeiten",
     "redact": "Schwärzen",
-    "editContent": "Text und Bilder bearbeiten"
+    "editContent": "Text und Bilder bearbeiten",
+    "more": "Weitere Werkzeuge"
   },
   "viewMode": {
     "single": "Einzelne Seite",
