@@ -947,6 +947,21 @@ export function executeCommand(command: CommandId): void {
     startSigning();
     return;
   }
+  if (command === 'tools.highlight') {
+    // Textmarker: Leiste „Kommentieren“ mit dem Werkzeug „Text hervorheben“; nochmals wählen beendet es
+    const active = getActiveTab();
+    if (active?.status !== 'ready' || active.mode !== 'view' || !active.canAnnotate) return;
+    const annotations = useAnnotations.getState();
+    if (ui.commentToolsVisible && annotations.tool === 'highlight') {
+      annotations.setTool('select');
+      return;
+    }
+    if (active.contentEditing) toggleContentEditing(active);
+    if (active.formEditing) toggleFormEditing(active);
+    useUi.getState().setCommentToolsVisible(true);
+    annotations.setTool('highlight');
+    return;
+  }
   if (command === 'forms.edit') {
     const active = getActiveTab();
     if (active) toggleFormEditing(active);

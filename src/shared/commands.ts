@@ -38,6 +38,7 @@ export const COMMANDS = [
   'pages.extract',
   'pages.split',
   'tools.sign',
+  'tools.highlight',
   'forms.edit',
   'content.edit',
   'redact.tools',

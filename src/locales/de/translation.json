@@ -66,7 +66,8 @@
       "toggleRightPanel": "Suchbereich",
       "fullscreen": "Vollbild",
       "devTools": "Entwicklerwerkzeuge",
-      "toggleCommentTools": "Kommentieren"
+      "toggleCommentTools": "Kommentieren",
+      "highlight": "Text markieren"
     },
     "nav": {
       "title": "Gehe zu",
@@ -287,7 +288,8 @@
     "editForm": "Formular bearbeiten",
     "redact": "Schwärzen",
     "editContent": "Text und Bilder bearbeiten",
-    "more": "Weitere Werkzeuge"
+    "more": "Weitere Werkzeuge",
+    "highlight": "Textmarker"
   },
   "viewMode": {
     "single": "Einzelne Seite",
@@ -1218,5 +1220,12 @@
       "platform": "Updates in der App gibt es nur unter macOS.",
       "location": "Die App läuft nicht aus dem Programme-Ordner (z. B. direkt vom Disk-Image). Bitte einmal in „Programme“ ziehen."
     }
+  },
+  "selection": {
+    "toolbar": "Auswahl markieren",
+    "highlight": "Hervorheben",
+    "color": "Farbe zum Hervorheben",
+    "underline": "Unterstreichen",
+    "strikeout": "Durchstreichen"
   }
 }

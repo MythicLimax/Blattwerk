@@ -397,3 +397,49 @@ test.describe('Farbauswahl beim Kommentieren', () => {
     await handle.close();
   });
 });
+
+test('Text markieren: normal auswählen, Farbe aus der Palette wählen, bleibt nach dem Speichern', async () => {
+  const userData = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+  tempDirs.push(userData);
+  const file = path.join(userData, 'kopie-markieren.pdf');
+  copyFileSync(fixture('text.pdf'), file);
+  const { page, app, close } = await launchApp([file], { userData });
+  await waitForDocument(page, TEXT_PDF.pages);
+  await page.getByTestId('sidebar-comments').click();
+
+  // Ohne Werkzeug: Text auswählen → kleine Leiste über der Auswahl
+  await selectText(page, 'Testdokument für Blattwerk');
+  const popover = page.getByTestId('selection-popover');
+  await expect(popover).toBeVisible();
+  await page.getByTestId('selection-highlight').click();
+  await expect(popover).toHaveCount(0);
+  await expect(cards(page)).toHaveCount(1);
+
+  // Farbe aus der großen Palette: Auswahl bleibt erhalten, obwohl in die Farbauswahl geklickt wird
+  await selectText(page, 'Die Umlaute');
+  await page.getByTestId('selection-color-more').click();
+  await page.getByTestId('selection-color-palette').nth(40).click();
+  await expect(cards(page)).toHaveCount(2);
+  await expect(page.getByTestId('comment-toolbar')).toHaveCount(0);
+
+  // Textmarker in der Werkzeugleiste: jede Auswahl wird sofort hervorgehoben
+  await page.getByTestId('highlight-button').click();
+  await expect(page.getByTestId('tool-highlight')).toHaveAttribute('aria-pressed', 'true');
+  await selectText(page, 'Ein PDF besteht');
+  await expect(cards(page)).toHaveCount(3);
+  await expect(popover).toHaveCount(0);
+
+  await save(page, app);
+  const saved = readFileSync(file).toString('latin1');
+  // Farbe (/C) steht im selben Objekt wie /Subtype /Highlight, davor oder danach
+  const colors = new Set(
+    [...saved.matchAll(/\/Subtype\s*\/Highlight/g)].map((m) => {
+      const start = saved.lastIndexOf(' obj', m.index);
+      const end = saved.indexOf('endobj', m.index);
+      return /\/C\s*\[([^\]]*)\]/.exec(saved.slice(start, end))?.[1]?.trim();
+    }),
+  );
+  expect((saved.match(/\/Subtype\s*\/Highlight/g) ?? []).length).toBe(3);
+  expect(colors.size).toBeGreaterThan(1);
+  await close();
+});
