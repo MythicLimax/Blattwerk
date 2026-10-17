@@ -217,7 +217,7 @@ export function registerIpc(ctx: IpcContext): void {
       return { ok: false, error: 'changed-externally' };
     }
     try {
-      await atomicWrite(target, bytes);
+      await ctx.files.whileReleased(target, () => atomicWrite(target, bytes));
     } catch (error) {
       return { ok: false, error: 'write-failed', detail: String(error) };
     }
@@ -242,7 +242,8 @@ export function registerIpc(ctx: IpcContext): void {
     if (result.canceled || !result.filePath) return { ok: false, error: 'cancelled' };
     const target = path.extname(result.filePath).toLowerCase() === '.pdf' ? result.filePath : `${result.filePath}.pdf`;
     try {
-      await atomicWrite(target, bytes);
+      // Auch „Sichern unter“ kann eine offene Datei ersetzen (dieselbe oder eine in einem anderen Fenster)
+      await ctx.files.whileReleased(target, () => atomicWrite(target, bytes));
     } catch (error) {
       return { ok: false, error: 'write-failed', detail: String(error) };
     }

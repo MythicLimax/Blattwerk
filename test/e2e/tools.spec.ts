@@ -1,15 +1,15 @@
 // Phase 6: Werkzeuge. Arbeitet auf Kopien der Test-PDFs.
 import { expect, test, type ElectronApplication } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fixture, PASSWORDS, TEXT_PDF } from '../fixtures/expectations';
-import { expectWindowCount, launchApp, menuClick, waitForDocument, windowWithTitle } from './app';
+import { expectWindowCount, launchApp, menuClick, removeTempDir, waitForDocument, windowWithTitle } from './app';
 import { unlockWithPdfKit } from './pdfkit';
 
 const tempDirs: string[] = [];
 test.afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs) removeTempDir(dir);
 });
 
 function copyOf(name: string): { dir: string; file: string } {

@@ -1,13 +1,13 @@
 // Phase 3: Seiten organisieren. Arbeitet auf Kopien der Test-PDFs; Systemdialoge werden im Hauptprozess ersetzt.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { COMMENTS_PDF, fixture, imageFixture, PASSWORDS, TEXT_PDF } from '../fixtures/expectations';
-import { expectWindowCount, launchApp, menuClick, waitForDocument, windowWithTitle, type AppHandle } from './app';
+import { expectWindowCount, launchApp, menuClick, removeTempDir, waitForDocument, windowWithTitle, type AppHandle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 
 const require = createRequire(import.meta.url);
@@ -17,7 +17,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
 
 const tempDirs: string[] = [];
 test.afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs) removeTempDir(dir);
 });
 
 function tempDir(): string {

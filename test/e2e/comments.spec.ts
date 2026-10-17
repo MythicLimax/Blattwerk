@@ -1,16 +1,16 @@
 // Phase 2: Kommentieren. Alle Tests arbeiten auf Kopien der Test-PDFs in einem temporären Ordner.
 import { expect, test, type Page } from '@playwright/test';
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { COMMENTS_PDF, fixture, TEXT_PDF } from '../fixtures/expectations';
-import { launchApp, menuClick, waitForDocument, type AppHandle } from './app';
+import { launchApp, menuClick, removeTempDir, waitForDocument, type AppHandle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 
 // Temporäre Ordner mit den Kopien; werden erst am Ende gelöscht, damit gespeicherte Dateien neu geöffnet werden können.
 const tempDirs: string[] = [];
 test.afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs) removeTempDir(dir);
 });
 
 // Startet die App mit einer Kopie des Test-PDFs und blendet Kommentarliste und Werkzeuge ein.

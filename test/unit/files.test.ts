@@ -145,6 +145,29 @@ describe('FileRegistry', () => {
     expect(registry.hasDocuments(8)).toBe(false);
   });
 
+  it('gibt offene Dateien unter Windows zum Überschreiben frei und öffnet sie danach wieder', async () => {
+    const target = path.join(dir, 'offen.pdf');
+    await writeFile(target, await readFile(fixture('text.pdf')));
+    const registry = new FileRegistry();
+    const result = await registry.open(target, 1);
+    if (!result.ok) throw new Error('öffnen fehlgeschlagen');
+    const { fileId } = result.file;
+    await registry.whileReleased(
+      target,
+      async () => {
+        // Während des Schreibens kein Lesen aus der alten Datei
+        await expect(registry.read(fileId, 0, 5, 1)).rejects.toThrow('file-changed');
+      },
+      'win32',
+    );
+    // Unverändert: Lesen geht wieder
+    expect(new TextDecoder().decode(await registry.read(fileId, 0, 5, 1))).toBe('%PDF-');
+    // Scheitert das Schreiben, bleibt die Datei lesbar
+    await expect(registry.whileReleased(target, async () => Promise.reject(new Error('kaputt')), 'win32')).rejects.toThrow('kaputt');
+    await expect(registry.read(fileId, 0, 5, 1)).resolves.toHaveLength(5);
+    await registry.close(fileId, 1);
+  });
+
   it('gibt eine Datei an ein anderes Fenster weiter, ohne sie neu zu öffnen', async () => {
     const registry = new FileRegistry();
     const result = await registry.open(fixture('text.pdf'), 7);

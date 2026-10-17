@@ -1,17 +1,17 @@
 // Phase 7: Profi-Funktionen. Arbeitet auf Kopien der Test-PDFs; Systemdialoge werden ersetzt.
 import { expect, test, type ElectronApplication } from '@playwright/test';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fixture, TEXT_PDF } from '../fixtures/expectations';
-import { launchApp, menuClick, waitForDocument, windowWithTitle } from './app';
+import { launchApp, menuClick, removeTempDir, waitForDocument, windowWithTitle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 import { taggedPdf } from '../fixtures/tagged';
 import { wordDocument } from '../fixtures/docx';
 
 const tempDirs: string[] = [];
 test.afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs) removeTempDir(dir);
 });
 
 const TEST_ID = path.resolve(import.meta.dirname, '..', 'fixtures', 'certs', 'test-id.p12');

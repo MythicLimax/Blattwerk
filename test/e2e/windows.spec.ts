@@ -1,15 +1,15 @@
 // Jedes Dokument in einem eigenen Fenster, Tabs herausziehen und zusammenführen (ADR 0026)
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fixture, TEXT_PDF } from '../fixtures/expectations';
-import { expectWindowCount, launchApp, menuClick, mergeAllWindows, waitForDocument, windowWithTitle } from './app';
+import { expectWindowCount, launchApp, menuClick, mergeAllWindows, removeTempDir, waitForDocument, windowWithTitle } from './app';
 
 const FORM_PAGES = 1;
 const tempDirs: string[] = [];
 test.afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs) removeTempDir(dir);
 });
 
 // Kopien der Test-PDFs, weil einige Tests speichern

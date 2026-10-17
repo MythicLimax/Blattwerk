@@ -60,7 +60,7 @@ export async function launchApp(files: string[] = [], options: { userData?: stri
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
       await closing;
-      if (!options.keepUserData && !options.userData) rmSync(userData, { recursive: true, force: true });
+      if (!options.keepUserData && !options.userData) removeTempDir(userData);
     },
   };
 }
@@ -122,4 +122,14 @@ export async function mergeAllWindows(app: ElectronApplication): Promise<Page> {
   const [win] = app.windows();
   if (!win) throw new Error('kein Fenster');
   return win;
+}
+
+// Temporären Testordner löschen. Unter Windows sperrt das System Dateien kurz nach dem Beenden der App noch; dann mehrfach
+// versuchen und einen übrig gebliebenen Ordner im temporären Verzeichnis hinnehmen.
+export function removeTempDir(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch (error) {
+    console.warn(`Testordner nicht gelöscht: ${dir}`, error);
+  }
 }

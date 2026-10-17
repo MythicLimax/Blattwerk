@@ -21,7 +21,8 @@ function accepts(accept: PickKind | 'pdf-only', kind: FileKind): boolean {
 interface OpenFile {
   info: FileInfo;
   path: string;
-  handle: fs.FileHandle;
+  // null, solange die Datei unter Windows zum Überschreiben freigegeben ist (whileReleased)
+  handle: fs.FileHandle | null;
   ownerId: number;
   // Dokument in einem Tab (nicht Quelldatei zum Einfügen, Zusammenführen oder Vergleichen)
   document: boolean;
@@ -29,10 +30,10 @@ interface OpenFile {
   mtimeMs: number;
 }
 
-function normalizePath(filePath: string): string {
+function normalizePath(filePath: string, platform: NodeJS.Platform = process.platform): string {
   const resolved = path.resolve(filePath);
   // macOS und Windows unterscheiden Groß- und Kleinschreibung in Dateinamen normalerweise nicht
-  return process.platform === 'linux' ? resolved : resolved.toLowerCase();
+  return platform === 'linux' ? resolved : resolved.toLowerCase();
 }
 
 export class FileChangedError extends Error {
@@ -98,13 +99,16 @@ export class FileRegistry {
     if (!file || file.ownerId !== ownerId) throw new Error('unknown-file');
     const range = validateReadRange(begin, end, file.info.size);
     if (!range) throw new Error('invalid-range');
-    const current = await file.handle.stat();
+    const handle = file.handle;
+    // Datei wird gerade überschrieben (Windows): wie eine von außen geänderte Datei behandeln
+    if (!handle) throw new FileChangedError();
+    const current = await handle.stat();
     if (current.size !== file.info.size || current.mtimeMs !== file.mtimeMs) throw new FileChangedError();
     const length = range.end - range.begin;
     const buffer = new Uint8Array(length);
     let offset = 0;
     while (offset < length) {
-      const { bytesRead } = await file.handle.read(buffer, offset, length - offset, range.begin + offset);
+      const { bytesRead } = await handle.read(buffer, offset, length - offset, range.begin + offset);
       if (bytesRead === 0) break;
       offset += bytesRead;
     }
@@ -171,6 +175,34 @@ export class FileRegistry {
     return true;
   }
 
+  // Windows lässt eine Datei, die noch geöffnet ist, nicht ersetzen. Vor dem Überschreiben (Speichern über eine offene
+  // Datei) schließt das Register deshalb alle Handles auf diesen Pfad und öffnet sie danach wieder. Hat sich die Datei
+  // geändert, melden spätere Lesezugriffe das wie eine Änderung von außen. Andere Systeme ersetzen offene Dateien
+  // problemlos; dort läuft write unverändert.
+  async whileReleased<T>(filePath: string, write: () => Promise<T>, platform: NodeJS.Platform = process.platform): Promise<T> {
+    if (platform !== 'win32') return write();
+    const wanted = normalizePath(filePath, platform);
+    const affected = [...this.#files.values()].filter((file) => file.handle && normalizePath(file.path, platform) === wanted);
+    for (const file of affected) {
+      const handle = file.handle;
+      file.handle = null;
+      await handle?.close().catch(() => undefined);
+    }
+    try {
+      return await write();
+    } finally {
+      for (const file of affected) {
+        // Inzwischen geschlossen (z. B. durch reopen nach dem Speichern): nichts wieder zu öffnen
+        if (this.#files.get(file.info.fileId) !== file || file.handle) continue;
+        try {
+          file.handle = await fs.open(file.path, 'r');
+        } catch {
+          file.handle = null;
+        }
+      }
+    }
+  }
+
   pathOf(fileId: string, ownerId: number): string | null {
     const file = this.#files.get(fileId);
     return file && file.ownerId === ownerId ? file.path : null;
@@ -180,7 +212,7 @@ export class FileRegistry {
     const file = this.#files.get(fileId);
     if (!file || file.ownerId !== ownerId) return;
     this.#files.delete(fileId);
-    await file.handle.close().catch(() => undefined);
+    await file.handle?.close().catch(() => undefined);
   }
 
   async closeAllOwnedBy(ownerId: number): Promise<void> {

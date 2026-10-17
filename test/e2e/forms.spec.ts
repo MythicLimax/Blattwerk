@@ -1,6 +1,6 @@
 // Phase 4: Formulare und Unterschrift. Arbeitet auf Kopien der Test-PDFs.
 import { expect, test, type Page } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,7 +9,7 @@ import { crc32, deflateSync } from 'node:zlib';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { fixture } from '../fixtures/expectations';
 import type { ElectronApplication } from '@playwright/test';
-import { launchApp, menuClick, menuItemState, waitForDocument, type AppHandle } from './app';
+import { launchApp, menuClick, menuItemState, removeTempDir, waitForDocument, type AppHandle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 
 const require = createRequire(import.meta.url);
@@ -19,7 +19,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
 
 const tempDirs: string[] = [];
 test.afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs) removeTempDir(dir);
 });
 
 async function openCopy(name: string, pages: number): Promise<AppHandle & { file: string; dir: string }> {
