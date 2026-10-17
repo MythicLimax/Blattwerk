@@ -31,7 +31,8 @@ describe('atomicWrite', () => {
     await chmod(target, 0o600);
     await atomicWrite(target, 'neu');
     expect(await readFile(target, 'utf8')).toBe('neu');
-    expect((await stat(target)).mode & 0o777).toBe(0o600);
+    // Unix-Dateirechte gibt es unter Windows nicht (Node meldet dort immer 0o666 bzw. 0o444)
+    if (process.platform !== 'win32') expect((await stat(target)).mode & 0o777).toBe(0o600);
   });
 
   it('lässt das Ziel unverändert, wenn das Ersetzen scheitert', async () => {
