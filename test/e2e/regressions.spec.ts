@@ -206,7 +206,8 @@ test('Fenster schließen fragt bei Änderungen nach und beendet dann die App (au
   await page.getByTestId('prompt-cancel').click();
   await expect(page.getByTestId('tab')).toHaveCount(1);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
-  await page.getByTestId('prompt-discard').click();
+  // Die App kann sich beenden, bevor Playwright den Klick bestätigt bekommt
+  await page.getByTestId('prompt-discard').click().catch(() => undefined);
   await exited;
 });
 
