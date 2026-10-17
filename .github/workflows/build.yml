@@ -42,6 +42,10 @@ jobs:
         # Hängende Tests sollen nicht stundenlang laufen (normal: etwa 6 Minuten)
         timeout-minutes: 30
         run: npm run test:e2e -- --max-failures=15
+        env:
+          # Unter Windows zeichnen verborgene Fenster kaum (jede Mausbewegung wartet), Tests laufen dann in die
+          # Zeitgrenze. Auf dem CI-Rechner sieht niemand zu; unter macOS bleiben die Fenster verborgen.
+          BLATTWERK_E2E_SHOW: ${{ runner.os == 'Windows' && '1' || '' }}
 
   package:
     name: Paket (${{ matrix.name }})
