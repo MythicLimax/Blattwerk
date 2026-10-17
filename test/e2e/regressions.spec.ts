@@ -108,18 +108,20 @@ test('Suchfeld leeren entfernt die Ergebnisse; Tabwechsel behält die Markierung
   const { app, close } = await launchApp([fixture('text.pdf'), fixture('kaputte-xref.pdf')]);
   await expectWindowCount(app, 2);
   await waitForDocument(await windowWithTitle(app, 'kaputte-xref.pdf'), TEXT_PDF.pages);
-  // Beide Dokumente als Tabs in einem Fenster: kaputte-xref.pdf vorn, text.pdf dahinter
+  // Beide Dokumente als Tabs in einem Fenster
   const page = await mergeAllWindows(app);
   await expect(page.getByTestId('tab')).toHaveCount(2);
-  await page.getByTestId('tab').last().click();
+  const textTab = page.getByTestId('tab').filter({ hasText: 'text.pdf' }).filter({ hasNotText: 'kaputte' });
+  const otherTab = page.getByTestId('tab').filter({ hasText: 'kaputte-xref.pdf' });
+  await textTab.click();
   await waitForDocument(page, TEXT_PDF.pages);
   await page.getByTestId('search-button').click();
   await page.getByTestId('search-input').fill(TEXT_PDF.searchTerm);
   await expect(page.getByTestId('search-results').locator('li')).toHaveCount(TEXT_PDF.searchHits);
 
-  await page.getByTestId('tab').first().click();
+  await otherTab.click();
   await waitForDocument(page, TEXT_PDF.pages);
-  await page.getByTestId('tab').last().click();
+  await textTab.click();
   await expect(activePane(page).locator('.textLayer .highlight').first()).toBeVisible();
   // Der Tabwechsel holt den Fokus nicht ins Suchfeld.
   expect(await page.evaluate(() => document.activeElement?.getAttribute('data-testid'))).not.toBe('search-input');

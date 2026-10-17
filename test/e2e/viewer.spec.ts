@@ -31,14 +31,16 @@ test.describe('Start und Öffnen', () => {
     await expect(textWindow.getByTestId('tab')).toHaveCount(1);
     const formWindow = await windowWithTitle(app, 'formular.pdf');
     await waitForDocument(formWindow, 1);
-    // Zusammenführen: Das vordere Fenster (zuletzt geöffnet) übernimmt den Tab des anderen
+    // Zusammenführen: Das vordere Fenster übernimmt den Tab des anderen
     const page = await mergeAllWindows(app);
     await expect(page.getByTestId('tab')).toHaveCount(2);
-    await expect(page.getByTestId('tab').last()).toContainText('text.pdf');
+    const textTab = page.getByTestId('tab').filter({ hasText: 'text.pdf' });
+    const formTab = page.getByTestId('tab').filter({ hasText: 'formular.pdf' });
+    await textTab.click();
     await waitForDocument(page, TEXT_PDF.pages);
-    await page.getByTestId('tab').first().click();
+    await formTab.click();
     await waitForDocument(page, 1);
-    await page.getByTestId('tab').first().getByRole('button').click();
+    await formTab.getByRole('button').click();
     await expect(page.getByTestId('tab')).toHaveCount(1);
     await waitForDocument(page, TEXT_PDF.pages);
     await close();

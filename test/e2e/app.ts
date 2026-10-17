@@ -113,7 +113,8 @@ export async function windowWithTitle(app: ElectronApplication, title: string): 
   return found;
 }
 
-// „Fenster → Alle Fenster zusammenführen“: Alle Tabs landen im vorderen Fenster (dem zuletzt geöffneten).
+// „Fenster → Alle Fenster zusammenführen“: Alle Tabs landen im vorderen Fenster (unsichtbar: das zuletzt geöffnete;
+// mit BLATTWERK_E2E_SHOW das mit dem Fokus). Tests prüfen Tabs deshalb am Namen, nicht an der Reihenfolge.
 // Liefert das verbleibende Fenster.
 export async function mergeAllWindows(app: ElectronApplication): Promise<Page> {
   await menuClick(app, 'window.mergeAll');

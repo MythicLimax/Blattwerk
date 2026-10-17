@@ -93,8 +93,9 @@ test('Tab aus der Leiste ziehen und per Menü in ein neues Fenster bewegen', asy
   const page = await mergeAllWindows(app);
   await expect(page.getByTestId('tab')).toHaveCount(2);
 
-  // Herausziehen: Loslassen unterhalb der Tableiste
-  await dragTab(page, 1, 0, 300);
+  // Herausziehen: Loslassen unterhalb der Tableiste (text.pdf)
+  const textIndex = (await page.getByTestId('tab').first().textContent())?.includes('text.pdf') ? 0 : 1;
+  await dragTab(page, textIndex, 0, 300);
   await expectWindowCount(app, 2);
   await expect(page.getByTestId('tab')).toHaveCount(1);
   const detached = await windowWithTitle(app, 'text.pdf');
@@ -128,7 +129,7 @@ test('Tab auf ein anderes Fenster ziehen führt beide zusammen', async () => {
   await dragTab(source, 0, -500, 200);
   await expectWindowCount(app, 1);
   await expect(target.getByTestId('tab')).toHaveCount(2);
-  await expect(target.getByTestId('tab').last()).toContainText('formular.pdf');
+  await expect(target.getByTestId('tab').filter({ hasText: 'formular.pdf' })).toHaveCount(1);
   await close();
 });
 
@@ -151,10 +152,11 @@ test('ungespeicherte Änderungen wandern mit; Speichern schreibt in die Original
   // Zusammenführen: Das Fenster mit Änderungen gibt seinen Tab ohne Rückfrage ab und schließt sich
   const page = await mergeAllWindows(app);
   await expect(page.getByTestId('tab')).toHaveCount(2);
-  await expect(page.getByTestId('tab').last()).toContainText('text.pdf');
-  await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+  const textTab = page.getByTestId('tab').filter({ hasText: 'text.pdf' });
+  await expect(textTab.getByTestId('tab-dirty')).toHaveCount(1);
   expect(readFileSync(textFile).equals(before)).toBe(true);
 
+  await textTab.click();
   await waitForDocument(page, TEXT_PDF.pages);
   await menuClick(app, 'file.save');
   await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
