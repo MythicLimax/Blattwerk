@@ -48,3 +48,27 @@ describe('Ziel eines losgelassenen Tabs', () => {
     expect(dropTarget({ x: 1500, y: 800 }, source, [right])).toEqual({ kind: 'new' });
   });
 });
+
+describe('Fensterlage je Dokument', () => {
+  it('merkt sich die Lage, die neueste vorn, und übersteht einen Neustart', async () => {
+    const { mkdtemp, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+    const { WindowPositions, MAX_WINDOW_POSITIONS } = await import('../../src/main/files/window-positions');
+    const dir = await mkdtemp(path.join(tmpdir(), 'blattwerk-test-'));
+    try {
+      const file = path.join(dir, 'positions.json');
+      const positions = new WindowPositions(file, 'darwin');
+      await positions.load();
+      await positions.remember('/Docs/A.pdf', { x: 10, y: 20, width: 700, height: 500 });
+      expect(positions.get('/docs/a.pdf')).toEqual({ x: 10, y: 20, width: 700, height: 500 });
+      for (let i = 0; i < MAX_WINDOW_POSITIONS; i++) await positions.remember(`/Docs/${i}.pdf`, { x: i, y: 0, width: 600, height: 400 });
+      expect(positions.get('/Docs/A.pdf')).toBeNull();
+      const again = new WindowPositions(file, 'darwin');
+      await again.load();
+      expect(again.get(`/Docs/${MAX_WINDOW_POSITIONS - 1}.pdf`)?.x).toBe(MAX_WINDOW_POSITIONS - 1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

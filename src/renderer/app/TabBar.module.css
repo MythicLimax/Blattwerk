@@ -37,6 +37,14 @@
   box-shadow: 0 1px 4px rgba(40, 30, 10, 0.1), inset 0 0 0 0.5px var(--separator);
 }
 
+/* Tab wird innerhalb der Leiste verschoben: liegt über den anderen und folgt dem Zeiger */
+.dragging {
+  position: relative;
+  z-index: 1;
+  transition: none;
+  cursor: grabbing;
+}
+
 /* Tab wird gerade aus der Leiste gezogen: Loslassen gibt ihn an ein anderes oder neues Fenster */
 .detaching {
   opacity: 0.45;

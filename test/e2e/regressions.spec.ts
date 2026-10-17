@@ -134,6 +134,8 @@ test('Suchfeld leeren entfernt die Ergebnisse; Tabwechsel behält die Markierung
 });
 
 test('„Liste leeren“ auf dem Startbildschirm leert auch die Liste des Systems', async () => {
+  // Die Liste des Systems gibt es nur unter macOS (Dock) und Windows (Sprungliste)
+  test.skip(process.platform === 'linux', 'keine Systemliste unter Linux');
   const first = await launchApp([fixture('text.pdf')], { keepUserData: true });
   await waitForDocument(first.page, TEXT_PDF.pages);
   await first.app.close();

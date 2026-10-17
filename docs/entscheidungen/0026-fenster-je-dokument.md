@@ -50,5 +50,14 @@ Tab herausziehen und wird zu einem eigenen Fenster. Muss auch unter Windows gehe
 ## Grenzen
 
 - Der Rückgängig-Verlauf bleibt beim Herausziehen im alten Fenster zurück (nur der aktuelle Stand wandert mit).
-- Innerhalb der Tableiste lassen sich Tabs nicht umsortieren.
-- Gespeichert wird nur eine Fensterlage (die zuletzt bewegte); beim nächsten Start öffnet das erste Fenster dort.
+
+## Ergänzungen (2026-10-17)
+
+- **Tabs umsortieren:** Ein Tab, der innerhalb der Leiste gezogen wird, folgt dem Zeiger und landet beim Loslassen
+  hinter allen Tabs, deren Mitte links vom Zeiger liegt (`moveTab` im `documents-store`). Umsortiert wird erst beim
+  Loslassen: Würde React das Element während des Ziehens umhängen, endete das Festhalten des Zeigers.
+- **Fensterlage je Dokument** (`src/main/files/window-positions.ts`, `window-positions.json` im Profil, höchstens 100
+  Einträge): Ein Fenster mit genau einem Dokument merkt sich beim Verschieben, Ändern der Größe und Schließen seine
+  Lage für diesen Pfad (nicht für unbenannte Dokumente). Öffnet das Dokument wieder in einem eigenen Fenster, liegt es
+  dort, sofern die Stelle noch auf einem Bildschirm ist. So liegen zwei Dokumente nach dem Neuöffnen wieder
+  nebeneinander. Fenster ohne gemerkte Lage erscheinen wie bisher versetzt zum vorderen.

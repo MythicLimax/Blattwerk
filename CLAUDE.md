@@ -57,7 +57,8 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ### Fenster
 
 - **Jedes Dokument in einem eigenen Fenster** ([ADR 0026](docs/entscheidungen/0026-fenster-je-dokument.md)): Der Hauptprozess hält je Fenster einen `WindowContext` (`src/main/index.ts`: bereit, Menüzustand, Schließen erlaubt, wartende Dateien und Tabs). Menü und Befehle folgen dem vorderen Fenster. `openDocument` öffnet im anfragenden Fenster, wenn es leer ist, holt ein Fenster mit derselben Datei nach vorn oder legt ein neues an (versetzt, `window-layout.ts`); der Renderer bekommt dann `error: 'elsewhere'`.
-- **Tabs zwischen Fenstern:** herausziehen (`TabBar.tsx`, Zeiger festhalten, Loslassen außerhalb der Leiste → `transferTab` mit Bildschirmpunkt), „Fenster → Tab in neues Fenster bewegen“, „Fenster → Alle Fenster zusammenführen“ (`mergeRequest`). Die Datei wechselt nur den Eigentümer (`FileRegistry.transfer`); ungespeicherte Änderungen wandern als neuer Stand mit (`TabTransfer`, `receiveTab` in `session.ts`), der Rückgängig-Verlauf nicht. Ein Fenster ohne Tabs nach einer Übergabe schließt sich (`window:close`).
+- **Tabs zwischen Fenstern:** herausziehen (`TabBar.tsx`, Zeiger festhalten, Loslassen außerhalb der Leiste → `transferTab` mit Bildschirmpunkt), „Fenster → Tab in neues Fenster bewegen“, „Fenster → Alle Fenster zusammenführen“ (`mergeRequest`); innerhalb der Leiste umsortieren (`moveTab`, erst beim Loslassen). Die Datei wechselt nur den Eigentümer (`FileRegistry.transfer`); ungespeicherte Änderungen wandern als neuer Stand mit (`TabTransfer`, `receiveTab` in `session.ts`), der Rückgängig-Verlauf nicht. Ein Fenster ohne Tabs nach einer Übergabe schließt sich (`window:close`).
+- **Fensterlage je Dokument** (`src/main/files/window-positions.ts`): Fenster mit genau einem Dokument merken sich ihre Lage für dessen Pfad; das Dokument öffnet später wieder dort.
 - Schließen fragt je Fenster; Beenden fragt die Fenster nacheinander. Letztes Fenster zu → App beendet.
 
 ### Dokumentmodell
@@ -127,7 +128,7 @@ docs/
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index (Fenster je Dokument), window, window-layout, menu, ipc, security, protocol(+paths), print,
-                            default-app, i18n, files/ (file-registry, recent-files, json-store, atomic-write, signatures)
+                            default-app, i18n, files/ (file-registry, recent-files, json-store, atomic-write, signatures, window-positions)
   preload/                  contextBridge-API (index.ts) und ihr Typ (api-types.ts)
   shared/                   Typen, IPC-Vertrag, Befehle, Tastenkürzel, Validierung, product.ts. Keine Node- oder DOM-Imports
   locales/de/               translation.json (alle UI-Texte, Renderer und Menü), pdfjs-viewer.ftl (Texte der pdf.js-Bausteine)
@@ -225,7 +226,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 | `npm run dist:mac:local` | Mac-App (Apple Silicon) bauen, `.dmg` nach `release/` |
 | `npm run dist:mac`, `npm run dist:win` | Pakete für CI (beide Mac-Architekturen bzw. Windows) |
 
-**In der Claude-Sandbox:** Electron, Playwright-Oberflächentests, `npm run fixtures` (wegen `sips`) und Packaging laufen nur außerhalb der Sandbox. **In der Cloud (Linux):** `node node_modules/electron/install.js` lädt Electron, danach laufen die Oberflächentests mit `BLATTWERK_E2E_SHOW=1 xvfb-run -a -s "-screen 0 1920x1200x24" npx playwright test` (sichtbar auf dem virtuellen Bildschirm; verborgen dauert dort jede Mausbewegung etwa 1 s und Tests mit Ziehen laufen in die Zeitgrenze). Unter Linux scheitern immer „Liste leeren … Liste des Systems“ (gibt es nur unter macOS und Windows) und „Absturz der Anzeige“; PDFKit-Prüfungen nur auf dem Mac. Kein Packaging.
+**In der Claude-Sandbox:** Electron, Playwright-Oberflächentests, `npm run fixtures` (wegen `sips`) und Packaging laufen nur außerhalb der Sandbox. **In der Cloud (Linux):** `node node_modules/electron/install.js` lädt Electron, danach laufen die Oberflächentests mit `BLATTWERK_E2E_SHOW=1 xvfb-run -a -s "-screen 0 1920x1200x24" npx playwright test` (sichtbar auf dem virtuellen Bildschirm; verborgen dauert dort jede Mausbewegung etwa 1 s und Tests mit Ziehen laufen in die Zeitgrenze). Unter Linux scheitert „Absturz der Anzeige“ immer, „Liste leeren … Liste des Systems“ wird übersprungen (gibt es nur unter macOS und Windows), PDFKit-Prüfungen laufen nur auf dem Mac. Mit Node 22 scheitert zudem ein Umwandlungstest (Windows-1252), das Projekt braucht Node 24. Kein Packaging.
 
 ## Packaging
 

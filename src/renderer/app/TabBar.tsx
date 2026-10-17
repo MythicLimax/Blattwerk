@@ -36,6 +36,16 @@ interface TabDrag {
   moved: boolean;
 }
 
+// Stelle in der Tableiste, an der ein gezogener Tab landet: hinter allen anderen Tabs, deren Mitte links vom Zeiger liegt
+function dropIndex(bar: HTMLElement | null, tabId: string, clientX: number): number {
+  if (!bar) return 0;
+  const others = [...bar.querySelectorAll<HTMLElement>('[role="tab"]')].filter((element) => element.dataset.tabId !== tabId);
+  return others.filter((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.left + rect.width / 2 < clientX;
+  }).length;
+}
+
 // Liegt der Zeiger außerhalb der Tableiste (darüber, darunter oder außerhalb des Fensters)?
 function isOutside(bar: HTMLElement | null, event: { clientX: number; clientY: number }): boolean {
   if (!bar) return false;
@@ -44,21 +54,27 @@ function isOutside(bar: HTMLElement | null, event: { clientX: number; clientY: n
   return outsideWindow || event.clientY < rect.top - DETACH_DISTANCE || event.clientY > rect.bottom + DETACH_DISTANCE;
 }
 
-// Tab herausziehen (ADR 0026): Loslassen außerhalb der Tableiste gibt den Tab an das Fenster unter dem Zeiger oder an
-// ein neues Fenster an dieser Stelle. Das Festhalten des Zeigers liefert Bewegungen auch außerhalb des Fensters.
+// Tab ziehen (ADR 0026): Innerhalb der Tableiste folgt der Tab dem Zeiger und landet beim Loslassen an der neuen Stelle.
+// Loslassen außerhalb der Leiste gibt ihn an das Fenster unter dem Zeiger oder an ein neues Fenster an dieser Stelle.
+// Das Festhalten des Zeigers liefert Bewegungen auch außerhalb des Fensters. Umsortiert wird erst beim Loslassen, weil
+// React beim Umhängen des Elements das Festhalten beenden würde.
 function useTabDrag(bar: RefObject<HTMLDivElement | null>) {
   const drag = useRef<TabDrag | null>(null);
   // Nach einem Ziehen keinen Klick auslösen
   const suppressClick = useRef(false);
   const [detaching, setDetaching] = useState<string | null>(null);
+  // Gezogener Tab innerhalb der Leiste und seine waagerechte Verschiebung
+  const [shift, setShift] = useState<{ tabId: string; dx: number } | null>(null);
 
   const end = () => {
     drag.current = null;
     setDetaching(null);
+    setShift(null);
   };
 
   return {
     detaching,
+    shift,
     suppressClick,
     onPointerDown: (event: ReactPointerEvent<HTMLDivElement>, tabId: string) => {
       if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
@@ -71,7 +87,9 @@ function useTabDrag(bar: RefObject<HTMLDivElement | null>) {
       if (!current || current.pointerId !== event.pointerId) return;
       if (!current.moved && Math.hypot(event.clientX - current.startX, event.clientY - current.startY) < DRAG_THRESHOLD) return;
       current.moved = true;
-      setDetaching(isOutside(bar.current, event) ? current.tabId : null);
+      const outside = isOutside(bar.current, event);
+      setDetaching(outside ? current.tabId : null);
+      setShift(outside ? null : { tabId: current.tabId, dx: event.clientX - current.startX });
     },
     onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => {
       const current = drag.current;
@@ -80,6 +98,8 @@ function useTabDrag(bar: RefObject<HTMLDivElement | null>) {
       if (current.moved && isOutside(bar.current, event)) {
         // Bildschirmpunkt in denselben Einheiten wie die Fensterlagen im Hauptprozess
         void transferTab(current.tabId, { kind: 'point', x: Math.round(event.screenX), y: Math.round(event.screenY) });
+      } else if (current.moved) {
+        useDocuments.getState().moveTab(current.tabId, dropIndex(bar.current, current.tabId, event.clientX));
       }
       end();
     },
@@ -108,7 +128,9 @@ export function TabBar() {
             role="tab"
             aria-selected={active}
             tabIndex={active ? 0 : -1}
-            className={[styles.tab, active ? styles.active : '', drag.detaching === tab.id ? styles.detaching : ''].join(' ')}
+            data-tab-id={tab.id}
+            className={[styles.tab, active ? styles.active : '', drag.detaching === tab.id ? styles.detaching : '', drag.shift?.tabId === tab.id ? styles.dragging : ''].join(' ')}
+            style={drag.shift?.tabId === tab.id ? { transform: `translateX(${drag.shift.dx}px)` } : undefined}
             title={`${tab.dir}/${tab.name}`}
             onPointerDown={(event) => drag.onPointerDown(event, tab.id)}
             onPointerMove={drag.onPointerMove}

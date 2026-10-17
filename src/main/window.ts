@@ -54,7 +54,7 @@ export function createSettingsStore(userDataDir: string): JsonStore<SettingsData
 export const DEFAULT_WINDOW_SIZE = { width: 1280, height: 860 };
 
 // Gespeicherte Fensterposition nur übernehmen, wenn sie noch auf einem vorhandenen Bildschirm liegt.
-function visibleBounds(bounds: Rectangle | null): Rectangle | null {
+export function visibleBounds(bounds: Rectangle | null): Rectangle | null {
   if (!bounds) return null;
   const visible = screen.getAllDisplays().some(({ workArea }) => {
     const overlapX = Math.min(bounds.x + bounds.width, workArea.x + workArea.width) - Math.max(bounds.x, workArea.x);

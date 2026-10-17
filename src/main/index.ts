@@ -26,7 +26,8 @@ import { registerIpc, showOpenDialog } from './ipc';
 import { applyMenu } from './menu';
 import { handleAppScheme, registerAppScheme } from './protocol';
 import { hardenSession, hardenWebContents, isTrustedAppUrl } from './security';
-import { createMainWindow, createSettingsStore, type SettingsData, type WindowState } from './window';
+import { createMainWindow, createSettingsStore, visibleBounds, type SettingsData, type WindowState } from './window';
+import { WindowPositions } from './files/window-positions';
 import { boundsAtPoint, cascadeFrom, dropTarget } from './window-layout';
 import { isBlankDocumentPath, removeBlankDocuments } from './files/blank-document';
 import { defaultUpdateFolder, runPendingInstall, setCustomUpdateFolder } from './update/updater';
@@ -66,6 +67,7 @@ const preloadPath = path.join(moduleDir, '..', 'preload', 'index.cjs');
 const files = new FileRegistry();
 let recent: RecentFiles;
 let signatures: SignatureStore;
+let positions: WindowPositions;
 
 const EMPTY_MENU_STATE: MenuState = {
   hasDocument: false,
@@ -429,9 +431,13 @@ interface NewWindowOptions {
 
 function createWindow(options: NewWindowOptions = {}): WindowContext {
   const near = options.near ?? frontContext();
-  // Weitere Fenster erscheinen leicht versetzt zum vorderen; das erste an der gespeicherten Stelle.
+  // Ein Dokument öffnet dort, wo sein Fenster zuletzt lag (falls noch auf einem Bildschirm). Sonst erscheinen weitere
+  // Fenster leicht versetzt zum vorderen, das erste an der gespeicherten Stelle.
+  const first = options.pending?.[0];
+  const remembered = first?.kind === 'path' ? visibleBounds(positions.get(first.path)) : null;
   const bounds =
     options.bounds ??
+    remembered ??
     (near && !near.win.isDestroyed() ? cascadeFrom(near.win.getNormalBounds(), screen.getDisplayMatching(near.win.getNormalBounds()).workArea) : undefined);
   const win = createMainWindow({
     preloadPath,
@@ -443,6 +449,10 @@ function createWindow(options: NewWindowOptions = {}): WindowContext {
     onStateChange: (state) => {
       windowState = state;
       saveSettings({ window: state });
+      // Lage je Dokument: nur bei Fenstern mit genau einem Dokument, nicht für unbenannte
+      const documents = files.documentPaths(win.webContents.id);
+      const [only] = documents;
+      if (documents.length === 1 && only && state.bounds && !isBlankDocumentPath(only)) void positions.remember(only, state.bounds).catch(() => undefined);
     },
   });
   const ctx: WindowContext = {
@@ -531,6 +541,8 @@ void app.whenReady().then(async () => {
   handleAppScheme(rendererDir);
   recent = new RecentFiles(path.join(app.getPath('userData'), 'recent-files.json'));
   signatures = new SignatureStore(path.join(app.getPath('userData'), 'signatures.json'));
+  positions = new WindowPositions(path.join(app.getPath('userData'), 'window-positions.json'));
+  await positions.load();
   settings = await settingsStore.read();
   setCustomUpdateFolder(() => settings.updateFolder);
   windowState = settings.window;
@@ -603,7 +615,9 @@ void app.whenReady().then(async () => {
   });
 
   initialized = true;
-  createWindow();
-  // Beim Start übergebene Dateien: die erste im ersten Fenster, jede weitere in einem eigenen
-  for (const p of startupPaths.splice(0)) requestOpen(p);
+  // Beim Start übergebene Dateien: die erste im ersten Fenster (an der Lage ihres letzten Fensters), jede weitere in
+  // einem eigenen
+  const [first, ...rest] = startupPaths.splice(0);
+  createWindow({ pending: first ? [{ kind: 'path', path: first }] : [] });
+  for (const p of rest) requestOpen(p);
 });

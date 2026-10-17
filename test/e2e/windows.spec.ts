@@ -165,3 +165,44 @@ test('ungespeicherte Änderungen wandern mit; Speichern schreibt in die Original
   expect(saved.getPage(0).getRotation().angle).toBe(90);
   await close();
 });
+
+test('Tabs innerhalb der Leiste umsortieren', async () => {
+  const { app, close } = await launchApp([fixture('text.pdf'), fixture('formular.pdf')]);
+  await expectWindowCount(app, 2);
+  await waitForDocument(await windowWithTitle(app, 'text.pdf'), TEXT_PDF.pages);
+  const page = await mergeAllWindows(app);
+  await expect(page.getByTestId('tab')).toHaveCount(2);
+  const names = async () => (await page.getByTestId('tab').allTextContents()).map((text) => (text.includes('text.pdf') ? 'text' : 'formular'));
+  const before = await names();
+  const width = (await page.getByTestId('tab').first().boundingBox())?.width ?? 150;
+  // Ersten Tab nach rechts hinter den zweiten ziehen
+  await dragTab(page, 0, width + 30, 0);
+  await expect.poll(names).toEqual([...before].reverse());
+  await expectWindowCount(app, 1);
+  await close();
+});
+
+test('ein Dokument öffnet wieder dort, wo sein Fenster zuletzt lag', async () => {
+  const { dir, files } = copies('text.pdf', 'formular.pdf');
+  const [textFile, formFile] = files as [string, string];
+  const first = await launchApp([textFile, formFile], { userData: dir });
+  await expectWindowCount(first.app, 2);
+  await waitForDocument(await windowWithTitle(first.app, 'text.pdf'), TEXT_PDF.pages);
+  await waitForDocument(await windowWithTitle(first.app, 'formular.pdf'), FORM_PAGES);
+  const textBounds = { x: 40, y: 60, width: 820, height: 640 };
+  const formBounds = { x: 880, y: 60, width: 800, height: 640 };
+  await setBounds(first.app, 'text.pdf', textBounds);
+  await setBounds(first.app, 'formular.pdf', formBounds);
+  // Gespeichert wird kurz nach dem Verschieben und beim Schließen
+  await first.page.waitForTimeout(800);
+  await first.app.close();
+
+  const second = await launchApp([textFile, formFile], { userData: dir });
+  await expectWindowCount(second.app, 2);
+  await waitForDocument(await windowWithTitle(second.app, 'formular.pdf'), FORM_PAGES);
+  const bounds = (title: string) =>
+    second.app.evaluate(({ BrowserWindow }, t) => BrowserWindow.getAllWindows().find((w) => w.getTitle().startsWith(t))?.getBounds(), title);
+  expect(await bounds('text.pdf')).toEqual(textBounds);
+  expect(await bounds('formular.pdf')).toEqual(formBounds);
+  await second.close();
+});

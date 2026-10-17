@@ -146,6 +146,11 @@ export class FileRegistry {
     return [...this.#files.values()].find((file) => file.document && normalizePath(file.path) === wanted)?.ownerId ?? null;
   }
 
+  // Pfade der Dokumente in den Tabs eines Fensters
+  documentPaths(ownerId: number): string[] {
+    return [...this.#files.values()].filter((file) => file.document && file.ownerId === ownerId).map((file) => file.path);
+  }
+
   // true, wenn das Fenster mindestens ein Dokument in einem Tab hat
   hasDocuments(ownerId: number): boolean {
     return [...this.#files.values()].some((file) => file.document && file.ownerId === ownerId);
