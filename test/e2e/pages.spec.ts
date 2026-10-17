@@ -233,8 +233,10 @@ test.describe('Seiten organisieren', () => {
     await page.getByTestId('split-size').fill('5');
     await expect(page.getByTestId('split-summary')).toHaveText('Ergibt 3 Dateien.');
     await page.getByTestId('split-ok').click();
-    await expect.poll(() => readdirSync(byCount).length).toBe(3);
-    const parts = readdirSync(byCount).sort();
+    // Nur fertige Dateien zählen: Während des Schreibens liegt eine temporäre Datei „.Name.tmp“ daneben (atomicWrite)
+    const finished = (dir: string) => readdirSync(dir).filter((name) => !name.startsWith('.'));
+    await expect.poll(() => finished(byCount).length).toBe(3);
+    const parts = finished(byCount).sort();
     expect(parts[0]).toBe('kopie-text – Teil 1.pdf');
     expect(await pageCount(path.join(byCount, parts[2] as string))).toBe(2);
 
@@ -243,8 +245,8 @@ test.describe('Seiten organisieren', () => {
     await page.getByTestId('split-by-bookmarks').check();
     await expect(page.getByTestId('split-summary')).toHaveText('Ergibt 4 Dateien.');
     await page.getByTestId('split-ok').click();
-    await expect.poll(() => readdirSync(byBookmarks).length).toBe(4);
-    const chapters = readdirSync(byBookmarks).sort();
+    await expect.poll(() => finished(byBookmarks).length).toBe(4);
+    const chapters = finished(byBookmarks).sort();
     const counts = await Promise.all(chapters.map((name) => pageCount(path.join(byBookmarks, name))));
     expect(counts).toEqual([2, 3, 4, 3]);
     await handle.close();
