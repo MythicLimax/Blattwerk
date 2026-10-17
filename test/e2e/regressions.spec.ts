@@ -168,9 +168,9 @@ test('Absturz der Anzeige: Neu laden stellt die App wieder her', async () => {
         app.evaluate(async ({ BrowserWindow }) => {
           const contents = BrowserWindow.getAllWindows()[0]?.webContents;
           if (!contents || contents.isCrashed() || contents.isLoading()) return false;
-          return contents
-            .executeJavaScript('Boolean(document.querySelector(\'[data-testid="start-screen"]\'))')
-            .catch(() => false);
+          // Während des Neuladens kommt die Antwort unter Linux und Windows nie zurück: höchstens 1 s warten
+          const query = contents.executeJavaScript('Boolean(document.querySelector(\'[data-testid="start-screen"]\'))').catch(() => false);
+          return Promise.race([query, new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000))]);
         }),
       { timeout: 20_000 },
     )

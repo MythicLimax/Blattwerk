@@ -226,7 +226,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 | `npm run dist:mac:local` | Mac-App (Apple Silicon) bauen, `.dmg` nach `release/` |
 | `npm run dist:mac`, `npm run dist:win` | Pakete für CI (beide Mac-Architekturen bzw. Windows) |
 
-**In der Claude-Sandbox:** Electron, Playwright-Oberflächentests, `npm run fixtures` (wegen `sips`) und Packaging laufen nur außerhalb der Sandbox. **In der Cloud (Linux):** `node node_modules/electron/install.js` lädt Electron, danach laufen die Oberflächentests mit `BLATTWERK_E2E_SHOW=1 xvfb-run -a -s "-screen 0 1920x1200x24" npx playwright test` (sichtbar auf dem virtuellen Bildschirm; verborgen dauert dort jede Mausbewegung etwa 1 s und Tests mit Ziehen laufen in die Zeitgrenze). Unter Linux scheitert „Absturz der Anzeige“ immer, „Liste leeren … Liste des Systems“ wird übersprungen (gibt es nur unter macOS und Windows), PDFKit-Prüfungen laufen nur auf dem Mac. Mit Node 22 scheitert zudem ein Umwandlungstest (Windows-1252), das Projekt braucht Node 24. Kein Packaging.
+**In der Claude-Sandbox:** Electron, Playwright-Oberflächentests, `npm run fixtures` (wegen `sips`) und Packaging laufen nur außerhalb der Sandbox. **In der Cloud (Linux):** `node node_modules/electron/install.js` lädt Electron, danach laufen die Oberflächentests mit `BLATTWERK_E2E_SHOW=1 xvfb-run -a -s "-screen 0 1920x1200x24" npx playwright test` (sichtbar auf dem virtuellen Bildschirm; verborgen dauert dort jede Mausbewegung etwa 1 s und Tests mit Ziehen laufen in die Zeitgrenze). Unter Linux wird „Liste leeren … Liste des Systems“ übersprungen (gibt es nur unter macOS und Windows), PDFKit-Prüfungen laufen nur auf dem Mac. Mit Node 22 scheitert zudem ein Umwandlungstest (Windows-1252), das Projekt braucht Node 24. Kein Packaging.
 
 ## Packaging
 
@@ -234,7 +234,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 - Dateizuordnung `.pdf` (macOS `CFBundleDocumentTypes`, Windows ProgID). Standardprogramm festlegen ([ADR 0004](docs/entscheidungen/0004-standardprogramm.md)): unter macOS über Launch Services per JavaScript for Automation (nur in der installierten App), unter Windows öffnet die App die Einstellungsseite.
 - Signatur: lokal ad-hoc (`identity: '-'`, `hardenedRuntime: false`). Für Weitergabe an andere: Apple-Developer-Zertifikat, `identity` setzen, `hardenedRuntime: true`, Notarisierung.
 - `npm run dist:mac:local` baut im temporären Ordner des Systems und kopiert nur die `.dmg` nach `release/`. `build/after-pack.cjs` entfernt vor dem Signieren alle erweiterten Dateiattribute (an denen `codesign` sonst scheitern kann).
-- GitHub Actions: Matrix `macos-latest` (arm64 und x64) und `windows-latest`. Signieren und Notarisieren optional über Secrets. Ohne Zertifikate sind die Builds unsigniert, dann warnen Gatekeeper bzw. SmartScreen.
+- GitHub Actions: Matrix `macos-latest` (arm64 und x64) und `windows-latest`. Unter Windows laufen die Oberflächentests mit sichtbaren Fenstern (`BLATTWERK_E2E_SHOW`, verborgene zeichnen dort kaum) und 1920 × 1080 (sonst klappt die Werkzeugleiste zusammen); Zeitgrenze 30 Minuten, ältere Läufe eines Zweigs werden abgebrochen. Signieren und Notarisieren optional über Secrets. Ohne Zertifikate sind die Builds unsigniert, dann warnen Gatekeeper bzw. SmartScreen.
 
 ## Bekannte Stolpersteine
 
