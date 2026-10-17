@@ -40,7 +40,7 @@ Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001
 
 ```
 Hauptprozess (Node)                 Preload                       Renderer (React, sandboxed)
-- Fenster, natives Menü             contextBridge:                - Oberfläche, Tabs, Seitenleisten
+- Fenster (eins je Dokument), Menü  contextBridge:                - Oberfläche, Tabs, Seitenleisten
 - Dateien öffnen und lesen (IDs)    window.blattwerk (typisiert)  - pdf.js-Worker je Dokument (Parsen, Text)
 - Zuletzt geöffnet, Einstellungen                                 - PDFium-Worker (Ändern, Speichern; bei Bedarf)
 - app://-Protokoll, Sicherheit                                    - Zustand: zustand-Stores
@@ -53,6 +53,12 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Strukturänderungen mit @cantoo/pdf-lib** im selben Worker, nur wo PDFium es nicht kann: Formularfelder (`fields.ts`, [ADR 0007](docs/entscheidungen/0007-formulare.md)), Verweise nach dem Übernehmen von Seiten (`imported.ts`), Wasserzeichen und Kopf-/Fußzeilen als eigene Inhaltsströme (`stamping.ts`, [ADR 0009](docs/entscheidungen/0009-wasserzeichen.md)), Vor- und Nacharbeiten beim Schwärzen (`sanitize.ts`, [ADR 0008](docs/entscheidungen/0008-schwaerzen.md)). Inkrementell (`commit()`), außer beim Schwärzen (vollständig neu, ohne unerreichbare Objekte). Nie in verschlüsselten Dokumenten. Erst bei Bedarf geladen (eigener Bundle-Teil).
 - **Große Dateien** (über 8 MB): eigener `PDFDataRangeTransport` (`src/renderer/engine/range-transport.ts`) liest 1-MB-Blöcke per IPC, höchstens 6 gleichzeitig. Kleinere Dateien werden in einem Stück gelesen.
 - **Laden ist abbrechbar:** `LoadedDocumentHandle.promise` lehnt beim Schließen ab; der pdf.js-Worker wird erst nach `task.destroy()` beendet.
+
+### Fenster
+
+- **Jedes Dokument in einem eigenen Fenster** ([ADR 0026](docs/entscheidungen/0026-fenster-je-dokument.md)): Der Hauptprozess hält je Fenster einen `WindowContext` (`src/main/index.ts`: bereit, Menüzustand, Schließen erlaubt, wartende Dateien und Tabs). Menü und Befehle folgen dem vorderen Fenster. `openDocument` öffnet im anfragenden Fenster, wenn es leer ist, holt ein Fenster mit derselben Datei nach vorn oder legt ein neues an (versetzt, `window-layout.ts`); der Renderer bekommt dann `error: 'elsewhere'`.
+- **Tabs zwischen Fenstern:** herausziehen (`TabBar.tsx`, Zeiger festhalten, Loslassen außerhalb der Leiste → `transferTab` mit Bildschirmpunkt), „Fenster → Tab in neues Fenster bewegen“, „Fenster → Alle Fenster zusammenführen“ (`mergeRequest`). Die Datei wechselt nur den Eigentümer (`FileRegistry.transfer`); ungespeicherte Änderungen wandern als neuer Stand mit (`TabTransfer`, `receiveTab` in `session.ts`), der Rückgängig-Verlauf nicht. Ein Fenster ohne Tabs nach einer Übergabe schließt sich (`window:close`).
+- Schließen fragt je Fenster; Beenden fragt die Fenster nacheinander. Letztes Fenster zu → App beendet.
 
 ### Dokumentmodell
 
@@ -117,10 +123,10 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0025)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0026)
   phasen/                   Abschlussbericht je Phase
 src/
-  main/                     Hauptprozess: index, window, menu, ipc, security, protocol(+paths), print,
+  main/                     Hauptprozess: index (Fenster je Dokument), window, window-layout, menu, ipc, security, protocol(+paths), print,
                             default-app, i18n, files/ (file-registry, recent-files, json-store, atomic-write, signatures)
   preload/                  contextBridge-API (index.ts) und ihr Typ (api-types.ts)
   shared/                   Typen, IPC-Vertrag, Befehle, Tastenkürzel, Validierung, product.ts. Keine Node- oder DOM-Imports
@@ -198,7 +204,7 @@ Stand 2026-10-12. Vor dem Installieren erneut prüfen und die aktuelle stabile V
 ## Tests
 
 - **Unit/Integration (Vitest):** reine Logik und die Test-PDFs mit der Node-Variante von pdf.js; PDFium-WASM und pdf-lib laufen ebenfalls in Node (`test/integration/pdfium-*.test.ts`, `fields.test.ts`, `redaction.test.ts`, `stamping.test.ts`, `content.test.ts`). Das Test-PDF zum Schwärzen erzeugt `test/fixtures/redaction.ts` im Test (Geheimnisse an allen bekannten Verstecken).
-- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt), `test/e2e/forms.spec.ts` (Phase 4), `test/e2e/edit.spec.ts` (Phase 5), `test/e2e/tools.spec.ts` (Phase 6), `test/e2e/pro.spec.ts` (Phase 7; getaggtes Test-PDF aus `test/fixtures/tagged.ts`) und `test/e2e/regressions.spec.ts` (behobene Fehler). Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. **Unsichtbar:** Im Testmodus bleibt das Fenster verborgen (ohne Drosselung) und die App ohne Dock-Symbol, damit die Tests den Auftraggeber nicht stören; `BLATTWERK_E2E_SHOW=1` zeigt das Fenster zum Zuschauen. **Verbindlich (Auftraggeber, 2026-10-15): Alle Tests laufen unsichtbar, auch der Rauchtest der fertigen App. Nichts darf ein Fenster öffnen oder den Fokus nehmen; der Auftraggeber arbeitet nebenher am Mac.** Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
+- **E2E (Playwright mit Electron):** `test/e2e/viewer.spec.ts` (Phase 1), `test/e2e/comments.spec.ts` (Phase 2, arbeitet auf Kopien der Test-PDFs), `test/e2e/pages.spec.ts` (Phase 3; Öffnen-, Ordner- und Sichern-Dialoge per `stubDialogs` ersetzt), `test/e2e/forms.spec.ts` (Phase 4), `test/e2e/edit.spec.ts` (Phase 5), `test/e2e/tools.spec.ts` (Phase 6), `test/e2e/pro.spec.ts` (Phase 7; getaggtes Test-PDF aus `test/fixtures/tagged.ts`), `test/e2e/windows.spec.ts` (Fenster je Dokument, Tabs herausziehen und zusammenführen) und `test/e2e/regressions.spec.ts` (behobene Fehler). Mehrere Dateien beim Start öffnen mehrere Fenster: `expectWindowCount`, `windowWithTitle`, `mergeAllWindows` in `test/e2e/app.ts`; Menübefehle gehen an das vordere (zuletzt geöffnete) Fenster. Beim Schließen beantwortet der Test-Helfer die Rückfrage „Nicht speichern“. **Unsichtbar:** Im Testmodus bleibt das Fenster verborgen (ohne Drosselung) und die App ohne Dock-Symbol, damit die Tests den Auftraggeber nicht stören; `BLATTWERK_E2E_SHOW=1` zeigt das Fenster zum Zuschauen. **Verbindlich (Auftraggeber, 2026-10-15): Alle Tests laufen unsichtbar, auch der Rauchtest der fertigen App. Nichts darf ein Fenster öffnen oder den Fokus nehmen; der Auftraggeber arbeitet nebenher am Mac.** Systemdialoge werden im Hauptprozess per `app.evaluate` ersetzt; Drucken landet im Testmodus als PDF in einem Ordner.
 - **Fertige App:** `node scripts/smoke-packaged.mjs <Pfad zur .app>` startet das Paket, prüft die Anzeige und speichert einen Kommentar (PDFium aus dem Paket). `node scripts/smoke-update.mjs <Pfad zur .app>` spielt in einem Testordner ein Update (Version 99.0.0) ein.
 - **Ausgabeprüfung für jede gespeicherte Datei:** `qpdf --check` (in CI installiert, lokal übersprungen, wenn nicht vorhanden), Öffnen mit pdf.js, PDFium und `@cantoo/pdf-lib`, Annotationen haben /AP. Unter macOS zusätzlich mit PDFKit (die Engine von Apple Vorschau): `test/e2e/pdfkit.ts` (JavaScript for Automation). Acrobat Reader: manuelle Checkliste im Phasenbericht.
 - **Test-PDFs** (`test/fixtures/pdfs/`): Text, Scan (nur Bild), Formular (AcroForm), verschlüsselt (Benutzer- und Besitzerpasswort), eingeschränkt, beschädigt (kaputte xref, abgeschnitten), mit Links und Lesezeichen, mit Kommentaren (`kommentare.pdf`: Antwort, Prüfstatus). Signiert folgt mit PAdES in Phase 7. „Sehr groß“ (600 Seiten, mehr als 100 MB) erzeugt `scripts/generate-fixtures.ts` nach `test/fixtures/generated/`.
@@ -219,7 +225,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 | `npm run dist:mac:local` | Mac-App (Apple Silicon) bauen, `.dmg` nach `release/` |
 | `npm run dist:mac`, `npm run dist:win` | Pakete für CI (beide Mac-Architekturen bzw. Windows) |
 
-**In der Claude-Sandbox:** Electron, Playwright-Oberflächentests, `npm run fixtures` (wegen `sips`) und Packaging laufen nur außerhalb der Sandbox.
+**In der Claude-Sandbox:** Electron, Playwright-Oberflächentests, `npm run fixtures` (wegen `sips`) und Packaging laufen nur außerhalb der Sandbox. **In der Cloud (Linux):** `node node_modules/electron/install.js` lädt Electron, danach laufen die Oberflächentests mit `xvfb-run -a npx playwright test` (Mausbewegungen dort etwa 1 s je Schritt; PDFKit-Prüfungen und die Systemliste „Zuletzt geöffnet“ nur auf dem Mac). Kein Packaging.
 
 ## Packaging
 
@@ -234,7 +240,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 - Pinch auf dem Trackpad kommt als `wheel`-Event mit `ctrlKey`. Browser-Zoom per `setVisualZoomLevelLimits(1, 1)` abschalten und selbst zoomen.
 - `File.path` gibt es in Electron nicht mehr. Für Drag & Drop `webUtils.getPathForFile` im Preload nutzen.
 - macOS öffnet Dateien per `open-file`-Event, auch vor `ready`. Windows übergibt sie über `argv` und `second-instance`.
-- Schließen des Fensters beendet die App auch unter macOS (Wunsch des Auftraggebers, 2026-10-14); die Rückfrage zum Speichern kommt vorher.
+- Schließen des letzten Fensters beendet die App auch unter macOS (Wunsch des Auftraggebers, 2026-10-14); die Rückfrage zum Speichern kommt vorher.
 - Pfad des Projekts enthält Leerzeichen. In Skripten Pfade immer quoten.
 - iCloud-Ordner (z. B. `~/Documents`) sind ungeeignet: Konfliktkopien in generierten Ordnern und Attribute, an denen `codesign` scheitert.
 - `.tools/package.json` mit `"type": "commonjs"` (legt `dev-env.sh` an): Sonst liest Node die heruntergeladenen Hilfsprogramme von electron-builder als ES-Module.

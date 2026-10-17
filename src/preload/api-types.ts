@@ -26,6 +26,10 @@ import type {
   SaveToFolderResult,
   SavedSignature,
   SignatureInput,
+  TabDestination,
+  TabReceived,
+  TabTransfer,
+  TabTransferResult,
 } from '../shared/ipc';
 
 export interface BlattwerkApi {
@@ -92,6 +96,12 @@ export interface BlattwerkApi {
   confirmClose(): void;
   cancelClose(): void;
   onRequestClose(listener: () => void): () => void;
+  // Mehrere Fenster (ADR 0026): Tab in ein anderes oder neues Fenster geben, Tab übernehmen, alle Tabs abgeben
+  transferTab(fileId: string, transfer: TabTransfer, destination: TabDestination): Promise<TabTransferResult>;
+  onTabReceived(listener: (message: TabReceived) => void): () => void;
+  onMergeRequest(listener: () => void): () => void;
+  // Fenster schließen, nachdem sein letzter Tab weitergegeben wurde
+  closeWindow(): void;
   openExternal(url: string): Promise<boolean>;
   setMenuState(state: MenuState): void;
   // Glasflächen für Apples Liquid Glass (nur wirksam, wenn appInfo().nativeGlass)

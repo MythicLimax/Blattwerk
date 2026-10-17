@@ -8,6 +8,8 @@ import {
   validateMenuState,
   validateReadRange,
   sanitizeFileName,
+  validateTabDestination,
+  validateTabTransfer,
 } from '../../src/shared/validate';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
@@ -145,5 +147,29 @@ describe('sanitizeFileName', () => {
   it('behält Umlaute und eine vorhandene Endung, begrenzt die Länge', () => {
     expect(sanitizeFileName('Ünïcödé Name.PDF')).toBe('Ünïcödé Name.pdf');
     expect(sanitizeFileName('x'.repeat(300))).toHaveLength(150);
+  });
+});
+
+describe('Tab-Übergabe zwischen Fenstern', () => {
+  const pdf = new TextEncoder().encode('%PDF-1.7\n%%EOF');
+
+  it('nimmt gültige Übergaben an', () => {
+    expect(validateTabTransfer({ bytes: null, password: null, filePassword: null, page: 1 })).toEqual({ bytes: null, password: null, filePassword: null, page: 1 });
+    expect(validateTabTransfer({ bytes: pdf, password: 'geheim', filePassword: null, page: 3 })?.bytes).toBe(pdf);
+  });
+
+  it('lehnt Nicht-PDFs, ungültige Seiten und lange Kennwörter ab', () => {
+    expect(validateTabTransfer({ bytes: new Uint8Array([1, 2, 3]), password: null, filePassword: null, page: 1 })).toBeNull();
+    expect(validateTabTransfer({ bytes: null, password: null, filePassword: null, page: 0 })).toBeNull();
+    expect(validateTabTransfer({ bytes: null, password: 'x'.repeat(2000), filePassword: null, page: 1 })).toBeNull();
+    expect(validateTabTransfer(null)).toBeNull();
+  });
+
+  it('prüft das Ziel', () => {
+    expect(validateTabDestination({ kind: 'point', x: 10, y: -20 })).toEqual({ kind: 'point', x: 10, y: -20 });
+    expect(validateTabDestination({ kind: 'merge' })).toEqual({ kind: 'merge' });
+    expect(validateTabDestination({ kind: 'new', extra: 1 })).toEqual({ kind: 'new' });
+    expect(validateTabDestination({ kind: 'point', x: Number.NaN, y: 0 })).toBeNull();
+    expect(validateTabDestination({ kind: 'anywhere' })).toBeNull();
   });
 });

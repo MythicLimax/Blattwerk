@@ -21,6 +21,9 @@ import {
   type SaveNewResult,
   type SaveResult,
   type SaveToFolderResult,
+  type TabDestination,
+  type TabTransfer,
+  type TabTransferResult,
 } from '../shared/ipc';
 import { PRODUCT_NAME } from '../shared/product';
 import {
@@ -38,6 +41,8 @@ import {
   validateGlassRegions,
   validateMenuState,
   validateNamedPdfs,
+  validateTabDestination,
+  validateTabTransfer,
 } from '../shared/validate';
 import { atomicWrite } from './files/atomic-write';
 import { createBlankDocument, isBlankDocumentPath } from './files/blank-document';
@@ -65,13 +70,19 @@ export interface IpcContext {
   onRendererReady: (win: BrowserWindow) => void;
   onRecentChanged: () => void;
   clearRecent: () => Promise<RecentFile[]>;
-  openPathFor: (win: BrowserWindow, filePath: string, options?: { recent?: boolean }) => Promise<OpenResult>;
+  // Dokument öffnen: im anfragenden Fenster, wenn es leer ist, sonst in einem eigenen Fenster (ADR 0026)
+  openDocument: (win: BrowserWindow, filePath: string, options?: { recent?: boolean }) => Promise<OpenResult>;
   // Nach erfolgreichem Speichern unter neuem Namen (Zuletzt-Liste, Menü)
   onSavedAs: (filePath: string) => Promise<void>;
   getSettings: () => AppSettings;
   setAuthorName: (name: string) => Promise<AppSettings>;
   onCloseConfirmed: (win: BrowserWindow) => void;
   onCloseCancelled: (win: BrowserWindow) => void;
+  // Fenster ohne Tabs schließen (sein letzter Tab ist in ein anderes Fenster gewandert)
+  onCloseWindow: (win: BrowserWindow) => void;
+  transferTab: (win: BrowserWindow, fileId: string, transfer: TabTransfer, destination: TabDestination) => Promise<TabTransferResult>;
+  // App beenden (alle Fenster fragen bei ungespeicherten Änderungen nach)
+  quit: () => void;
   signatures: SignatureStore;
   getLastIdPath: () => string | null;
   setLastIdPath: (filePath: string | null) => void;
@@ -136,7 +147,7 @@ export function registerIpc(ctx: IpcContext): void {
     if (!win) return [];
     const paths = await showOpenDialog(win);
     const results: OpenResult[] = [];
-    for (const p of paths) results.push(await ctx.openPathFor(win, p));
+    for (const p of paths) results.push(await ctx.openDocument(win, p));
     return results;
   });
 
@@ -145,7 +156,7 @@ export function registerIpc(ctx: IpcContext): void {
     if (!win || !isSafeLocalPath(filePath, process.platform)) {
       return { ok: false, error: 'unreadable' };
     }
-    return ctx.openPathFor(win, filePath);
+    return ctx.openDocument(win, filePath);
   });
 
   handle(IPC.readRange, (event, fileId: unknown, begin: unknown, end: unknown) => {
@@ -165,7 +176,7 @@ export function registerIpc(ctx: IpcContext): void {
     if (!win || typeof filePath !== 'string' || !(await ctx.recent.contains(filePath))) {
       return { ok: false, error: 'not-found' };
     }
-    return ctx.openPathFor(win, filePath);
+    return ctx.openDocument(win, filePath);
   });
 
   handle(IPC.recentRemove, async (_event, filePath: unknown) => {
@@ -289,7 +300,7 @@ export function registerIpc(ctx: IpcContext): void {
       } catch (error) {
         return { ok: false, error: 'write-failed', detail: String(error) };
       }
-      const open = openAfter === true ? await ctx.openPathFor(win, target) : null;
+      const open = openAfter === true ? await ctx.openDocument(win, target) : null;
       return { ok: true, name: path.basename(target), open };
     },
   );
@@ -298,12 +309,11 @@ export function registerIpc(ctx: IpcContext): void {
   // Vorhandene Dateien werden nie überschrieben; bei gleichem Namen kommt eine Nummer dazu.
   handle(IPC.updateStatus, (): UpdateStatus => checkForUpdate());
 
-  // Update vormerken und die App über den normalen Weg schließen (Rückfrage bei ungespeicherten Änderungen);
-  // beim Beenden tauscht ein Hilfsskript die App aus und öffnet sie neu
-  handle(IPC.updateInstall, (event): boolean => {
-    const win = windowOf(event);
-    if (!win || !scheduleInstall()) return false;
-    win.close();
+  // Update vormerken und die App über den normalen Weg beenden (jedes Fenster fragt bei ungespeicherten Änderungen
+  // nach); beim Beenden tauscht ein Hilfsskript die App aus und öffnet sie neu
+  handle(IPC.updateInstall, (): boolean => {
+    if (!scheduleInstall()) return false;
+    ctx.quit();
     return true;
   });
 
@@ -317,9 +327,8 @@ export function registerIpc(ctx: IpcContext): void {
   handle(IPC.newBlank, async (event): Promise<OpenResult> => {
     const win = windowOf(event);
     if (!win) return { ok: false, error: 'unreadable' };
-    const file = await createBlankDocument(t('files.untitled'));
-    const result = await ctx.openPathFor(win, file, { recent: false });
-    return result.ok ? { ...result, file: { ...result.file, untitled: true } } : result;
+    // Unbenannte Dokumente erkennt das Öffnen am Ordner (nicht in „Zuletzt geöffnet“, Kennzeichnung untitled)
+    return ctx.openDocument(win, await createBlankDocument(t('files.untitled')));
   });
 
   handle(IPC.saveToFolder, async (event, files: unknown, referenceFileId: unknown): Promise<SaveToFolderResult> => {
@@ -472,7 +481,7 @@ export function registerIpc(ctx: IpcContext): void {
     } catch (error) {
       return { ok: false, error: 'write-failed', detail: String(error) };
     }
-    return { ok: true, name: path.basename(target), open: await ctx.openPathFor(win, target) };
+    return { ok: true, name: path.basename(target), open: await ctx.openDocument(win, target) };
   };
 
   handle(IPC.convertPick, async (event): Promise<ConvertResult> => {
@@ -567,6 +576,21 @@ export function registerIpc(ctx: IpcContext): void {
     if (!ctx.isTrustedSender(event)) return;
     const win = windowOf(event);
     if (win) ctx.onCloseCancelled(win);
+  });
+
+  // Tab in ein anderes Fenster geben (herausgezogen oder zusammengeführt)
+  handle(IPC.tabTransfer, async (event, fileId: unknown, transfer: unknown, destination: unknown): Promise<TabTransferResult> => {
+    const win = windowOf(event);
+    const validTransfer = validateTabTransfer(transfer);
+    const validDestination = validateTabDestination(destination);
+    if (!win || !isFileId(fileId) || !validTransfer || !validDestination) return { ok: false, error: 'invalid-data' };
+    return ctx.transferTab(win, fileId, validTransfer, validDestination);
+  });
+
+  ipcMain.on(IPC.closeWindow, (event) => {
+    if (!ctx.isTrustedSender(event)) return;
+    const win = windowOf(event);
+    if (win) ctx.onCloseWindow(win);
   });
 
   ipcMain.on(IPC.rendererReady, (event) => {

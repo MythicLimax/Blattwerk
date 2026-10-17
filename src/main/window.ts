@@ -50,6 +50,9 @@ export function createSettingsStore(userDataDir: string): JsonStore<SettingsData
   );
 }
 
+// Größe für weitere Fenster: wie das vordere, sonst wie gespeichert
+export const DEFAULT_WINDOW_SIZE = { width: 1280, height: 860 };
+
 // Gespeicherte Fensterposition nur übernehmen, wenn sie noch auf einem vorhandenen Bildschirm liegt.
 function visibleBounds(bounds: Rectangle | null): Rectangle | null {
   if (!bounds) return null;
@@ -64,6 +67,9 @@ function visibleBounds(bounds: Rectangle | null): Rectangle | null {
 export interface CreateWindowOptions {
   preloadPath: string;
   state: WindowState;
+  // Lage eines weiteren Fensters (versetzt zum vorderen bzw. an der Stelle eines herausgezogenen Tabs);
+  // ohne Angabe gilt die gespeicherte Lage
+  bounds?: Rectangle;
   devTools: boolean;
   // Oberflächentests: Fenster unsichtbar lassen (zeichnet trotzdem vollständig)
   hidden?: boolean;
@@ -74,9 +80,9 @@ export interface CreateWindowOptions {
 }
 
 export function createMainWindow(options: CreateWindowOptions): BrowserWindow {
-  const bounds = visibleBounds(options.state.bounds);
+  const bounds = options.bounds ?? visibleBounds(options.state.bounds);
   const win = new BrowserWindow({
-    ...(bounds ?? { width: 1280, height: 860 }),
+    ...(bounds ?? DEFAULT_WINDOW_SIZE),
     minWidth: 760,
     minHeight: 480,
     show: false,
@@ -103,7 +109,7 @@ export function createMainWindow(options: CreateWindowOptions): BrowserWindow {
     },
   });
 
-  if (options.state.maximized) win.maximize();
+  if (options.state.maximized && !options.bounds) win.maximize();
   // Pinch-Zoom des Browsers aus: Zoomen übernimmt der Viewer selbst.
   void win.webContents.setVisualZoomLevelLimits(1, 1);
   if (!options.hidden) win.once('ready-to-show', () => win.show());

@@ -23,8 +23,16 @@ interface OpenFile {
   path: string;
   handle: fs.FileHandle;
   ownerId: number;
+  // Dokument in einem Tab (nicht Quelldatei zum Einfügen, Zusammenführen oder Vergleichen)
+  document: boolean;
   // Stand beim Öffnen. Ändert sich die Datei danach, liefern Lesezugriffe einen Fehler statt falscher Daten.
   mtimeMs: number;
+}
+
+function normalizePath(filePath: string): string {
+  const resolved = path.resolve(filePath);
+  // macOS und Windows unterscheiden Groß- und Kleinschreibung in Dateinamen normalerweise nicht
+  return process.platform === 'linux' ? resolved : resolved.toLowerCase();
 }
 
 export class FileChangedError extends Error {
@@ -81,7 +89,7 @@ export class FileRegistry {
       return { ok: false, error: 'unreadable', name };
     }
     const info: FileInfo = { fileId: randomUUID(), name, dir: path.dirname(filePath), size: opened.size, kind };
-    this.#files.set(info.fileId, { info, path: filePath, handle, ownerId, mtimeMs: opened.mtimeMs });
+    this.#files.set(info.fileId, { info, path: filePath, handle, ownerId, document: accept === 'pdf-only', mtimeMs: opened.mtimeMs });
     return { ok: true, file: info };
   }
 
@@ -128,13 +136,34 @@ export class FileRegistry {
 
   // true, wenn diese Datei (gleicher Pfad) gerade in irgendeinem Tab geöffnet ist
   isOpenPath(filePath: string): boolean {
-    const normalize = (p: string) => {
-      const resolved = path.resolve(p);
-      // macOS und Windows unterscheiden Groß- und Kleinschreibung in Dateinamen normalerweise nicht
-      return process.platform === 'linux' ? resolved : resolved.toLowerCase();
-    };
-    const wanted = normalize(filePath);
-    return [...this.#files.values()].some((file) => normalize(file.path) === wanted);
+    const wanted = normalizePath(filePath);
+    return [...this.#files.values()].some((file) => normalizePath(file.path) === wanted);
+  }
+
+  // Fenster (webContents-ID), in dem diese Datei als Dokument in einem Tab offen ist; sonst null
+  documentOwner(filePath: string): number | null {
+    const wanted = normalizePath(filePath);
+    return [...this.#files.values()].find((file) => file.document && normalizePath(file.path) === wanted)?.ownerId ?? null;
+  }
+
+  // true, wenn das Fenster mindestens ein Dokument in einem Tab hat
+  hasDocuments(ownerId: number): boolean {
+    return [...this.#files.values()].some((file) => file.document && file.ownerId === ownerId);
+  }
+
+  // Angaben zu einer geöffneten Datei (für die Übergabe eines Tabs)
+  infoOf(fileId: string, ownerId: number): FileInfo | null {
+    const file = this.#files.get(fileId);
+    return file && file.ownerId === ownerId ? file.info : null;
+  }
+
+  // Gibt eine geöffnete Datei an ein anderes Fenster weiter (Tab wandert, ADR 0026). Handle und Stand beim Öffnen
+  // bleiben, damit Änderungen von außen weiterhin erkannt werden.
+  transfer(fileId: string, fromOwner: number, toOwner: number): boolean {
+    const file = this.#files.get(fileId);
+    if (!file || file.ownerId !== fromOwner) return false;
+    file.ownerId = toOwner;
+    return true;
   }
 
   pathOf(fileId: string, ownerId: number): string | null {

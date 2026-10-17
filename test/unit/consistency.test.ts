@@ -84,7 +84,9 @@ describe('Menü und Tastenkürzel', () => {
         openRecent: () => undefined,
         clearRecent: () => undefined,
         setDefaultApp: () => undefined,
-    chooseUpdateFolder: () => undefined,
+        chooseUpdateFolder: () => undefined,
+        mergeWindows: () => undefined,
+        windowCount: 1,
       });
       const ids = collectIds(template);
       expect(COMMANDS.filter((command) => !ids.includes(command))).toEqual([]);
@@ -103,7 +105,9 @@ describe('Menü und Tastenkürzel', () => {
       openRecent: () => undefined,
       clearRecent: () => undefined,
       setDefaultApp: () => undefined,
-    chooseUpdateFolder: () => undefined,
+      chooseUpdateFolder: () => undefined,
+      mergeWindows: () => undefined,
+      windowCount: 1,
     };
     const state = { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true, formEditing: false, canEditForms: false, redactToolsVisible: false, hasRedactionMarks: false, contentEditing: false, markToolsVisible: false };
     const flatten = (items: Electron.MenuItemConstructorOptions[]): Electron.MenuItemConstructorOptions[] =>
@@ -117,6 +121,11 @@ describe('Menü und Tastenkürzel', () => {
 
     const emptyWin = flatten(buildMenuTemplate({ ...base, platform: 'win32', state: { ...state, tabCount: 0 } }));
     expect(emptyWin.find((i) => i.id === 'file.close')?.enabled).toBe(false);
+
+    // „Alle Fenster zusammenführen“ erst ab zwei Fenstern
+    expect(empty.find((i) => i.id === 'window.mergeAll')?.enabled).toBe(false);
+    const two = flatten(buildMenuTemplate({ ...base, windowCount: 2, platform: 'win32', state: { ...state, tabCount: 1 } }));
+    expect(two.find((i) => i.id === 'window.mergeAll')?.enabled).toBe(true);
   });
 
   it('maskiert & in Dateinamen der Zuletzt-Liste', async () => {
@@ -131,7 +140,9 @@ describe('Menü und Tastenkürzel', () => {
       openRecent: () => undefined,
       clearRecent: () => undefined,
       setDefaultApp: () => undefined,
-    chooseUpdateFolder: () => undefined,
+      chooseUpdateFolder: () => undefined,
+      mergeWindows: () => undefined,
+      windowCount: 1,
     });
     const text = JSON.stringify(template);
     expect(text).toContain('AGB && Datenschutz.pdf');

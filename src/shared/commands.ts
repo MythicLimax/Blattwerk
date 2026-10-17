@@ -70,6 +70,7 @@ export const COMMANDS = [
   'nav.goToPage',
   'window.nextTab',
   'window.previousTab',
+  'window.moveTabToNewWindow',
 ] as const;
 
 export type CommandId = (typeof COMMANDS)[number];

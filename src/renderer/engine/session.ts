@@ -1,5 +1,5 @@
 import type { CommandId } from '../../shared/commands';
-import type { FileInfo, OpenResult, ViewMode } from '../../shared/ipc';
+import type { FileInfo, OpenResult, TabDestination, TabReceived, TabTransfer, ViewMode } from '../../shared/ipc';
 import { api } from '../api';
 import { computeChanges, hasChanges } from '../features/annotations/changes';
 import { deleteAnnotation, loadAnnotations } from '../features/annotations/controller';
@@ -8,7 +8,7 @@ import { deleteSelectedField, toggleFormEditing } from '../features/form-edit/ac
 import { openRedactApply, openRedactFind, toggleRedactTools } from '../features/redaction/actions';
 import { toggleMarkTools } from '../features/annotations/mark-actions';
 import { openStampDialog, removeArtifacts } from '../features/stamping/actions';
-import { deletePages, targetPages } from '../features/pages/actions';
+import { currentBytes, deletePages, targetPages } from '../features/pages/actions';
 import { runPageCommand } from '../features/pages/commands';
 import { printDocument } from '../features/print/print-service';
 import { layoutForMode } from '../features/viewer/view-modes';
@@ -157,7 +157,8 @@ async function loadIntoTab(tabId: string, file: FileInfo, knownPassword: string 
 
 export async function handleOpenResult(result: OpenResult): Promise<void> {
   if (!result.ok) {
-    if (result.error !== 'cancelled') {
+    // elsewhere: Die Datei öffnet sich in einem anderen Fenster (ADR 0026)
+    if (result.error !== 'cancelled' && result.error !== 'elsewhere') {
       useUi.getState().notify(t(`errors.open.${result.error}`, { name: result.name ?? '' }));
     }
     return;
@@ -178,14 +179,74 @@ export async function handleOpenResult(result: OpenResult): Promise<void> {
   useAnnotations.getState().init(tabId);
   useHistory.getState().reset(tabId);
   await loadIntoTab(tabId, file, null);
+  // Neues leeres Dokument: sofort im Modus „Text und Bilder bearbeiten“ (auch wenn es in einem neuen Fenster öffnet)
+  const tab = findTab(tabId);
+  if (file.untitled && tab?.status === 'ready' && tab.canModify && !tab.contentEditing && getActiveTab()?.id === tabId) toggleContentEditing(tab);
 }
 
-// Neues leeres Dokument: eine A4-Seite, sofort im Modus „Text und Bilder bearbeiten“
+// Neues leeres Dokument: eine A4-Seite. Im Fenster mit Dokumenten öffnet es sich in einem neuen Fenster.
 export async function createBlankDocument(): Promise<void> {
-  const result = await api.newBlankDocument();
-  await handleOpenResult(result);
-  const tab = getActiveTab();
-  if (result.ok && tab?.untitled && tab.status === 'ready' && tab.canModify && !tab.contentEditing) toggleContentEditing(tab);
+  await handleOpenResult(await api.newBlankDocument());
+}
+
+// Stand eines Tabs für die Übergabe an ein anderes Fenster. Ungespeicherte Kommentare, Formularwerte und
+// Dokumentänderungen wandern als ein neuer Stand mit; der Rückgängig-Verlauf bleibt zurück.
+async function transferState(tab: TabState): Promise<TabTransfer> {
+  const runtime = getRuntime(tab.id);
+  const history = tabHistory(tab.id);
+  const password = runtime?.password ?? null;
+  // Kennwort der Datei: das des gespeicherten Stands, wenn gerade ein anderer angezeigt wird (Kennwortschutz geändert)
+  const saved = history && history.savedCursor >= 0 && history.savedCursor !== history.cursor ? history.states[history.savedCursor] : undefined;
+  const filePassword = saved?.password !== undefined ? saved.password : password;
+  const page = Math.max(1, tab.currentPage);
+  if (tab.status !== 'ready' || !runtime?.pdf || !isTabDirty(tab.id)) return { bytes: null, password, filePassword, page };
+  const { bytes } = await currentBytes(tab);
+  return { bytes, password, filePassword, page };
+}
+
+// Gibt einen Tab an ein anderes Fenster (herausgezogen, Menü oder „Alle Fenster zusammenführen“, ADR 0026).
+// Liefert true, wenn der Tab dieses Fenster verlassen hat. Ohne Tabs schließt sich das Fenster danach.
+export async function transferTab(tabId: string, destination: TabDestination): Promise<boolean> {
+  commitPendingEdits();
+  await syncFormChanges(tabId);
+  await settled(tabId);
+  const tab = findTab(tabId);
+  if (!tab || tab.saving || tab.working) return false;
+  try {
+    const result = await api.transferTab(tab.fileId, await transferState(tab), destination);
+    if (!result.ok) {
+      if (result.error !== 'nothing-to-do') useUi.getState().notify(t('tabs.transferFailed'), result.error);
+      return false;
+    }
+  } catch (error) {
+    useUi.getState().notify(t('tabs.transferFailed'), errorMessage(error));
+    return false;
+  }
+  closeTabNow(tabId);
+  if (useDocuments.getState().tabs.length === 0) api.closeWindow();
+  return true;
+}
+
+// „Alle Fenster zusammenführen“: alle Tabs nacheinander an das vordere Fenster abgeben
+export async function giveAllTabs(): Promise<void> {
+  for (const tab of [...useDocuments.getState().tabs]) {
+    if (!(await transferTab(tab.id, { kind: 'merge' }))) return;
+  }
+}
+
+// Übernimmt einen Tab aus einem anderen Fenster. Mit Änderungen liegt der übergebene Stand als neuer Stand über der
+// Datei (wie nach einer Seitenoperation): Der Tab gilt als ungespeichert, Speichern schreibt in die Originaldatei.
+export async function receiveTab({ file, transfer }: TabReceived): Promise<void> {
+  const tabId = crypto.randomUUID();
+  useDocuments.getState().addTab({ id: tabId, fileId: file.fileId, name: file.name, dir: file.dir, size: file.size, untitled: file.untitled === true });
+  useAnnotations.getState().init(tabId);
+  useHistory.getState().reset(tabId);
+  useDocuments.getState().updateTab(tabId, { currentPage: transfer.page });
+  if (transfer.bytes) {
+    const next: DocState = { bytes: transfer.bytes, annotations: null, page: transfer.page, selection: [], password: transfer.password };
+    useHistory.getState().push(tabId, { annotations: null, page: transfer.page, selection: [], password: transfer.filePassword }, next);
+  }
+  await loadIntoTab(tabId, file, transfer.password, { data: transfer.bytes ?? undefined });
 }
 
 export function submitPassword(tabId: string, password: string): void {
@@ -892,6 +953,11 @@ export function executeCommand(command: CommandId): void {
   }
   if (command === 'window.nextTab') return switchTab(1);
   if (command === 'window.previousTab') return switchTab(-1);
+  if (command === 'window.moveTabToNewWindow') {
+    const active = getActiveTab();
+    if (active && useDocuments.getState().tabs.length > 1) void transferTab(active.id, { kind: 'new' });
+    return;
+  }
   if (runPageCommand(command, getActiveTab())) return;
   if (command === 'file.exportImages' || command === 'file.exportText') {
     const active = getActiveTab();

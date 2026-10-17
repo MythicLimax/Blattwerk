@@ -3,7 +3,7 @@ import { trackPointerLight } from '../components/glass/liquid-glass';
 import { useNativeGlass } from './native-glass';
 import { UpdateBanner } from '../features/update/UpdateBanner';
 import { api } from '../api';
-import { handleCloseRequest, handleOpenResult, executeCommand } from '../engine/session';
+import { giveAllTabs, handleCloseRequest, handleOpenResult, executeCommand, receiveTab } from '../engine/session';
 import { CommentToolbar } from '../features/annotations/CommentToolbar';
 import { MarkToolbar } from '../features/annotations/MarkToolbar';
 import { ContentEditToolbar } from '../features/content-edit/ContentEditToolbar';
@@ -90,6 +90,9 @@ export function App() {
     const refreshRecent = () => void api.recent.list().then((list) => useUi.getState().setRecent(list));
     const offRecent = api.onRecentChanged(refreshRecent);
     const offClose = api.onRequestClose(() => void handleCloseRequest());
+    // Mehrere Fenster (ADR 0026): Tab aus einem anderen Fenster übernehmen, alle Tabs an das vordere abgeben
+    const offReceived = api.onTabReceived((message) => void receiveTab(message));
+    const offMerge = api.onMergeRequest(() => void giveAllTabs());
     refreshRecent();
     void api.getSettings().then((settings) => useUi.getState().setAuthorName(settings.authorName));
     api.signalReady();
@@ -98,6 +101,8 @@ export function App() {
       offCommand();
       offRecent();
       offClose();
+      offReceived();
+      offMerge();
     };
   }, []);
 

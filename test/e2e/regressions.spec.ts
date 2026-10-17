@@ -2,7 +2,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { existsSync } from 'node:fs';
 import { fixture, LARGE_PDF, TEXT_PDF } from '../fixtures/expectations';
-import { currentPage, launchApp, menuClick, menuItemState, waitForDocument } from './app';
+import { currentPage, expectWindowCount, launchApp, menuClick, menuItemState, mergeAllWindows, waitForDocument, windowWithTitle } from './app';
 
 const activePane = (page: Page) => page.locator('[data-testid="active-pane"]');
 
@@ -13,14 +13,16 @@ test('mehrere Dateien öffnen: Abbrechen der Kennwortabfrage hält die übrigen 
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: paths })) as typeof dialog.showOpenDialog;
   }, [fixture('verschluesselt.pdf'), fixture('text.pdf')]);
   await page.getByTestId('open-button').click();
-  await expect(page.getByTestId('tab')).toHaveCount(2);
+  // Die erste Datei öffnet im leeren Fenster, die zweite in einem eigenen (ADR 0026).
+  await expectWindowCount(app, 2);
+  await expect(page.getByTestId('tab')).toHaveCount(1);
   // text.pdf lädt, obwohl für die erste Datei noch das Kennwort fehlt.
-  await waitForDocument(page, TEXT_PDF.pages);
-  await page.getByTestId('tab').first().click();
+  const second = await windowWithTitle(app, 'text.pdf');
+  await waitForDocument(second, TEXT_PDF.pages);
   await expect(page.getByTestId('password-dialog')).toBeVisible();
   await page.getByTestId('password-dialog').getByRole('button', { name: 'Abbrechen' }).click();
-  await expect(page.getByTestId('tab')).toHaveCount(1);
-  await waitForDocument(page, TEXT_PDF.pages);
+  await expect(page.getByTestId('tab')).toHaveCount(0);
+  await waitForDocument(second, TEXT_PDF.pages);
   await close();
 });
 
@@ -103,8 +105,13 @@ test('Suchergebnis anklicken wählt genau diesen Treffer aus', async () => {
 });
 
 test('Suchfeld leeren entfernt die Ergebnisse; Tabwechsel behält die Markierungen', async () => {
-  const { page, close } = await launchApp([fixture('text.pdf'), fixture('kaputte-xref.pdf')]);
+  const { app, close } = await launchApp([fixture('text.pdf'), fixture('kaputte-xref.pdf')]);
+  await expectWindowCount(app, 2);
+  await waitForDocument(await windowWithTitle(app, 'kaputte-xref.pdf'), TEXT_PDF.pages);
+  // Beide Dokumente als Tabs in einem Fenster: kaputte-xref.pdf vorn, text.pdf dahinter
+  const page = await mergeAllWindows(app);
   await expect(page.getByTestId('tab')).toHaveCount(2);
+  await page.getByTestId('tab').last().click();
   await waitForDocument(page, TEXT_PDF.pages);
   await page.getByTestId('search-button').click();
   await page.getByTestId('search-input').fill(TEXT_PDF.searchTerm);

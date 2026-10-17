@@ -48,6 +48,8 @@ export const IPC = {
   // Textdokumente (Word, OpenDocument, RTF, Text, Markdown) in PDF umwandeln: wählen bzw. abgelegt
   convertPick: 'convert:pick',
   convertDropped: 'convert:dropped',
+  // Mehrere Fenster (ADR 0026): Tab in ein anderes oder neues Fenster geben
+  tabTransfer: 'window:tab-transfer',
   // Renderer → Hauptprozess (send)
   // Glasflächen für Apples Liquid Glass unter macOS 26+ (ADR 0023)
   glassRegions: 'glass:regions',
@@ -55,11 +57,16 @@ export const IPC = {
   rendererReady: 'app:renderer-ready',
   closeConfirmed: 'app:close-confirmed',
   closeCancelled: 'app:close-cancelled',
+  // Fenster ohne Tabs schließen (nachdem sein letzter Tab in ein anderes Fenster gewandert ist)
+  closeWindow: 'window:close',
   // Hauptprozess → Renderer
   fileOpened: 'file:opened',
   menuCommand: 'menu:command',
   recentChanged: 'recent:changed',
   requestClose: 'app:request-close',
+  // Tab aus einem anderen Fenster übernehmen bzw. alle Tabs an das vordere Fenster abgeben
+  tabReceived: 'window:tab-received',
+  mergeRequest: 'window:merge-request',
 } as const;
 
 export type FileKind = 'pdf' | 'jpeg' | 'png';
@@ -133,11 +140,33 @@ export const MAX_SIGNATURE_SIDE = 4000;
 export const MAX_NEW_FILES = 1000;
 export const MAX_FILE_NAME = 150;
 
-export type OpenErrorCode = 'not-found' | 'not-a-file' | 'not-pdf' | 'unreadable' | 'cancelled';
+// elsewhere: Die Datei öffnet sich in einem anderen Fenster (neues Fenster oder dort schon offen); kein Fehler.
+export type OpenErrorCode = 'not-found' | 'not-a-file' | 'not-pdf' | 'unreadable' | 'cancelled' | 'elsewhere';
 
 export type OpenResult =
   | { ok: true; file: FileInfo }
   | { ok: false; error: OpenErrorCode; name?: string };
+
+// Stand eines Tabs, der in ein anderes Fenster wandert (ADR 0026). bytes: ungespeicherter Stand (Kommentare,
+// Formularwerte und Dokumentänderungen eingearbeitet); null = die Datei unverändert.
+export interface TabTransfer {
+  bytes: Uint8Array | null;
+  // Kennwort des übergebenen Stands bzw. der Datei (Kennwortschutz kann beide unterscheiden)
+  password: string | null;
+  filePassword: string | null;
+  page: number;
+}
+
+// Ziel: Bildschirmpunkt, an dem der Tab losgelassen wurde, ein neues Fenster (Menü) oder „Alle Fenster zusammenführen“
+export type TabDestination = { kind: 'point'; x: number; y: number } | { kind: 'new' } | { kind: 'merge' };
+
+export type TabTransferResult = { ok: true } | { ok: false; error: 'nothing-to-do' | 'unknown-file' | 'invalid-data' };
+
+// Übernommener Tab im Zielfenster
+export interface TabReceived {
+  file: FileInfo;
+  transfer: TabTransfer;
+}
 
 export interface RecentFile {
   path: string;

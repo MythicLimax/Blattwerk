@@ -132,4 +132,33 @@ describe('FileRegistry', () => {
     await registry.closeAllOwnedBy(7);
     expect(registry.openCount).toBe(1);
   });
+
+  it('kennt das Fenster eines Dokuments; Quelldateien zählen nicht als Dokument', async () => {
+    const registry = new FileRegistry();
+    await registry.open(fixture('text.pdf'), 7);
+    // Quelldatei zum Einfügen oder Vergleichen
+    await registry.open(fixture('formular.pdf'), 8, 'pdf');
+    expect(registry.documentOwner(fixture('text.pdf'))).toBe(7);
+    expect(registry.documentOwner(fixture('formular.pdf'))).toBeNull();
+    expect(registry.hasDocuments(7)).toBe(true);
+    expect(registry.hasDocuments(8)).toBe(false);
+  });
+
+  it('gibt eine Datei an ein anderes Fenster weiter, ohne sie neu zu öffnen', async () => {
+    const registry = new FileRegistry();
+    const result = await registry.open(fixture('text.pdf'), 7);
+    if (!result.ok) throw new Error('öffnen fehlgeschlagen');
+    const { fileId } = result.file;
+    expect(registry.transfer(fileId, 8, 9)).toBe(false);
+    expect(registry.transfer(fileId, 7, 9)).toBe(true);
+    // Das alte Fenster hat keinen Zugriff mehr; sein Schließen ist wirkungslos
+    await expect(registry.read(fileId, 0, 5, 7)).rejects.toThrow('unknown-file');
+    await registry.close(fileId, 7);
+    expect(registry.openCount).toBe(1);
+    expect(registry.infoOf(fileId, 9)?.name).toBe('text.pdf');
+    expect(await registry.isUnchangedOnDisk(fileId, 9)).toBe(true);
+    expect(registry.documentOwner(fixture('text.pdf'))).toBe(9);
+    await registry.close(fileId, 9);
+    expect(registry.openCount).toBe(0);
+  });
 });

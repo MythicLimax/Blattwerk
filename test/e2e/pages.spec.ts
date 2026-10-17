@@ -7,7 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { COMMENTS_PDF, fixture, imageFixture, PASSWORDS, TEXT_PDF } from '../fixtures/expectations';
-import { launchApp, menuClick, waitForDocument, type AppHandle } from './app';
+import { expectWindowCount, launchApp, menuClick, waitForDocument, windowWithTitle, type AppHandle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 
 const require = createRequire(import.meta.url);
@@ -192,8 +192,10 @@ test.describe('Seiten organisieren', () => {
     await menuClick(app, 'pages.extract');
     await page.getByTestId('extract-pages-input').fill('2-3, 7');
     await page.getByTestId('extract-pages-ok').click();
-    await expect(page.getByTestId('tab')).toHaveCount(2);
-    await waitForDocument(page, 3);
+    // Das neue Dokument öffnet in einem eigenen Fenster (ADR 0026)
+    await expectWindowCount(app, 2);
+    await waitForDocument(await windowWithTitle(app, 'auszug.pdf'), 3);
+    await expect(page.getByTestId('tab')).toHaveCount(1);
     expect(await footers(target)).toEqual([2, 3, 7]);
     // Das Ausgangsdokument bleibt unverändert und ohne ungespeicherte Änderungen
     await expect(page.getByTestId('tab-dirty')).toHaveCount(0);

@@ -4,7 +4,7 @@ import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileS
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fixture, TEXT_PDF } from '../fixtures/expectations';
-import { launchApp, menuClick, waitForDocument } from './app';
+import { launchApp, menuClick, waitForDocument, windowWithTitle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 import { taggedPdf } from '../fixtures/tagged';
 import { wordDocument } from '../fixtures/docx';
@@ -117,16 +117,17 @@ test.describe('PDF/A', () => {
     await expect(dialog.getByTestId('pdfa-issues')).toContainText('Helvetica');
     await dialog.getByTestId('pdfa-convert').click();
     await expect(dialog).toBeHidden();
-    // Die neue Datei öffnet sich in einem eigenen Tab
+    // Die neue Datei öffnet sich in einem eigenen Fenster (ADR 0026); Menübefehle gehen an das vordere Fenster
     await expect.poll(() => existsSync(archived), { timeout: 15_000 }).toBe(true);
-    await waitForDocument(page, TEXT_PDF.pages);
+    const archivedWindow = await windowWithTitle(app, 'bericht-archiv.pdf');
+    await waitForDocument(archivedWindow, TEXT_PDF.pages);
     const text = readFileSync(archived).toString('latin1');
     expect(text).toContain('pdfaid:part>2<');
     if (process.platform === 'darwin') expect(inspectWithPdfKit(archived).ok).toBe(true);
 
     await menuClick(app, 'tools.pdfa');
-    await expect(page.getByTestId('pdfa-verdict')).toHaveAttribute('data-compliant', 'true');
-    await expect(page.getByTestId('pdfa-issues')).toHaveCount(0);
+    await expect(archivedWindow.getByTestId('pdfa-verdict')).toHaveAttribute('data-compliant', 'true');
+    await expect(archivedWindow.getByTestId('pdfa-issues')).toHaveCount(0);
     await handle.close();
   });
 });
