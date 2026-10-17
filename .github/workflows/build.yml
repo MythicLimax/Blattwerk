@@ -8,6 +8,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Ein neuer Stand bricht ältere Läufe desselben Zweigs ab
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Prüfen und testen (${{ matrix.os }})
@@ -34,7 +39,9 @@ jobs:
         run: npm run fixtures -- --large
       - run: npm test
       - name: Oberflächentests
-        run: npm run test:e2e
+        # Hängende Tests sollen nicht stundenlang laufen (normal: etwa 6 Minuten)
+        timeout-minutes: 30
+        run: npm run test:e2e -- --max-failures=15
 
   package:
     name: Paket (${{ matrix.name }})
