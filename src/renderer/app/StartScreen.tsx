@@ -62,6 +62,8 @@ function useThumbnails(recent: RecentFile[], templates: TemplateInfo[]) {
           else missing.push(id);
         }
         setTemplateVersion((v) => v + 1);
+        // Erst kurz warten: Beim Start mit einer Datei ist die Startseite nur einen Augenblick zu sehen
+        if (missing.length > 0) await new Promise((resolve) => setTimeout(resolve, 800));
         for (const id of missing) {
           if (cancelled) return;
           templateThumbs.set(id, await createTemplateThumbnail(id).catch(() => null));

@@ -159,14 +159,19 @@ test('Absturz der Anzeige: Neu laden stellt die App wieder her', async () => {
   await app.evaluate(({ dialog }) => {
     dialog.showMessageBox = (async () => ({ response: 0, checkboxChecked: false })) as typeof dialog.showMessageBox;
   });
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.webContents.forcefullyCrashRenderer());
+  // Das Dokumentfenster gezielt wählen: Die Startseite öffnet für Vorschaubilder kurzlebige Hilfsfenster
+  await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()
+      .find((win) => win.webContents.getURL().includes('/index.html'))
+      ?.webContents.forcefullyCrashRenderer(),
+  );
   // Nach dem Neuladen zeigt das (einzige) Fenster wieder den Startbildschirm. Abfrage direkt beim Fenster,
   // weil Playwright die Seite nach einem Absturz nicht weiterverfolgt.
   await expect
     .poll(
       () =>
         app.evaluate(async ({ BrowserWindow }) => {
-          const contents = BrowserWindow.getAllWindows()[0]?.webContents;
+          const contents = BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().includes('/index.html'))?.webContents;
           if (!contents || contents.isCrashed() || contents.isLoading()) return false;
           // Während des Neuladens kommt die Antwort unter Linux und Windows nie zurück: höchstens 1 s warten
           const query = contents.executeJavaScript('Boolean(document.querySelector(\'[data-testid="start-screen"]\'))').catch(() => false);
@@ -202,11 +207,11 @@ test('Fenster schließen fragt bei Änderungen nach und beendet dann die App (au
   await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
   const exited = new Promise<void>((resolve) => app.process().once('exit', () => resolve()));
   // Wie ein Klick auf den roten Knopf
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().includes('/index.html'))?.close());
   // Abbrechen: Fenster und App bleiben
   await page.getByTestId('prompt-cancel').click();
   await expect(page.getByTestId('tab')).toHaveCount(1);
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().includes('/index.html'))?.close());
   // Die App kann sich beenden, bevor Playwright den Klick bestätigt bekommt
   await page.getByTestId('prompt-discard').click().catch(() => undefined);
   await exited;
@@ -319,14 +324,7 @@ test('schmales Fenster: was nicht in die Leiste passt, steht im Menü „Weitere
   const toolbar = page.getByTestId('toolbar');
   const fits = () => toolbar.evaluate((element) => element.scrollWidth <= element.clientWidth + 1);
   await expect(page.getByTestId('toolbar-more')).toHaveCount(0);
-  // Unter Windows kommt eine Größenänderung kurz nach dem Anzeigen des Fensters manchmal nicht an: so lange setzen, bis
-  // die Leiste wirklich schmal ist
-  await expect
-    .poll(async () => {
-      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(780, 700));
-      return toolbar.evaluate((element) => element.clientWidth);
-    })
-    .toBeLessThanOrEqual(780);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().includes('/index.html'))?.setSize(780, 700));
   await expect(page.getByTestId('toolbar-more')).toBeVisible();
   expect(await fits()).toBe(true);
   await expect(toolbar.getByTestId('zoom-select')).toHaveCount(0);
@@ -345,7 +343,7 @@ test('schmales Fenster: was nicht in die Leiste passt, steht im Menü „Weitere
   expect(await bar.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   const done = await page.getByTestId('content-edit-done').boundingBox();
   expect(done && done.x + done.width).toBeLessThanOrEqual(780);
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1280, 860));
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().includes('/index.html'))?.setSize(1280, 860));
   await expect(page.getByTestId('toolbar-more')).toHaveCount(0);
   await expect(toolbar.getByTestId('zoom-select')).toBeVisible();
   await close();

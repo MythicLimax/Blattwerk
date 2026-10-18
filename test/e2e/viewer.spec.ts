@@ -332,7 +332,7 @@ test.describe('Oberfläche', () => {
   test('Sicherheitseinstellungen des Fensters', async () => {
     const { page, app, close } = await launchApp();
     const prefs = await app.evaluate(({ BrowserWindow }) => {
-      const win = BrowserWindow.getAllWindows()[0];
+      const win = BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().includes('/index.html'));
       // getLastWebPreferences fehlt in den Typen von Electron 44, ist zur Laufzeit aber vorhanden.
       const p = (win?.webContents as unknown as { getLastWebPreferences(): Electron.WebPreferences } | undefined)?.getLastWebPreferences();
       return { contextIsolation: p?.contextIsolation, nodeIntegration: p?.nodeIntegration, sandbox: p?.sandbox, webSecurity: p?.webSecurity };
