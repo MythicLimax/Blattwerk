@@ -12,6 +12,8 @@ import {
   type OpenResult,
   type RecentFile,
   type TabDestination,
+  type TabDragHoverState,
+  type TabDragMessage,
   type TabReceived,
   type TabTransfer,
   type TabTransferResult,
@@ -28,7 +30,8 @@ import { handleAppScheme, registerAppScheme } from './protocol';
 import { hardenSession, hardenWebContents, isTrustedAppUrl } from './security';
 import { createMainWindow, createSettingsStore, visibleBounds, type SettingsData, type WindowState } from './window';
 import { WindowPositions } from './files/window-positions';
-import { boundsAtPoint, cascadeFrom, dropTarget } from './window-layout';
+import { boundsAtPoint, cascadeFrom, dropTarget, type Point } from './window-layout';
+import { TabGhost } from './tab-ghost';
 import { isBlankDocumentPath, removeBlankDocuments } from './files/blank-document';
 import { defaultUpdateFolder, runPendingInstall, setCustomUpdateFolder } from './update/updater';
 import { attachNativeGlass, describeNativeGlass, nativeGlassAvailable } from './native-glass';
@@ -93,7 +96,7 @@ const EMPTY_MENU_STATE: MenuState = {
 };
 
 // Was ein Fenster beim Start öffnen soll: eine Datei oder ein Tab aus einem anderen Fenster
-type PendingOpen = { kind: 'path'; path: string; recent?: boolean } | { kind: 'tab'; file: FileInfo; transfer: TabTransfer };
+type PendingOpen = { kind: 'path'; path: string; recent?: boolean } | { kind: 'tab'; file: FileInfo; transfer: TabTransfer; index?: number };
 
 // Jedes Dokument hat sein eigenes Fenster (ADR 0026). Je Fenster: Zustand für Menü und Schließen.
 interface WindowContext {
@@ -261,7 +264,7 @@ async function deliver(ctx: WindowContext, item: PendingOpen): Promise<void> {
     return;
   }
   if (!files.transfer(item.file.fileId, IN_TRANSIT, ctx.ownerId)) return;
-  const message: TabReceived = { file: item.file, transfer: item.transfer };
+  const message: TabReceived = { file: item.file, transfer: item.transfer, ...(item.index === undefined ? {} : { index: item.index }) };
   ctx.win.webContents.send(IPC.tabReceived, message);
 }
 
@@ -276,6 +279,9 @@ async function transferTab(win: BrowserWindow, fileId: string, transfer: TabTran
 
   let target: WindowContext | null = null;
   let newBounds: Rectangle | null = null;
+  let index: number | undefined;
+  // Ein laufendes Ziehen endet mit der Übergabe; sein Zielfenster (mit Einfügestelle) gilt vor der Lage der Fenster
+  const drag = destination.kind === 'point' ? finishTabDrag(source) : null;
   if (destination.kind === 'merge') {
     target = mergeTarget && mergeTarget !== source && windows.has(mergeTarget.win) ? mergeTarget : null;
     if (!target) return { ok: false, error: 'nothing-to-do' };
@@ -284,22 +290,29 @@ async function transferTab(win: BrowserWindow, fileId: string, transfer: TabTran
     if (source.menuState.tabCount <= 1) return { ok: false, error: 'nothing-to-do' };
   } else {
     const point = { x: destination.x, y: destination.y };
-    const others = zOrder
-      .filter((ctx) => ctx !== source && !ctx.win.isDestroyed() && !ctx.win.isMinimized())
-      .map((ctx) => ({ id: ctx, bounds: ctx.win.getBounds() }));
-    const drop = dropTarget(point, { id: source, bounds: source.win.getBounds() }, others);
-    if (drop.kind === 'window') {
-      target = drop.id;
+    const hovered = drag?.hover && windows.has(drag.hover.win) && !drag.hover.win.isDestroyed() ? drag.hover : null;
+    target = hovered ?? windowAt(point, source);
+    if (target) {
+      index = hovered ? drag?.hoverState?.index : undefined;
     } else {
-      // Der einzige Tab eines Fensters wird nicht zu einem neuen Fenster: Das wäre dasselbe noch einmal.
-      if (source.menuState.tabCount <= 1) return { ok: false, error: 'nothing-to-do' };
-      const size = source.win.getNormalBounds();
-      newBounds = boundsAtPoint(size, point, screen.getDisplayNearestPoint(point).workArea);
+      const grip = gripOf(source, drag?.grip);
+      const workArea = screen.getDisplayNearestPoint(point).workArea;
+      // Der einzige Tab eines Fensters wird nicht zu einem neuen Fenster (das wäre dasselbe noch einmal): Losgelassen
+      // außerhalb des Fensters, wandert das Fenster dorthin, wie beim Ziehen eines einzelnen Tabs in Safari.
+      if (source.menuState.tabCount <= 1) {
+        if (isInside(source.win.getBounds(), point)) return { ok: false, error: 'nothing-to-do' };
+        if (!source.win.isMaximized() && !source.win.isFullScreen()) {
+          const moved = boundsAtPoint(source.win.getBounds(), point, workArea, grip);
+          source.win.setPosition(moved.x, moved.y);
+        }
+        return { ok: false, error: 'nothing-to-do' };
+      }
+      newBounds = boundsAtPoint(source.win.getNormalBounds(), point, workArea, grip);
     }
   }
 
   if (!files.transfer(fileId, source.ownerId, IN_TRANSIT)) return { ok: false, error: 'unknown-file' };
-  const item: PendingOpen = { kind: 'tab', file, transfer };
+  const item: PendingOpen = { kind: 'tab', file, transfer, ...(index === undefined ? {} : { index }) };
   if (!target) {
     createWindow({ pending: [item], bounds: newBounds ?? undefined, near: source });
     return { ok: true };
@@ -308,6 +321,106 @@ async function transferTab(win: BrowserWindow, fileId: string, transfer: TabTran
   else target.pending.push(item);
   if (destination.kind === 'point') showWindow(target);
   return { ok: true };
+}
+
+const isInside = (bounds: Rectangle, point: Point): boolean =>
+  point.x >= bounds.x && point.x < bounds.x + bounds.width && point.y >= bounds.y && point.y < bounds.y + bounds.height;
+
+// Anderes Fenster unter einem Bildschirmpunkt (das vorderste); null über dem eigenen Fenster oder freier Fläche
+function windowAt(point: Point, source: WindowContext): WindowContext | null {
+  const others = zOrder
+    .filter((ctx) => ctx !== source && !ctx.win.isDestroyed() && !ctx.win.isMinimized())
+    .map((ctx) => ({ id: ctx, bounds: ctx.win.getBounds() }));
+  const drop = dropTarget(point, { id: source, bounds: source.win.getBounds() }, others);
+  return drop.kind === 'window' ? drop.id : null;
+}
+
+// Griff in Fensterkoordinaten: Der Renderer misst ab dem Inhalt; unter Windows liegt davor noch der Fensterrahmen.
+function gripOf(source: WindowContext, grip: Point | undefined): Point | undefined {
+  if (!grip) return undefined;
+  const outer = source.win.getBounds();
+  const content = source.win.getContentBounds();
+  return { x: grip.x + content.x - outer.x, y: grip.y + content.y - outer.y };
+}
+
+// Laufendes Ziehen eines Tabs über die Fenstergrenze (ADR 0026): Vorschau am Zeiger, Fenster unter dem Zeiger und
+// dessen Antwort (Zeiger über der Tableiste, Einfügestelle)
+interface TabDragState {
+  source: WindowContext;
+  title: string;
+  grip: Point;
+  ghost: TabGhost | null;
+  point: Point | null;
+  detached: boolean;
+  hover: WindowContext | null;
+  hoverState: TabDragHoverState | null;
+}
+let tabDrag: TabDragState | null = null;
+
+const ghostUrl = (): string => (devServerUrl ? new URL('ghost.html', devServerUrl).href : `${APP_ORIGIN}/ghost.html`);
+
+function onTabDrag(win: BrowserWindow, message: TabDragMessage): void {
+  const source = contextOf(win);
+  if (!source) return;
+  if (message.kind === 'start') {
+    finishTabDrag(tabDrag?.source ?? source);
+    tabDrag = {
+      source,
+      title: message.title,
+      grip: message.grip,
+      // Unsichtbare Testläufe öffnen kein weiteres Fenster
+      ghost: runHidden ? null : new TabGhost({ url: ghostUrl(), source: win, title: message.title, tabOffset: message.tabOffset }),
+      point: null,
+      detached: false,
+      hover: null,
+      hoverState: null,
+    };
+    return;
+  }
+  if (tabDrag?.source !== source) return;
+  if (message.kind === 'end') {
+    finishTabDrag(source);
+    return;
+  }
+  tabDrag.point = { x: message.x, y: message.y };
+  tabDrag.detached = message.detached;
+  setDragHover(message.detached ? windowAt(tabDrag.point, source) : null);
+  updateGhost();
+}
+
+// Vorschau am Zeiger, solange der Tab außerhalb der eigenen Leiste und nicht über der Leiste eines anderen Fensters ist
+function updateGhost(): void {
+  if (!tabDrag) return;
+  const overBar = tabDrag.hover !== null && tabDrag.hoverState?.overBar === true;
+  tabDrag.ghost?.moveTo(tabDrag.detached && !overBar ? tabDrag.point : null);
+}
+
+function setDragHover(target: WindowContext | null): void {
+  const drag = tabDrag;
+  if (!drag) return;
+  const previous = drag.hover;
+  if (previous && previous !== target && !previous.win.isDestroyed()) previous.win.webContents.send(IPC.tabDragHover, null);
+  if (previous !== target) drag.hoverState = null;
+  drag.hover = target;
+  if (!target || !drag.point || target.win.isDestroyed()) return;
+  const content = target.win.getContentBounds();
+  target.win.webContents.send(IPC.tabDragHover, { x: drag.point.x - content.x, y: drag.point.y - content.y, title: drag.title });
+}
+
+function onTabDragHoverState(win: BrowserWindow, state: TabDragHoverState): void {
+  if (!tabDrag || tabDrag.hover?.win !== win) return;
+  tabDrag.hoverState = state;
+  updateGhost();
+}
+
+// Beendet das Ziehen (Übergabe, Loslassen in der eigenen Leiste, geschlossenes Fenster) und liefert seinen Stand
+function finishTabDrag(source: WindowContext): TabDragState | null {
+  const drag = tabDrag;
+  if (!drag || drag.source !== source) return null;
+  tabDrag = null;
+  drag.ghost?.destroy();
+  if (drag.hover && !drag.hover.win.isDestroyed()) drag.hover.win.webContents.send(IPC.tabDragHover, null);
+  return drag;
 }
 
 // „Fenster → Alle Fenster zusammenführen“: Jedes andere Fenster gibt seine Tabs an das vordere ab und schließt sich.
@@ -481,6 +594,8 @@ function createWindow(options: NewWindowOptions = {}): WindowContext {
     windows.delete(win);
     zOrder = zOrder.filter((other) => other !== ctx);
     if (mergeTarget === ctx) mergeTarget = null;
+    if (tabDrag?.source === ctx) finishTabDrag(ctx);
+    else if (tabDrag?.hover === ctx) tabDrag.hover = null;
     refreshMenu();
   });
   // Beim Neuladen des Renderers (z. B. in der Entwicklung) Dateien freigeben.
@@ -611,6 +726,8 @@ void app.whenReady().then(async () => {
       win.close();
     },
     transferTab,
+    onTabDrag,
+    onTabDragHoverState,
     quit: () => app.quit(),
   });
 

@@ -9,6 +9,8 @@ import {
   validateReadRange,
   sanitizeFileName,
   validateTabDestination,
+  validateTabDragHoverState,
+  validateTabDragMessage,
   validateTabTransfer,
 } from '../../src/shared/validate';
 
@@ -171,5 +173,16 @@ describe('Tab-Übergabe zwischen Fenstern', () => {
     expect(validateTabDestination({ kind: 'new', extra: 1 })).toEqual({ kind: 'new' });
     expect(validateTabDestination({ kind: 'point', x: Number.NaN, y: 0 })).toBeNull();
     expect(validateTabDestination({ kind: 'anywhere' })).toBeNull();
+  });
+
+  it('prüft Meldungen beim Ziehen über die Fenstergrenze', () => {
+    const start = { kind: 'start', title: 'a.pdf', tabOffset: { x: 4, y: 5 }, grip: { x: 30, y: 60 } };
+    expect(validateTabDragMessage(start)).toEqual(start);
+    expect(validateTabDragMessage({ kind: 'move', x: 1, y: 2, detached: true })).toEqual({ kind: 'move', x: 1, y: 2, detached: true });
+    expect(validateTabDragMessage({ kind: 'end', more: 1 })).toEqual({ kind: 'end' });
+    expect(validateTabDragMessage({ ...start, title: 'x'.repeat(2000) })).toBeNull();
+    expect(validateTabDragMessage({ kind: 'move', x: 1, y: 2 })).toBeNull();
+    expect(validateTabDragHoverState({ overBar: true, index: 2 })).toEqual({ overBar: true, index: 2 });
+    expect(validateTabDragHoverState({ overBar: true, index: -1 })).toBeNull();
   });
 });

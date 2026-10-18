@@ -1,0 +1,86 @@
+/* Vorschau am Zeiger (ADR 0026): Maße passend zu ghostLayout in src/main/window-layout.ts */
+:root {
+  --ghost-tab-bg: rgba(255, 253, 248, 0.96);
+  --ghost-text: #2b2a26;
+  --ghost-icon: #2f5d3f;
+  --ghost-preview-bg: #f3efe6;
+  --ghost-edge: rgba(40, 30, 10, 0.14);
+  --ghost-shadow: 0 8px 22px rgba(30, 24, 10, 0.28), 0 1px 3px rgba(30, 24, 10, 0.18);
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --ghost-tab-bg: rgba(52, 54, 49, 0.96);
+  --ghost-text: #ecebe6;
+  --ghost-icon: #8cc79d;
+  --ghost-preview-bg: #1c1d1a;
+  --ghost-edge: rgba(255, 255, 255, 0.14);
+  --ghost-shadow: 0 8px 22px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  cursor: grabbing;
+  user-select: none;
+}
+
+body {
+  padding: 18px;
+  font: 13px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: var(--ghost-text);
+  opacity: 0;
+  transform: scale(0.94);
+  transform-origin: 30px 30px;
+  transition:
+    opacity 120ms ease,
+    transform 160ms cubic-bezier(0.2, 0.9, 0.3, 1.25);
+}
+
+body.shown {
+  opacity: 1;
+  transform: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  box-sizing: border-box;
+  width: 200px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--ghost-tab-bg);
+  box-shadow: var(--ghost-shadow), inset 0 0 0 0.5px var(--ghost-edge);
+}
+
+.icon {
+  flex: none;
+  width: 9px;
+  height: 11px;
+  border: 1.5px solid var(--ghost-icon);
+  border-radius: 2px;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview {
+  display: block;
+  margin-top: 6px;
+  border-radius: 10px;
+  background: var(--ghost-preview-bg);
+  box-shadow: var(--ghost-shadow), inset 0 0 0 0.5px var(--ghost-edge);
+  object-fit: cover;
+}
+
+.preview:not([src]) {
+  visibility: hidden;
+}

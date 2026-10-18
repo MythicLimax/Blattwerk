@@ -22,6 +22,8 @@ import {
   type SaveResult,
   type SaveToFolderResult,
   type TabDestination,
+  type TabDragHoverState,
+  type TabDragMessage,
   type TabTransfer,
   type TabTransferResult,
 } from '../shared/ipc';
@@ -42,6 +44,8 @@ import {
   validateMenuState,
   validateNamedPdfs,
   validateTabDestination,
+  validateTabDragHoverState,
+  validateTabDragMessage,
   validateTabTransfer,
 } from '../shared/validate';
 import { atomicWrite } from './files/atomic-write';
@@ -81,6 +85,9 @@ export interface IpcContext {
   // Fenster ohne Tabs schließen (sein letzter Tab ist in ein anderes Fenster gewandert)
   onCloseWindow: (win: BrowserWindow) => void;
   transferTab: (win: BrowserWindow, fileId: string, transfer: TabTransfer, destination: TabDestination) => Promise<TabTransferResult>;
+  // Tab über die Fenstergrenze ziehen (Vorschau am Zeiger) und Antwort des Fensters darunter
+  onTabDrag: (win: BrowserWindow, message: TabDragMessage) => void;
+  onTabDragHoverState: (win: BrowserWindow, state: TabDragHoverState) => void;
   // App beenden (alle Fenster fragen bei ungespeicherten Änderungen nach)
   quit: () => void;
   signatures: SignatureStore;
@@ -586,6 +593,20 @@ export function registerIpc(ctx: IpcContext): void {
     const validDestination = validateTabDestination(destination);
     if (!win || !isFileId(fileId) || !validTransfer || !validDestination) return { ok: false, error: 'invalid-data' };
     return ctx.transferTab(win, fileId, validTransfer, validDestination);
+  });
+
+  ipcMain.on(IPC.tabDrag, (event, message: unknown) => {
+    if (!ctx.isTrustedSender(event)) return;
+    const win = windowOf(event);
+    const valid = validateTabDragMessage(message);
+    if (win && valid) ctx.onTabDrag(win, valid);
+  });
+
+  ipcMain.on(IPC.tabDragHoverState, (event, state: unknown) => {
+    if (!ctx.isTrustedSender(event)) return;
+    const win = windowOf(event);
+    const valid = validateTabDragHoverState(state);
+    if (win && valid) ctx.onTabDragHoverState(win, valid);
   });
 
   ipcMain.on(IPC.closeWindow, (event) => {

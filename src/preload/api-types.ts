@@ -27,6 +27,9 @@ import type {
   SavedSignature,
   SignatureInput,
   TabDestination,
+  TabDragHover,
+  TabDragHoverState,
+  TabDragMessage,
   TabReceived,
   TabTransfer,
   TabTransferResult,
@@ -100,6 +103,10 @@ export interface BlattwerkApi {
   transferTab(fileId: string, transfer: TabTransfer, destination: TabDestination): Promise<TabTransferResult>;
   onTabReceived(listener: (message: TabReceived) => void): () => void;
   onMergeRequest(listener: () => void): () => void;
+  // Tab über die Fenstergrenze ziehen: Vorschau am Zeiger, schwebender Tab über einem anderen Fenster
+  tabDrag(message: TabDragMessage): void;
+  onTabDragHover(listener: (hover: TabDragHover | null) => void): () => void;
+  setTabDragHoverState(state: TabDragHoverState): void;
   // Fenster schließen, nachdem sein letzter Tab weitergegeben wurde
   closeWindow(): void;
   openExternal(url: string): Promise<boolean>;

@@ -53,9 +53,27 @@ Tab herausziehen und wird zu einem eigenen Fenster. Muss auch unter Windows gehe
 
 ## Ergänzungen (2026-10-17)
 
-- **Tabs umsortieren:** Ein Tab, der innerhalb der Leiste gezogen wird, folgt dem Zeiger und landet beim Loslassen
-  hinter allen Tabs, deren Mitte links vom Zeiger liegt (`moveTab` im `documents-store`). Umsortiert wird erst beim
-  Loslassen: Würde React das Element während des Ziehens umhängen, endete das Festhalten des Zeigers.
+- **Tabs umsortieren:** Ein Tab, der innerhalb der Leiste gezogen wird, folgt dem Zeiger (begrenzt auf die Leiste),
+  die übersprungenen Tabs weichen mit einer kurzen Bewegung aus. Die Zielstelle ergibt sich aus den Mitten der anderen
+  Tabs vor dem Ziehen (`tab-drag.ts`, nicht aus den bewegten Lagen, sonst schaukelt es). Umsortiert wird erst beim
+  Loslassen (`moveTab`): Würde React das Element während des Ziehens umhängen, endete das Festhalten des Zeigers.
+  Danach gleitet der Tab von der losgelassenen Stelle an seinen Platz (Web Animations), die anderen stehen für einen
+  Augenblick ohne Übergang schon richtig (`.settling`).
+- **Tab hängt am Zeiger** (2026-10-18, Wunsch des Auftraggebers): Verlässt der Tab die Leiste in irgendeine Richtung,
+  schließen die anderen die Lücke, und der Hauptprozess zeigt eine Vorschau am Zeiger (`src/main/tab-ghost.ts`): ein
+  durchsichtiges Fenster ohne Rahmen, ohne Fokus und ohne Mausereignisse, mit dem Tab als Kapsel und einem verkleinerten
+  Bild des Fensters (`capturePage`). Die Seite dazu ist `ghost.html` (zweiter Einstieg im Renderer-Build, ohne Preload,
+  Daten im Fragment der Adresse). Der Renderer meldet Beginn, Bildschirmpunkte und Ende (`window:tab-drag`). Der gezogene
+  Tab wird dabei aktiv, damit die Vorschau sein Dokument zeigt. Unsichtbare Testläufe zeigen keine Vorschau.
+- **Über einem anderen Fenster:** Der Hauptprozess meldet dem Fenster unter dem Zeiger den schwebenden Tab
+  (`window:tab-drag-hover`, Fensterkoordinaten). Liegt der Zeiger über dessen Tableiste, zeigt es einen Platzhalter am
+  Zeiger und macht an der Einfügestelle Platz; die Vorschau am Zeiger verschwindet dann (der Tab „rastet ein“). Die
+  Antwort (`window:tab-drag-hover-state`: über der Leiste, Stelle) bestimmt beim Loslassen, wo der Tab landet
+  (`TabReceived.index`). Bis der Tab ankommt, hält die Leiste die Lücke (höchstens 0,6 s).
+- **Einziger Tab eines Fensters:** lässt sich nicht umsortieren. Herausgezogen zeigt er ebenfalls die Vorschau; über einem
+  anderen Fenster losgelassen wandert er dorthin, sonst wandert das Fenster an die Stelle (wie in Safari).
+- **Neues Fenster an der Vorschau:** Der Renderer schickt mit dem Beginn den Griff (Zeiger relativ zum Fenster, so als
+  wäre der Tab der erste der Leiste). Das neue Fenster liegt so, dass der Zeiger seinen Tab an derselben Stelle hält.
 - **Fensterlage je Dokument** (`src/main/files/window-positions.ts`, `window-positions.json` im Profil, höchstens 100
   Einträge): Ein Fenster mit genau einem Dokument merkt sich beim Verschieben, Ändern der Größe und Schließen seine
   Lage für diesen Pfad (nicht für unbenannte Dokumente). Öffnet das Dokument wieder in einem eigenen Fenster, liegt es

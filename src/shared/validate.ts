@@ -11,6 +11,8 @@ import {
   type PickKind,
   type SignatureInput,
   type TabDestination,
+  type TabDragHoverState,
+  type TabDragMessage,
   type TabTransfer,
   type ViewMode,
 } from './ipc';
@@ -228,6 +230,34 @@ export function validateTabDestination(value: unknown): TabDestination | null {
   if (typeof value !== 'object' || value === null) return null;
   const v = value as Record<string, unknown>;
   if (v.kind === 'merge' || v.kind === 'new') return { kind: v.kind };
-  const coordinate = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) < 1_000_000;
-  return v.kind === 'point' && coordinate(v.x) && coordinate(v.y) ? { kind: 'point', x: v.x, y: v.y } : null;
+  return v.kind === 'point' && isCoordinate(v.x) && isCoordinate(v.y) ? { kind: 'point', x: v.x, y: v.y } : null;
+}
+
+const isCoordinate = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) < 1_000_000;
+
+function point(value: unknown): { x: number; y: number } | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const v = value as Record<string, unknown>;
+  return isCoordinate(v.x) && isCoordinate(v.y) ? { x: v.x, y: v.y } : null;
+}
+
+// Ziehen eines Tabs über die Fenstergrenze (ADR 0026)
+export function validateTabDragMessage(value: unknown): TabDragMessage | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const v = value as Record<string, unknown>;
+  if (v.kind === 'end') return { kind: 'end' };
+  if (v.kind === 'move') {
+    const at = point(v);
+    return at && typeof v.detached === 'boolean' ? { kind: 'move', ...at, detached: v.detached } : null;
+  }
+  if (v.kind !== 'start' || typeof v.title !== 'string' || v.title.length > 1024) return null;
+  const tabOffset = point(v.tabOffset);
+  const grip = point(v.grip);
+  return tabOffset && grip ? { kind: 'start', title: v.title, tabOffset, grip } : null;
+}
+
+export function validateTabDragHoverState(value: unknown): TabDragHoverState | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const v = value as Record<string, unknown>;
+  return typeof v.overBar === 'boolean' && isNonNegativeInt(v.index) && v.index <= 10_000 ? { overBar: v.overBar, index: v.index } : null;
 }

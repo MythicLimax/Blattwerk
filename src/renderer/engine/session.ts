@@ -236,9 +236,11 @@ export async function giveAllTabs(): Promise<void> {
 
 // Übernimmt einen Tab aus einem anderen Fenster. Mit Änderungen liegt der übergebene Stand als neuer Stand über der
 // Datei (wie nach einer Seitenoperation): Der Tab gilt als ungespeichert, Speichern schreibt in die Originaldatei.
-export async function receiveTab({ file, transfer }: TabReceived): Promise<void> {
+export async function receiveTab({ file, transfer, index }: TabReceived): Promise<void> {
   const tabId = crypto.randomUUID();
   useDocuments.getState().addTab({ id: tabId, fileId: file.fileId, name: file.name, dir: file.dir, size: file.size, untitled: file.untitled === true });
+  // Auf die Tableiste gezogen: an die Stelle, an der die Leiste beim Schweben Platz gemacht hat
+  if (index !== undefined) useDocuments.getState().moveTab(tabId, index);
   useAnnotations.getState().init(tabId);
   useHistory.getState().reset(tabId);
   useDocuments.getState().updateTab(tabId, { currentPage: transfer.page });
