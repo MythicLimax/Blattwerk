@@ -26,7 +26,7 @@ import { focusViewer, getRuntime } from '../../engine/runtime';
 import { useTabAnnotations } from '../../state/annotations-store';
 import { useContentEdit, type ContentTool } from '../../state/content-edit-store';
 import { canRedoState, canUndoState, useTabHistory } from '../../state/dirty';
-import type { TabState } from '../../state/documents-store';
+import { useDocuments, type TabState } from '../../state/documents-store';
 import styles from '../annotations/CommentToolbar.module.css';
 import { addImage, reflowText, toggleContentEditing } from './actions';
 import type { ParagraphStyle } from '../../../shared/content';
@@ -46,10 +46,48 @@ function applyStyle(tab: TabState, patch: ParagraphStyle): void {
     );
     return;
   }
-  const selected = store.selected[tab.id];
+  // Läuft noch eine Änderung (z. B. die eben getippte Größe), gilt die Auswahl erst danach wieder: Gestaltung vormerken
+  // und dann auf den neu ausgewählten Text anwenden, statt den Klick zu verlieren
+  if (isBusy(tab.id)) {
+    pendingStyles.set(tab.id, { ...pendingStyles.get(tab.id), ...patch });
+    void whenIdle(tab.id).then(() => {
+      const pending = pendingStyles.get(tab.id);
+      pendingStyles.delete(tab.id);
+      if (pending) applyToSelection(tab.id, pending);
+    });
+    return;
+  }
+  applyToSelection(tab.id, patch);
+}
+
+const pendingStyles = new Map<string, ParagraphStyle>();
+
+function applyToSelection(tabId: string, patch: ParagraphStyle): void {
+  const selected = useContentEdit.getState().selected[tabId];
   const unit = selected?.unit;
-  if (selected && !selected.group && unit?.kind === 'text' && !tab.working)
-    void reflowText(tab.id, selected.pageIndex, unit, unit.text ?? '', { style: patch });
+  if (selected && !selected.group && unit?.kind === 'text')
+    void reflowText(tabId, selected.pageIndex, unit, unit.text ?? '', { style: patch });
+}
+
+// Eine Änderung läuft, oder der geänderte Text ist noch nicht wieder ausgewählt
+function isBusy(tabId: string): boolean {
+  const working = useDocuments.getState().tabs.find((candidate) => candidate.id === tabId)?.working === true;
+  return working || useContentEdit.getState().reselect?.tabId === tabId;
+}
+
+// Wartet, bis der Tab nicht mehr beschäftigt ist (oder geschlossen wurde)
+function whenIdle(tabId: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (!isBusy(tabId)) return resolve();
+    const check = () => {
+      if (isBusy(tabId)) return;
+      offDocuments();
+      offContent();
+      resolve();
+    };
+    const offDocuments = useDocuments.subscribe(check);
+    const offContent = useContentEdit.subscribe(check);
+  });
 }
 
 const TOOLS: Array<{ tool: ContentTool; icon: LucideIcon }> = [
