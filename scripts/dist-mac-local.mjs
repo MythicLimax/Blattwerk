@@ -13,7 +13,7 @@ rmSync(outDir, { recursive: true, force: true });
 
 execFileSync(
   process.execPath,
-  [path.join(root, 'node_modules', 'electron-builder', 'cli.js'), '--mac', '--arm64', `--config.directories.output=${outDir}`],
+  [path.join(root, 'node_modules', 'electron-builder', 'cli.js'), '--mac', '--arm64', '--publish', 'never', `--config.directories.output=${outDir}`],
   { cwd: root, stdio: 'inherit' },
 );
 

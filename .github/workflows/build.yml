@@ -77,7 +77,13 @@ jobs:
           cache: npm
       - run: npm ci
       - name: App bauen
-        run: ${{ matrix.command }}
+        # bash auch unter Windows: Leere Secrets müssen ganz fehlen, sonst hält electron-builder „CSC_LINK=“ für einen
+        # Pfad (den Arbeitsordner) und bricht ab („not a file“)
+        shell: bash
+        run: |
+          if [ -z "$CSC_LINK" ]; then unset CSC_LINK CSC_KEY_PASSWORD; fi
+          if [ -z "$APPLE_ID" ]; then unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; fi
+          ${{ matrix.command }}
         env:
           # Optional: Apple-Developer-Zertifikat (macOS) bzw. Code-Signing-Zertifikat (Windows) als Base64
           CSC_LINK: ${{ secrets.CSC_LINK }}

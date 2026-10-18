@@ -21,9 +21,9 @@
     "test:e2e": "npm run build && playwright test",
     "fixtures": "node scripts/generate-fixtures.ts",
     "licenses": "node scripts/check-licenses.mjs",
-    "dist:mac": "npm run build && electron-builder --mac --arm64 --x64",
+    "dist:mac": "npm run build && electron-builder --mac --arm64 --x64 --publish never",
     "dist:mac:local": "npm run build && node scripts/dist-mac-local.mjs",
-    "dist:win": "npm run build && electron-builder --win --x64"
+    "dist:win": "npm run build && electron-builder --win --x64 --publish never"
   },
   "dependencies": {
     "@cantoo/pdf-lib": "2.11.1",
