@@ -5,7 +5,6 @@ import {
   EyeOff,
   FilePenLine,
   FolderOpen,
-  House,
   Highlighter,
   Ellipsis,
   Info,
@@ -252,8 +251,6 @@ export function Toolbar() {
   const { t } = useTranslation();
   const tab = useActiveTab();
   const sidebarVisible = useUi((s) => s.sidebarVisible);
-  // Startseite sichtbar: ohne Dokument immer, sonst als Überlagerung (Home-Knopf)
-  const homeShown = useUi((s) => s.homeOpen) || !tab;
   const rightPanelVisible = useUi((s) => s.rightPanelVisible);
   const commentToolsVisible = useUi((s) => s.commentToolsVisible);
   const redactToolsVisible = useUi((s) => s.redactToolsVisible);
@@ -414,13 +411,6 @@ export function Toolbar() {
       }}
     >
       <GlassGroup>
-        <IconButton
-          icon={House}
-          label={t('toolbar.home')}
-          pressed={homeShown}
-          onClick={() => executeCommand('app.home')}
-          data-testid="home-button"
-        />
         {ready && (
           <IconButton
             icon={PanelLeft}

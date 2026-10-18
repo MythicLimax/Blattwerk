@@ -7,8 +7,10 @@ To-do-Liste mit Wochenplan.
 
 ## Entscheidung
 
-- **Home-Knopf** ganz links in der Werkzeugleiste (`House`, `app.home`, Menü „Anzeige → Startseite“, ⇧⌘H). Mit offenen
-  Dokumenten legt er die Startseite als Überlagerung über den Arbeitsbereich (`ui.homeOpen`, `StartScreen overlay`);
+- **Home-Knopf** am Anfang der Tableiste, oben links (`House`, `app.home`, Menü „Anzeige → Startseite“, ⇧⌘H). Nicht in
+  der Werkzeugleiste: Unter macOS (Platz für die Ampelknöpfe) hätte die Leiste in der Standardgröße nicht mehr ganz
+  gepasst und Gruppen ins Menü „Weitere“ verschoben. Die Tableiste gibt es nur mit offenen Dokumenten; ohne Dokument ist
+  die Startseite ohnehin zu sehen. Mit offenen Dokumenten legt er die Startseite als Überlagerung über den Arbeitsbereich (`ui.homeOpen`, `StartScreen overlay`);
   die Dokumente bleiben geladen, die Leisten der Bearbeitungsmodi verschwinden solange. Zurück per Esc, „Zurück zum
   Dokument“, erneutem Klick oder sobald ein Dokument geöffnet oder der Tab gewechselt wird. Ohne Dokument ist die
   Startseite ohnehin zu sehen. Was von der Startseite geöffnet wird, öffnet wie jedes Dokument (ADR 0026): im leeren

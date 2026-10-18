@@ -1,13 +1,14 @@
-import { FileText, Loader2, Lock, TriangleAlert, X } from 'lucide-react';
+import { FileText, House, Loader2, Lock, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
-import { closeTab, transferTab } from '../engine/session';
+import { closeTab, executeCommand, transferTab } from '../engine/session';
 import { useAnnotations } from '../state/annotations-store';
 import { isDirtyState } from '../state/dirty';
 import { useForms } from '../state/forms-store';
 import { useHistory } from '../state/history-store';
 import { useDocuments, type TabState } from '../state/documents-store';
+import { useUi } from '../state/ui-store';
 import styles from './TabBar.module.css';
 import { clampDrag, hoverIndex, shiftFor, slotGap, targetIndex, type Slot } from './tab-drag';
 
@@ -138,11 +139,10 @@ function useTabDrag(bar: RefObject<HTMLDivElement | null>) {
     if (outside && !current.announced && tab) {
       const element = bar.current?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(current.tabId)}"]`);
       const rect = element?.getBoundingClientRect();
-      const barRect = bar.current?.getBoundingClientRect();
-      const padding = bar.current ? parseFloat(getComputedStyle(bar.current).paddingLeft) || 0 : 0;
       const tabOffset = { x: current.startX - (rect?.left ?? current.startX), y: current.startY - (rect?.top ?? current.startY) };
-      // Im neuen Fenster ist der Tab der erste der Leiste; der Zeiger soll ihn dort an derselben Stelle halten
-      const grip = { x: (barRect?.left ?? 0) + padding + tabOffset.x, y: current.startY };
+      // Im neuen Fenster ist der Tab der erste der Leiste (hinter dem Home-Knopf); der Zeiger soll ihn dort an derselben
+      // Stelle halten
+      const grip = { x: (current.slots[0]?.left ?? 0) + tabOffset.x, y: current.startY };
       api.tabDrag({ kind: 'start', title: tab.name, tabOffset, grip });
       current.announced = true;
     }
@@ -279,8 +279,10 @@ function useIncomingTab(bar: RefObject<HTMLDivElement | null>, tabCount: number)
       // Platzhalter am Zeiger, höchstens direkt hinter dem letzten Tab
       const last = measured[measured.length - 1];
       const padding = parseFloat(getComputedStyle(element).paddingLeft) || 0;
-      const maxLeft = last ? last.left + last.width - rect.left + gap : padding;
-      const left = Math.min(Math.max(incoming.x - rect.left - PHANTOM_WIDTH / 2, padding), maxLeft) + element.scrollLeft;
+      // Nicht vor den ersten Tab (dort sitzt der Home-Knopf)
+      const minLeft = measured[0] ? measured[0].left - rect.left : padding;
+      const maxLeft = last ? last.left + last.width - rect.left + gap : minLeft;
+      const left = Math.min(Math.max(incoming.x - rect.left - PHANTOM_WIDTH / 2, minLeft), maxLeft) + element.scrollLeft;
       show({ left, index, overBar, title: incoming.title, step: PHANTOM_WIDTH + gap });
       const key = `${overBar}:${index}`;
       if (key !== reported.current) {
@@ -321,6 +323,7 @@ export function TabBar() {
   const annotationTabs = useAnnotations((s) => s.tabs);
   const historyTabs = useHistory((s) => s.tabs);
   const formTabs = useForms((s) => s.tabs);
+  const homeOpen = useUi((s) => s.homeOpen);
   const bar = useRef<HTMLDivElement>(null);
   const drag = useTabDrag(bar);
   const incoming = useIncomingTab(bar, tabs.length);
@@ -341,6 +344,17 @@ export function TabBar() {
       aria-label={t('tabs.label')}
       data-testid="tab-bar"
     >
+      <button
+        type="button"
+        className={styles.home}
+        aria-label={t('toolbar.home')}
+        aria-pressed={homeOpen}
+        data-tooltip={t('toolbar.home')}
+        onClick={() => executeCommand('app.home')}
+        data-testid="home-button"
+      >
+        <House size={15} strokeWidth={1.9} aria-hidden="true" />
+      </button>
       {tabs.map((tab, index) => {
         const active = tab.id === activeId;
         const dragged = view?.tabId === tab.id;
