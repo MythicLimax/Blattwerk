@@ -10,6 +10,8 @@ import {
   type NamedBytes,
   type PickKind,
   type SignatureInput,
+  type TabDestination,
+  type TabTransfer,
   type ViewMode,
 } from './ipc';
 
@@ -209,4 +211,23 @@ export function isExportText(value: unknown): value is string {
 export const MAX_ID_BYTES = 1024 * 1024;
 export function isP12Bytes(value: unknown): value is Uint8Array {
   return value instanceof Uint8Array && value.length >= 16 && value.length <= MAX_ID_BYTES && value[0] === 0x30;
+}
+
+// Tab, der in ein anderes Fenster wandert (ADR 0026): Bytes nur als PDF, Kennwörter begrenzt, Seite ganzzahlig
+export function validateTabTransfer(value: unknown): TabTransfer | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const v = value as Record<string, unknown>;
+  const password = (x: unknown): x is string | null => x === null || (typeof x === 'string' && x.length <= 1024);
+  if (v.bytes !== null && !isPdfBytes(v.bytes)) return null;
+  if (!password(v.password) || !password(v.filePassword)) return null;
+  if (!isNonNegativeInt(v.page) || v.page < 1 || v.page > 1_000_000) return null;
+  return { bytes: v.bytes as Uint8Array | null, password: v.password, filePassword: v.filePassword, page: v.page };
+}
+
+export function validateTabDestination(value: unknown): TabDestination | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const v = value as Record<string, unknown>;
+  if (v.kind === 'merge' || v.kind === 'new') return { kind: v.kind };
+  const coordinate = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) < 1_000_000;
+  return v.kind === 'point' && coordinate(v.x) && coordinate(v.y) ? { kind: 'point', x: v.x, y: v.y } : null;
 }

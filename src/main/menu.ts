@@ -7,6 +7,8 @@ import { t } from './i18n';
 export interface MenuContext {
   platform: NodeJS.Platform;
   state: MenuState;
+  // Anzahl offener Fenster (jedes Dokument hat sein eigenes, ADR 0026)
+  windowCount: number;
   recent: RecentFile[];
   devTools: boolean;
   sendCommand: (command: CommandId) => void;
@@ -15,6 +17,7 @@ export interface MenuContext {
   clearRecent: () => void;
   setDefaultApp: () => void;
   chooseUpdateFolder: () => void;
+  mergeWindows: () => void;
 }
 
 const VIEW_MODE_COMMANDS: Record<ViewMode, CommandId> = {
@@ -283,6 +286,8 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       { type: 'separator' },
       cmd('window.nextTab', t('menu.window.nextTab'), { enabled: state.tabCount > 1 }),
       cmd('window.previousTab', t('menu.window.previousTab'), { enabled: state.tabCount > 1 }),
+      cmd('window.moveTabToNewWindow', t('menu.window.moveTabToNewWindow'), { enabled: state.tabCount > 1 }),
+      { id: 'window.mergeAll', label: t('menu.window.mergeAll'), enabled: ctx.windowCount > 1, click: () => ctx.mergeWindows() },
       ...(isMac ? [{ type: 'separator' as const }, { role: 'front' as const, label: t('menu.window.front') }] : []),
     ],
   };

@@ -13,10 +13,11 @@ const require = createRequire(import.meta.url);
 const pdfjsRoot = path.dirname(require.resolve('pdfjs-dist/package.json'));
 pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(pdfjsRoot, 'legacy/build/pdf.worker.mjs')).href;
 
+// pdf.js verlangt einen Schrägstrich am Ende, auch unter Windows (dort liest Node „D:\…\cmaps/Datei“ problemlos)
 const commonOptions = {
-  standardFontDataUrl: path.join(pdfjsRoot, 'standard_fonts') + path.sep,
-  cMapUrl: path.join(pdfjsRoot, 'cmaps') + path.sep,
-  wasmUrl: path.join(pdfjsRoot, 'wasm') + path.sep,
+  standardFontDataUrl: `${path.join(pdfjsRoot, 'standard_fonts')}/`,
+  cMapUrl: `${path.join(pdfjsRoot, 'cmaps')}/`,
+  wasmUrl: `${path.join(pdfjsRoot, 'wasm')}/`,
   enableXfa: false,
   verbosity: 0,
 };

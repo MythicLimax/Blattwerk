@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fixture, LARGE_PDF, PASSWORDS, TEXT_PDF } from '../fixtures/expectations';
-import { currentPage, launchApp, menuClick, menuItemState, waitForDocument } from './app';
+import { currentPage, expectWindowCount, launchApp, menuClick, menuItemState, mergeAllWindows, waitForDocument, windowWithTitle } from './app';
 
 test.describe('Start und Öffnen', () => {
   test('ohne Datei erscheint der Startbildschirm', async () => {
@@ -23,15 +23,26 @@ test.describe('Start und Öffnen', () => {
     await close();
   });
 
-  test('mehrere Dokumente in Tabs, Wechseln und Schließen', async () => {
-    const { page, close } = await launchApp([fixture('text.pdf'), fixture('formular.pdf')]);
+  test('mehrere Dokumente öffnen je ein eigenes Fenster; zusammengeführt als Tabs wechseln und schließen', async () => {
+    const { app, close } = await launchApp([fixture('text.pdf'), fixture('formular.pdf')]);
+    await expectWindowCount(app, 2);
+    const textWindow = await windowWithTitle(app, 'text.pdf');
+    await waitForDocument(textWindow, TEXT_PDF.pages);
+    await expect(textWindow.getByTestId('tab')).toHaveCount(1);
+    const formWindow = await windowWithTitle(app, 'formular.pdf');
+    await waitForDocument(formWindow, 1);
+    // Zusammenführen: Das vordere Fenster übernimmt den Tab des anderen
+    const page = await mergeAllWindows(app);
     await expect(page.getByTestId('tab')).toHaveCount(2);
-    await waitForDocument(page, 1);
-    await page.getByTestId('tab').first().click();
+    const textTab = page.getByTestId('tab').filter({ hasText: 'text.pdf' });
+    const formTab = page.getByTestId('tab').filter({ hasText: 'formular.pdf' });
+    await textTab.click();
     await waitForDocument(page, TEXT_PDF.pages);
-    await page.getByTestId('tab').first().getByRole('button').click();
-    await expect(page.getByTestId('tab')).toHaveCount(1);
+    await formTab.click();
     await waitForDocument(page, 1);
+    await formTab.getByRole('button').click();
+    await expect(page.getByTestId('tab')).toHaveCount(1);
+    await waitForDocument(page, TEXT_PDF.pages);
     await close();
   });
 

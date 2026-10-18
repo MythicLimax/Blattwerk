@@ -88,3 +88,18 @@ describe('Ungespeichert und Rückgängig über Kommentare und Seiten', () => {
     expect(canRedoState(annotations(), state())).toBe(true);
   });
 });
+
+describe('Tabs umsortieren', () => {
+  it('verschiebt einen Tab an eine andere Stelle', async () => {
+    const { useDocuments } = await import('../../src/renderer/state/documents-store');
+    const store = useDocuments.getState();
+    for (const id of ['a', 'b', 'c']) store.addTab({ id, fileId: id, name: `${id}.pdf`, dir: '/', size: 1 });
+    const order = () => useDocuments.getState().tabs.map((tab) => tab.id);
+    useDocuments.getState().moveTab('a', 2);
+    expect(order()).toEqual(['b', 'c', 'a']);
+    useDocuments.getState().moveTab('c', 0);
+    expect(order()).toEqual(['c', 'b', 'a']);
+    useDocuments.getState().moveTab('fehlt', 0);
+    expect(order()).toEqual(['c', 'b', 'a']);
+  });
+});

@@ -47,17 +47,20 @@ export async function launchApp(files: string[] = [], options: { userData?: stri
       const closing = app.close().finally(() => {
         closed = true;
       });
+      // Jedes Dokument hat sein eigenes Fenster: Rückfragen können in jedem Fenster erscheinen.
       while (!closed) {
-        try {
-          const discard = page.getByTestId('prompt-discard');
-          if (await discard.isVisible()) await discard.click({ timeout: 1000 });
-        } catch {
-          break;
+        for (const win of app.windows()) {
+          try {
+            const discard = win.getByTestId('prompt-discard');
+            if (await discard.isVisible()) await discard.click({ timeout: 1000 });
+          } catch {
+            // Fenster inzwischen geschlossen
+          }
         }
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
       await closing;
-      if (!options.keepUserData && !options.userData) rmSync(userData, { recursive: true, force: true });
+      if (!options.keepUserData && !options.userData) removeTempDir(userData);
     },
   };
 }
@@ -85,4 +88,48 @@ export async function waitForDocument(page: Page, pageCount: number): Promise<vo
 
 export async function currentPage(page: Page): Promise<number> {
   return Number(await page.getByTestId('page-input').inputValue());
+}
+
+// Mehrere Fenster (ADR 0026): Anzahl abwarten, Fenster eines Dokuments am Titel („Name – Blattwerk“) finden
+export async function expectWindowCount(app: ElectronApplication, count: number): Promise<void> {
+  await expect.poll(() => app.windows().length).toBe(count);
+}
+
+export async function windowWithTitle(app: ElectronApplication, title: string): Promise<Page> {
+  let found: Page | null = null;
+  await expect
+    .poll(async () => {
+      for (const win of app.windows()) {
+        const current = await win.title().catch(() => '');
+        if (current === title || current.startsWith(`${title} – `)) {
+          found = win;
+          return true;
+        }
+      }
+      return false;
+    })
+    .toBe(true);
+  if (!found) throw new Error(`Kein Fenster mit dem Titel ${title}`);
+  return found;
+}
+
+// „Fenster → Alle Fenster zusammenführen“: Alle Tabs landen im vorderen Fenster (unsichtbar: das zuletzt geöffnete;
+// mit BLATTWERK_E2E_SHOW das mit dem Fokus). Tests prüfen Tabs deshalb am Namen, nicht an der Reihenfolge.
+// Liefert das verbleibende Fenster.
+export async function mergeAllWindows(app: ElectronApplication): Promise<Page> {
+  await menuClick(app, 'window.mergeAll');
+  await expectWindowCount(app, 1);
+  const [win] = app.windows();
+  if (!win) throw new Error('kein Fenster');
+  return win;
+}
+
+// Temporären Testordner löschen. Unter Windows sperrt das System Dateien kurz nach dem Beenden der App noch; dann mehrfach
+// versuchen und einen übrig gebliebenen Ordner im temporären Verzeichnis hinnehmen.
+export function removeTempDir(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch (error) {
+    console.warn(`Testordner nicht gelöscht: ${dir}`, error);
+  }
 }

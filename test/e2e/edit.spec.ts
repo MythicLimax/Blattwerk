@@ -1,6 +1,6 @@
 // Phase 5: Bearbeiten (Schwärzen). Arbeitet auf Kopien bzw. im Test erzeugten PDFs.
 import { expect, test, type Page } from '@playwright/test';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -10,7 +10,7 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { Rect } from '../../src/shared/annotations';
 import { fixture, imageFixture, TEXT_PDF } from '../fixtures/expectations';
 import { AREAS, buildRedactionPdf, containsSecret, PUBLIC, SECRETS } from '../fixtures/redaction';
-import { launchApp, menuClick, menuItemState, waitForDocument } from './app';
+import { launchApp, menuClick, menuItemState, removeTempDir, waitForDocument } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 
 const require = createRequire(import.meta.url);
@@ -20,7 +20,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
 
 const tempDirs: string[] = [];
 test.afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs) removeTempDir(dir);
 });
 
 function tempDir(): string {

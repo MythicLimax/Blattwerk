@@ -84,7 +84,9 @@
       "zoom": "Zoomen",
       "front": "Alle nach vorne bringen",
       "nextTab": "Nächster Tab",
-      "previousTab": "Vorheriger Tab"
+      "previousTab": "Vorheriger Tab",
+      "moveTabToNewWindow": "Tab in neues Fenster bewegen",
+      "mergeAll": "Alle Fenster zusammenführen"
     },
     "pages": {
       "title": "Dokument",
@@ -301,7 +303,8 @@
     "label": "Geöffnete Dokumente",
     "close": "Tab schließen",
     "loading": "Wird geladen …",
-    "unsaved": "Ungespeicherte Änderungen"
+    "unsaved": "Ungespeicherte Änderungen",
+    "transferFailed": "Der Tab ließ sich nicht in das andere Fenster übernehmen."
   },
   "sidebar": {
     "label": "Seitenleiste",

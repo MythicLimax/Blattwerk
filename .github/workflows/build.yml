@@ -8,6 +8,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Ein neuer Stand bricht ältere Läufe desselben Zweigs ab
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Prüfen und testen (${{ matrix.os }})
@@ -33,8 +38,22 @@ jobs:
       - name: Große Testdatei erzeugen
         run: npm run fixtures -- --large
       - run: npm test
+      - name: Bildschirmauflösung für die Oberflächentests (Windows)
+        # Der Windows-Rechner startet mit 1024 × 768; das Fenster (1280 × 860) passt dann nicht und die Werkzeugleiste
+        # klappt Knöpfe ins Menü „Weitere Werkzeuge“
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          try { Set-DisplayResolution -Width 1920 -Height 1080 -Force } catch { Write-Host "Auflösung nicht geändert: $_" }
+          Get-CimInstance -ClassName Win32_VideoController | Select-Object CurrentHorizontalResolution, CurrentVerticalResolution
       - name: Oberflächentests
-        run: npm run test:e2e
+        # Hängende Tests sollen nicht stundenlang laufen (normal: etwa 6 Minuten)
+        timeout-minutes: 30
+        run: npm run test:e2e -- --max-failures=15
+        env:
+          # Unter Windows zeichnen verborgene Fenster kaum (jede Mausbewegung wartet), Tests laufen dann in die
+          # Zeitgrenze. Auf dem CI-Rechner sieht niemand zu; unter macOS bleiben die Fenster verborgen.
+          BLATTWERK_E2E_SHOW: ${{ runner.os == 'Windows' && '1' || '' }}
 
   package:
     name: Paket (${{ matrix.name }})

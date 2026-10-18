@@ -89,6 +89,8 @@ interface DocumentsState {
   updateTab: (id: string, patch: Partial<TabState>) => void;
   updateSearch: (id: string, patch: Partial<SearchState>) => void;
   removeTab: (id: string) => void;
+  // Tab an eine andere Stelle der Tableiste (Index in der Liste nach dem Verschieben)
+  moveTab: (id: string, index: number) => void;
   setActive: (id: string) => void;
 }
 
@@ -151,6 +153,15 @@ export const useDocuments = create<DocumentsState>((set) => ({
         activeId = tabs[Math.min(index, tabs.length - 1)]?.id ?? null;
       }
       return { tabs, activeId };
+    }),
+  moveTab: (id, index) =>
+    set((state) => {
+      const tab = state.tabs.find((candidate) => candidate.id === id);
+      if (!tab) return state;
+      const rest = state.tabs.filter((candidate) => candidate.id !== id);
+      const target = Math.max(0, Math.min(index, rest.length));
+      if (state.tabs[target] === tab) return state;
+      return { tabs: [...rest.slice(0, target), tab, ...rest.slice(target)] };
     }),
   setActive: (id) => set({ activeId: id }),
 }));

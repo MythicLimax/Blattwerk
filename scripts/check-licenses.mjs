@@ -10,8 +10,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // docs/entscheidungen/0016-digitale-signaturen.md.
 const ALLOWED = new Set(['MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'ISC', '0BSD', 'Zlib', 'BlueOak-1.0.0']);
 
+// Unter Windows ist npm ein Skript (npm.cmd), das sich nicht direkt starten lässt. Deshalb npm über Node aufrufen,
+// wenn das Skript über `npm run` läuft (npm_execpath zeigt dann auf npm-cli.js).
+const npmCli = process.env.npm_execpath;
+const [command, prefix] = npmCli && npmCli.endsWith('.js') ? [process.execPath, [npmCli]] : ['npm', []];
 const tree = JSON.parse(
-  execFileSync('npm', ['ls', '--omit=dev', '--all', '--json', '--long'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }),
+  execFileSync(command, [...prefix, 'ls', '--omit=dev', '--all', '--json', '--long'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }),
 );
 
 const seen = new Map();

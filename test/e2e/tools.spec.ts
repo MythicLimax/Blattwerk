@@ -1,15 +1,15 @@
 // Phase 6: Werkzeuge. Arbeitet auf Kopien der Test-PDFs.
 import { expect, test, type ElectronApplication } from '@playwright/test';
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fixture, PASSWORDS, TEXT_PDF } from '../fixtures/expectations';
-import { launchApp, menuClick, waitForDocument } from './app';
+import { expectWindowCount, launchApp, menuClick, removeTempDir, waitForDocument, windowWithTitle } from './app';
 import { unlockWithPdfKit } from './pdfkit';
 
 const tempDirs: string[] = [];
 test.afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs) removeTempDir(dir);
 });
 
 function copyOf(name: string): { dir: string; file: string } {
@@ -235,9 +235,10 @@ test.describe('Vergleichen', () => {
       dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [picked] })) as typeof dialog.showOpenDialog;
     }, newer);
     await menuClick(handle.app, 'tools.compare');
-    await expect(handle.page.getByTestId('tab')).toHaveCount(2);
-    await waitForDocument(handle.page, 2);
-    await expect(handle.page.getByTestId('tab').nth(1)).toContainText('vergleich.pdf');
+    // Der Bericht öffnet in einem eigenen Fenster (ADR 0026)
+    await expectWindowCount(handle.app, 2);
+    await waitForDocument(await windowWithTitle(handle.app, 'vergleich.pdf'), 2);
+    await expect(handle.page.getByTestId('tab')).toHaveCount(1);
     expect(readFileSync(report).subarray(0, 5).toString()).toBe('%PDF-');
     await handle.close();
   });

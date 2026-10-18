@@ -31,7 +31,8 @@ describe('atomicWrite', () => {
     await chmod(target, 0o600);
     await atomicWrite(target, 'neu');
     expect(await readFile(target, 'utf8')).toBe('neu');
-    expect((await stat(target)).mode & 0o777).toBe(0o600);
+    // Unix-Dateirechte gibt es unter Windows nicht (Node meldet dort immer 0o666 bzw. 0o444)
+    if (process.platform !== 'win32') expect((await stat(target)).mode & 0o777).toBe(0o600);
   });
 
   it('lässt das Ziel unverändert, wenn das Ersetzen scheitert', async () => {
@@ -131,5 +132,57 @@ describe('FileRegistry', () => {
     await registry.open(fixture('scan.pdf'), 8);
     await registry.closeAllOwnedBy(7);
     expect(registry.openCount).toBe(1);
+  });
+
+  it('kennt das Fenster eines Dokuments; Quelldateien zählen nicht als Dokument', async () => {
+    const registry = new FileRegistry();
+    await registry.open(fixture('text.pdf'), 7);
+    // Quelldatei zum Einfügen oder Vergleichen
+    await registry.open(fixture('formular.pdf'), 8, 'pdf');
+    expect(registry.documentOwner(fixture('text.pdf'))).toBe(7);
+    expect(registry.documentOwner(fixture('formular.pdf'))).toBeNull();
+    expect(registry.hasDocuments(7)).toBe(true);
+    expect(registry.hasDocuments(8)).toBe(false);
+  });
+
+  it('gibt offene Dateien unter Windows zum Überschreiben frei und öffnet sie danach wieder', async () => {
+    const target = path.join(dir, 'offen.pdf');
+    await writeFile(target, await readFile(fixture('text.pdf')));
+    const registry = new FileRegistry();
+    const result = await registry.open(target, 1);
+    if (!result.ok) throw new Error('öffnen fehlgeschlagen');
+    const { fileId } = result.file;
+    await registry.whileReleased(
+      target,
+      async () => {
+        // Während des Schreibens kein Lesen aus der alten Datei
+        await expect(registry.read(fileId, 0, 5, 1)).rejects.toThrow('file-changed');
+      },
+      'win32',
+    );
+    // Unverändert: Lesen geht wieder
+    expect(new TextDecoder().decode(await registry.read(fileId, 0, 5, 1))).toBe('%PDF-');
+    // Scheitert das Schreiben, bleibt die Datei lesbar
+    await expect(registry.whileReleased(target, async () => Promise.reject(new Error('kaputt')), 'win32')).rejects.toThrow('kaputt');
+    await expect(registry.read(fileId, 0, 5, 1)).resolves.toHaveLength(5);
+    await registry.close(fileId, 1);
+  });
+
+  it('gibt eine Datei an ein anderes Fenster weiter, ohne sie neu zu öffnen', async () => {
+    const registry = new FileRegistry();
+    const result = await registry.open(fixture('text.pdf'), 7);
+    if (!result.ok) throw new Error('öffnen fehlgeschlagen');
+    const { fileId } = result.file;
+    expect(registry.transfer(fileId, 8, 9)).toBe(false);
+    expect(registry.transfer(fileId, 7, 9)).toBe(true);
+    // Das alte Fenster hat keinen Zugriff mehr; sein Schließen ist wirkungslos
+    await expect(registry.read(fileId, 0, 5, 7)).rejects.toThrow('unknown-file');
+    await registry.close(fileId, 7);
+    expect(registry.openCount).toBe(1);
+    expect(registry.infoOf(fileId, 9)?.name).toBe('text.pdf');
+    expect(await registry.isUnchangedOnDisk(fileId, 9)).toBe(true);
+    expect(registry.documentOwner(fixture('text.pdf'))).toBe(9);
+    await registry.close(fileId, 9);
+    expect(registry.openCount).toBe(0);
   });
 });

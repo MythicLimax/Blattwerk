@@ -2,7 +2,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { existsSync } from 'node:fs';
 import { fixture, LARGE_PDF, TEXT_PDF } from '../fixtures/expectations';
-import { currentPage, launchApp, menuClick, menuItemState, waitForDocument } from './app';
+import { currentPage, expectWindowCount, launchApp, menuClick, menuItemState, mergeAllWindows, waitForDocument, windowWithTitle } from './app';
 
 const activePane = (page: Page) => page.locator('[data-testid="active-pane"]');
 
@@ -13,14 +13,16 @@ test('mehrere Dateien öffnen: Abbrechen der Kennwortabfrage hält die übrigen 
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: paths })) as typeof dialog.showOpenDialog;
   }, [fixture('verschluesselt.pdf'), fixture('text.pdf')]);
   await page.getByTestId('open-button').click();
-  await expect(page.getByTestId('tab')).toHaveCount(2);
+  // Die erste Datei öffnet im leeren Fenster, die zweite in einem eigenen (ADR 0026).
+  await expectWindowCount(app, 2);
+  await expect(page.getByTestId('tab')).toHaveCount(1);
   // text.pdf lädt, obwohl für die erste Datei noch das Kennwort fehlt.
-  await waitForDocument(page, TEXT_PDF.pages);
-  await page.getByTestId('tab').first().click();
+  const second = await windowWithTitle(app, 'text.pdf');
+  await waitForDocument(second, TEXT_PDF.pages);
   await expect(page.getByTestId('password-dialog')).toBeVisible();
   await page.getByTestId('password-dialog').getByRole('button', { name: 'Abbrechen' }).click();
-  await expect(page.getByTestId('tab')).toHaveCount(1);
-  await waitForDocument(page, TEXT_PDF.pages);
+  await expect(page.getByTestId('tab')).toHaveCount(0);
+  await waitForDocument(second, TEXT_PDF.pages);
   await close();
 });
 
@@ -103,16 +105,23 @@ test('Suchergebnis anklicken wählt genau diesen Treffer aus', async () => {
 });
 
 test('Suchfeld leeren entfernt die Ergebnisse; Tabwechsel behält die Markierungen', async () => {
-  const { page, close } = await launchApp([fixture('text.pdf'), fixture('kaputte-xref.pdf')]);
+  const { app, close } = await launchApp([fixture('text.pdf'), fixture('kaputte-xref.pdf')]);
+  await expectWindowCount(app, 2);
+  await waitForDocument(await windowWithTitle(app, 'kaputte-xref.pdf'), TEXT_PDF.pages);
+  // Beide Dokumente als Tabs in einem Fenster
+  const page = await mergeAllWindows(app);
   await expect(page.getByTestId('tab')).toHaveCount(2);
+  const textTab = page.getByTestId('tab').filter({ hasText: 'text.pdf' }).filter({ hasNotText: 'kaputte' });
+  const otherTab = page.getByTestId('tab').filter({ hasText: 'kaputte-xref.pdf' });
+  await textTab.click();
   await waitForDocument(page, TEXT_PDF.pages);
   await page.getByTestId('search-button').click();
   await page.getByTestId('search-input').fill(TEXT_PDF.searchTerm);
   await expect(page.getByTestId('search-results').locator('li')).toHaveCount(TEXT_PDF.searchHits);
 
-  await page.getByTestId('tab').first().click();
+  await otherTab.click();
   await waitForDocument(page, TEXT_PDF.pages);
-  await page.getByTestId('tab').last().click();
+  await textTab.click();
   await expect(activePane(page).locator('.textLayer .highlight').first()).toBeVisible();
   // Der Tabwechsel holt den Fokus nicht ins Suchfeld.
   expect(await page.evaluate(() => document.activeElement?.getAttribute('data-testid'))).not.toBe('search-input');
@@ -125,6 +134,8 @@ test('Suchfeld leeren entfernt die Ergebnisse; Tabwechsel behält die Markierung
 });
 
 test('„Liste leeren“ auf dem Startbildschirm leert auch die Liste des Systems', async () => {
+  // Die Liste des Systems gibt es nur unter macOS (Dock) und Windows (Sprungliste)
+  test.skip(process.platform === 'linux', 'keine Systemliste unter Linux');
   const first = await launchApp([fixture('text.pdf')], { keepUserData: true });
   await waitForDocument(first.page, TEXT_PDF.pages);
   await first.app.close();
@@ -157,9 +168,9 @@ test('Absturz der Anzeige: Neu laden stellt die App wieder her', async () => {
         app.evaluate(async ({ BrowserWindow }) => {
           const contents = BrowserWindow.getAllWindows()[0]?.webContents;
           if (!contents || contents.isCrashed() || contents.isLoading()) return false;
-          return contents
-            .executeJavaScript('Boolean(document.querySelector(\'[data-testid="start-screen"]\'))')
-            .catch(() => false);
+          // Während des Neuladens kommt die Antwort unter Linux und Windows nie zurück: höchstens 1 s warten
+          const query = contents.executeJavaScript('Boolean(document.querySelector(\'[data-testid="start-screen"]\'))').catch(() => false);
+          return Promise.race([query, new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000))]);
         }),
       { timeout: 20_000 },
     )
@@ -195,7 +206,8 @@ test('Fenster schließen fragt bei Änderungen nach und beendet dann die App (au
   await page.getByTestId('prompt-cancel').click();
   await expect(page.getByTestId('tab')).toHaveCount(1);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
-  await page.getByTestId('prompt-discard').click();
+  // Die App kann sich beenden, bevor Playwright den Klick bestätigt bekommt
+  await page.getByTestId('prompt-discard').click().catch(() => undefined);
   await exited;
 });
 

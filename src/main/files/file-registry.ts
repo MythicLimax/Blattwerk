@@ -21,10 +21,19 @@ function accepts(accept: PickKind | 'pdf-only', kind: FileKind): boolean {
 interface OpenFile {
   info: FileInfo;
   path: string;
-  handle: fs.FileHandle;
+  // null, solange die Datei unter Windows zum Überschreiben freigegeben ist (whileReleased)
+  handle: fs.FileHandle | null;
   ownerId: number;
+  // Dokument in einem Tab (nicht Quelldatei zum Einfügen, Zusammenführen oder Vergleichen)
+  document: boolean;
   // Stand beim Öffnen. Ändert sich die Datei danach, liefern Lesezugriffe einen Fehler statt falscher Daten.
   mtimeMs: number;
+}
+
+function normalizePath(filePath: string, platform: NodeJS.Platform = process.platform): string {
+  const resolved = path.resolve(filePath);
+  // macOS und Windows unterscheiden Groß- und Kleinschreibung in Dateinamen normalerweise nicht
+  return platform === 'linux' ? resolved : resolved.toLowerCase();
 }
 
 export class FileChangedError extends Error {
@@ -81,7 +90,7 @@ export class FileRegistry {
       return { ok: false, error: 'unreadable', name };
     }
     const info: FileInfo = { fileId: randomUUID(), name, dir: path.dirname(filePath), size: opened.size, kind };
-    this.#files.set(info.fileId, { info, path: filePath, handle, ownerId, mtimeMs: opened.mtimeMs });
+    this.#files.set(info.fileId, { info, path: filePath, handle, ownerId, document: accept === 'pdf-only', mtimeMs: opened.mtimeMs });
     return { ok: true, file: info };
   }
 
@@ -90,13 +99,16 @@ export class FileRegistry {
     if (!file || file.ownerId !== ownerId) throw new Error('unknown-file');
     const range = validateReadRange(begin, end, file.info.size);
     if (!range) throw new Error('invalid-range');
-    const current = await file.handle.stat();
+    const handle = file.handle;
+    // Datei wird gerade überschrieben (Windows): wie eine von außen geänderte Datei behandeln
+    if (!handle) throw new FileChangedError();
+    const current = await handle.stat();
     if (current.size !== file.info.size || current.mtimeMs !== file.mtimeMs) throw new FileChangedError();
     const length = range.end - range.begin;
     const buffer = new Uint8Array(length);
     let offset = 0;
     while (offset < length) {
-      const { bytesRead } = await file.handle.read(buffer, offset, length - offset, range.begin + offset);
+      const { bytesRead } = await handle.read(buffer, offset, length - offset, range.begin + offset);
       if (bytesRead === 0) break;
       offset += bytesRead;
     }
@@ -128,13 +140,67 @@ export class FileRegistry {
 
   // true, wenn diese Datei (gleicher Pfad) gerade in irgendeinem Tab geöffnet ist
   isOpenPath(filePath: string): boolean {
-    const normalize = (p: string) => {
-      const resolved = path.resolve(p);
-      // macOS und Windows unterscheiden Groß- und Kleinschreibung in Dateinamen normalerweise nicht
-      return process.platform === 'linux' ? resolved : resolved.toLowerCase();
-    };
-    const wanted = normalize(filePath);
-    return [...this.#files.values()].some((file) => normalize(file.path) === wanted);
+    const wanted = normalizePath(filePath);
+    return [...this.#files.values()].some((file) => normalizePath(file.path) === wanted);
+  }
+
+  // Fenster (webContents-ID), in dem diese Datei als Dokument in einem Tab offen ist; sonst null
+  documentOwner(filePath: string): number | null {
+    const wanted = normalizePath(filePath);
+    return [...this.#files.values()].find((file) => file.document && normalizePath(file.path) === wanted)?.ownerId ?? null;
+  }
+
+  // Pfade der Dokumente in den Tabs eines Fensters
+  documentPaths(ownerId: number): string[] {
+    return [...this.#files.values()].filter((file) => file.document && file.ownerId === ownerId).map((file) => file.path);
+  }
+
+  // true, wenn das Fenster mindestens ein Dokument in einem Tab hat
+  hasDocuments(ownerId: number): boolean {
+    return [...this.#files.values()].some((file) => file.document && file.ownerId === ownerId);
+  }
+
+  // Angaben zu einer geöffneten Datei (für die Übergabe eines Tabs)
+  infoOf(fileId: string, ownerId: number): FileInfo | null {
+    const file = this.#files.get(fileId);
+    return file && file.ownerId === ownerId ? file.info : null;
+  }
+
+  // Gibt eine geöffnete Datei an ein anderes Fenster weiter (Tab wandert, ADR 0026). Handle und Stand beim Öffnen
+  // bleiben, damit Änderungen von außen weiterhin erkannt werden.
+  transfer(fileId: string, fromOwner: number, toOwner: number): boolean {
+    const file = this.#files.get(fileId);
+    if (!file || file.ownerId !== fromOwner) return false;
+    file.ownerId = toOwner;
+    return true;
+  }
+
+  // Windows lässt eine Datei, die noch geöffnet ist, nicht ersetzen. Vor dem Überschreiben (Speichern über eine offene
+  // Datei) schließt das Register deshalb alle Handles auf diesen Pfad und öffnet sie danach wieder. Hat sich die Datei
+  // geändert, melden spätere Lesezugriffe das wie eine Änderung von außen. Andere Systeme ersetzen offene Dateien
+  // problemlos; dort läuft write unverändert.
+  async whileReleased<T>(filePath: string, write: () => Promise<T>, platform: NodeJS.Platform = process.platform): Promise<T> {
+    if (platform !== 'win32') return write();
+    const wanted = normalizePath(filePath, platform);
+    const affected = [...this.#files.values()].filter((file) => file.handle && normalizePath(file.path, platform) === wanted);
+    for (const file of affected) {
+      const handle = file.handle;
+      file.handle = null;
+      await handle?.close().catch(() => undefined);
+    }
+    try {
+      return await write();
+    } finally {
+      for (const file of affected) {
+        // Inzwischen geschlossen (z. B. durch reopen nach dem Speichern): nichts wieder zu öffnen
+        if (this.#files.get(file.info.fileId) !== file || file.handle) continue;
+        try {
+          file.handle = await fs.open(file.path, 'r');
+        } catch {
+          file.handle = null;
+        }
+      }
+    }
   }
 
   pathOf(fileId: string, ownerId: number): string | null {
@@ -146,7 +212,7 @@ export class FileRegistry {
     const file = this.#files.get(fileId);
     if (!file || file.ownerId !== ownerId) return;
     this.#files.delete(fileId);
-    await file.handle.close().catch(() => undefined);
+    await file.handle?.close().catch(() => undefined);
   }
 
   async closeAllOwnedBy(ownerId: number): Promise<void> {

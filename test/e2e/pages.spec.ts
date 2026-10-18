@@ -1,13 +1,13 @@
 // Phase 3: Seiten organisieren. Arbeitet auf Kopien der Test-PDFs; Systemdialoge werden im Hauptprozess ersetzt.
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { COMMENTS_PDF, fixture, imageFixture, PASSWORDS, TEXT_PDF } from '../fixtures/expectations';
-import { launchApp, menuClick, waitForDocument, type AppHandle } from './app';
+import { expectWindowCount, launchApp, menuClick, removeTempDir, waitForDocument, windowWithTitle, type AppHandle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 
 const require = createRequire(import.meta.url);
@@ -17,7 +17,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
 
 const tempDirs: string[] = [];
 test.afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs) removeTempDir(dir);
 });
 
 function tempDir(): string {
@@ -192,8 +192,10 @@ test.describe('Seiten organisieren', () => {
     await menuClick(app, 'pages.extract');
     await page.getByTestId('extract-pages-input').fill('2-3, 7');
     await page.getByTestId('extract-pages-ok').click();
-    await expect(page.getByTestId('tab')).toHaveCount(2);
-    await waitForDocument(page, 3);
+    // Das neue Dokument öffnet in einem eigenen Fenster (ADR 0026)
+    await expectWindowCount(app, 2);
+    await waitForDocument(await windowWithTitle(app, 'auszug.pdf'), 3);
+    await expect(page.getByTestId('tab')).toHaveCount(1);
     expect(await footers(target)).toEqual([2, 3, 7]);
     // Das Ausgangsdokument bleibt unverändert und ohne ungespeicherte Änderungen
     await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
@@ -231,8 +233,10 @@ test.describe('Seiten organisieren', () => {
     await page.getByTestId('split-size').fill('5');
     await expect(page.getByTestId('split-summary')).toHaveText('Ergibt 3 Dateien.');
     await page.getByTestId('split-ok').click();
-    await expect.poll(() => readdirSync(byCount).length).toBe(3);
-    const parts = readdirSync(byCount).sort();
+    // Nur fertige Dateien zählen: Während des Schreibens liegt eine temporäre Datei „.Name.tmp“ daneben (atomicWrite)
+    const finished = (dir: string) => readdirSync(dir).filter((name) => !name.startsWith('.'));
+    await expect.poll(() => finished(byCount).length).toBe(3);
+    const parts = finished(byCount).sort();
     expect(parts[0]).toBe('kopie-text – Teil 1.pdf');
     expect(await pageCount(path.join(byCount, parts[2] as string))).toBe(2);
 
@@ -241,8 +245,8 @@ test.describe('Seiten organisieren', () => {
     await page.getByTestId('split-by-bookmarks').check();
     await expect(page.getByTestId('split-summary')).toHaveText('Ergibt 4 Dateien.');
     await page.getByTestId('split-ok').click();
-    await expect.poll(() => readdirSync(byBookmarks).length).toBe(4);
-    const chapters = readdirSync(byBookmarks).sort();
+    await expect.poll(() => finished(byBookmarks).length).toBe(4);
+    const chapters = finished(byBookmarks).sort();
     const counts = await Promise.all(chapters.map((name) => pageCount(path.join(byBookmarks, name))));
     expect(counts).toEqual([2, 3, 4, 3]);
     await handle.close();

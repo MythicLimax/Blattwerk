@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { isCommandId } from '../shared/commands';
-import { IPC, type MenuCommandMessage, type OpenResult } from '../shared/ipc';
+import { IPC, type MenuCommandMessage, type OpenResult, type TabReceived } from '../shared/ipc';
 import type { BlattwerkApi } from './api-types';
 
 // Kleine, feste Schnittstelle. Der Renderer bekommt nie direkten Zugriff auf ipcRenderer.
@@ -77,6 +77,11 @@ const api: BlattwerkApi = {
   setAuthorName: (name) => ipcRenderer.invoke(IPC.settingsSetAuthor, name),
   confirmClose: () => ipcRenderer.send(IPC.closeConfirmed),
   cancelClose: () => ipcRenderer.send(IPC.closeCancelled),
+  closeWindow: () => ipcRenderer.send(IPC.closeWindow),
+  transferTab: (fileId, transfer, destination) => ipcRenderer.invoke(IPC.tabTransfer, fileId, transfer, destination),
+  onTabReceived: (listener) =>
+    subscribe(IPC.tabReceived, (p) => (typeof p === 'object' && p !== null ? (p as TabReceived) : null), listener),
+  onMergeRequest: (listener) => subscribe(IPC.mergeRequest, () => true, () => listener()),
   onRequestClose: (listener) => subscribe(IPC.requestClose, () => true, () => listener()),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
   setMenuState: (state) => ipcRenderer.send(IPC.menuState, state),
