@@ -26,7 +26,8 @@ Stand: 2026-10-16 · Wunsch des Auftraggebers: neue Versionen nicht mehr von Han
 ## Verworfen
 
 - **electron-updater / Squirrel:** braucht einen Server im Netz und unter macOS eine kostenpflichtige Apple-Signatur.
-- **Update aus dem Netz laden:** widerspricht der Netzsperre der Spezifikation.
+- **Update aus dem Netz laden:** widerspricht der Netzsperre der Spezifikation. Später auf Wunsch des Auftraggebers doch
+  ergänzt, eng begrenzt auf GitHub: [0027](0027-updates-aus-dem-netz.md).
 
 ## Grenzen
 

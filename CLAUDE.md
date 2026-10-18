@@ -89,6 +89,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - **Textdokumente → PDF** ([ADR 0019](docs/entscheidungen/0019-textdokumente-umwandeln.md)): im Hauptprozess, `src/main/convert/` (eigene Leser für DOCX, ODT, RTF, Text, Markdown → `model.ts` → `html.ts`; `pdf.ts` setzt mit `printToPDF` in einem unsichtbaren Fenster mit eigener Sitzung ohne Netz und ohne JavaScript). IPC `convert:pick`, `convert:dropped`; abgelegte Textdokumente erkennt `isDocumentFileName` (`src/shared/convert.ts`).
 - **Leeres Dokument** („Unbenannt“, ⌘N, Startseite): `src/main/files/blank-document.ts` legt eine A4-Seite im temporären Ordner an (wird beim Beenden gelöscht, nicht in „Zuletzt geöffnet“). `TabState.untitled`: Sichern wird zu Sichern unter (Vorschlag im Ordner Dokumente); danach normales Dokument. Öffnet gleich im Modus „Text und Bilder bearbeiten“.
 - **Updates** ([ADR 0025](docs/entscheidungen/0025-updates.md)): ohne Internet aus einem Update-Ordner (`userData/Updates`, optional eigener Ordner `updateFolder`). macOS: `Blattwerk.app` (App-ID, höhere Version, gültige Signatur), Windows: `Blattwerk-Setup-<Version>.exe`. `src/main/update/` (prüfen, beim `will-quit` Hilfsskript starten), Leiste `features/update/`. `dist:mac:local` legt die neue App in den Update-Ordner.
+- **Updates aus dem Netz** ([ADR 0027](docs/entscheidungen/0027-updates-aus-dem-netz.md)): CI-Job „Veröffentlichen“ stellt jede neue Version (`package.json`) als Release in das öffentliche Projekt `MythicLimax/Blattwerk-Downloads` (Secret `DOWNLOADS_TOKEN`). „Nach Updates suchen …“ und still beim Start (höchstens alle 12 h) lädt `src/main/update/online.ts` die passende Datei in den Update-Ordner (macOS `-mac.zip`, entpackt mit `ditto`), dann weiter wie oben. **Für jede Auslieferung die Version erhöhen.**
 - Es ist immer höchstens ein Bearbeitungsmodus aktiv (Kommentieren, Schwärzen, Formular bearbeiten, Inhalt bearbeiten, Seiten organisieren).
 - Dieses Verfahren (Snapshot der Dokumentbytes) gilt für Seiten-, Feld-, Wasserzeichen- und Inhaltsänderungen sowie für das Schwärzen. Nach dem Speichern beginnt der Verlauf neu.
 
@@ -104,7 +105,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ### Sicherheit
 
 - `BrowserWindow`: `contextIsolation`, `sandbox`, `webSecurity` an, `nodeIntegration` aus. Navigation und `window.open` gesperrt (`src/main/security.ts`).
-- Alle App-Dateien kommen über `app://bundle/` (`src/main/protocol.ts`). Die CSP (`script-src 'self' 'wasm-unsafe-eval'`, `default-src 'none'`) steht in **jeder** Antwort, damit sie auch für Worker gilt. **Netzwerk ist komplett gesperrt** (`session.webRequest`), nur `app:`, `blob:`, `data:` sind erlaubt.
+- Alle App-Dateien kommen über `app://bundle/` (`src/main/protocol.ts`). Die CSP (`script-src 'self' 'wasm-unsafe-eval'`, `default-src 'none'`) steht in **jeder** Antwort, damit sie auch für Worker gilt. **Netzwerk ist im Renderer komplett gesperrt** (`session.webRequest`), nur `app:`, `blob:`, `data:` sind erlaubt. Einzige Ausnahme im Hauptprozess: Updates von GitHub (ADR 0027, nur HTTPS, feste Hosts, jede Weiterleitung geprüft).
 - **JavaScript in PDFs wird nie ausgeführt:** pdf.js bekommt keinen Scripting-Manager (ohne ihn läuft kein PDF-JavaScript), `enableXfa: false`. Die frühere Option `isEvalSupported` gibt es in pdf.js 6 nicht mehr; pdf.js nutzt kein `eval`.
 - Externe Links: nur `http`, `https`, `mailto`, keine Zugangsdaten im Host-Teil, nur nach Rückfrage mit angezeigtem Zielserver (Punycode).
 - IPC: feste Kanalliste (`src/shared/ipc.ts`), Absender wird geprüft, Argumente validiert (`src/shared/validate.ts`). Drop-Pfade nur absolut und lokal (keine UNC-Pfade). Quelldateien (PDF, JPEG, PNG) werden am Inhalt erkannt (`file-registry.ts`), Bilder über 100 Megapixel abgelehnt. Gespeicherte Unterschriften prüft der Hauptprozess (PNG, höchstens 2 MB und 4000 px, höchstens 20).
@@ -124,7 +125,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0026)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0027)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index (Fenster je Dokument), window, window-layout, menu, ipc, security, protocol(+paths), print,

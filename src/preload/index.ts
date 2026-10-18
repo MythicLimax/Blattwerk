@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { isCommandId } from '../shared/commands';
 import { IPC, type MenuCommandMessage, type OpenResult, type TabDragHover, type TabReceived } from '../shared/ipc';
+import type { OnlineCheck, UpdateProgress } from '../shared/update';
 import type { BlattwerkApi } from './api-types';
 
 // Kleine, feste Schnittstelle. Der Renderer bekommt nie direkten Zugriff auf ipcRenderer.
@@ -45,6 +46,9 @@ const api: BlattwerkApi = {
   update: {
     status: () => ipcRenderer.invoke(IPC.updateStatus),
     install: () => ipcRenderer.invoke(IPC.updateInstall),
+    checkOnline: () => ipcRenderer.invoke(IPC.updateCheckOnline),
+    onProgress: (listener) => subscribe(IPC.updateProgress, (p) => (typeof p === 'object' && p !== null ? (p as UpdateProgress) : null), listener),
+    onResult: (listener) => subscribe(IPC.updateResult, (p) => (typeof p === 'object' && p !== null ? (p as OnlineCheck) : null), listener),
   },
   fonts: {
     list: () => ipcRenderer.invoke(IPC.fontsList),

@@ -31,7 +31,8 @@ export class TabGhost {
     let image: string;
     try {
       const shot = await this.options.source.webContents.capturePage();
-      image = shot.resize({ width: this.layout.preview.width * 2, quality: 'good' }).toJPEG(80).toString('base64');
+      // PNG: Mit Apples Glas sind Teile des Fensters durchsichtig (als JPEG würden sie schwarz)
+      image = shot.resize({ width: this.layout.preview.width * 2, quality: 'good' }).toPNG().toString('base64');
     } catch {
       image = '';
     }
@@ -60,7 +61,7 @@ export class TabGhost {
     this.win = win;
     const data = {
       title: this.options.title,
-      image: image ? `data:image/jpeg;base64,${image}` : '',
+      image: image ? `data:image/png;base64,${image}` : '',
       preview: this.layout.preview,
       dark: nativeTheme.shouldUseDarkColors,
     };

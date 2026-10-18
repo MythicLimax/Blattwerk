@@ -19,6 +19,7 @@ import {
   type TabTransferResult,
 } from '../shared/ipc';
 import { APP_ID, APP_ORIGIN, PRODUCT_NAME } from '../shared/product';
+import type { OnlineCheck } from '../shared/update';
 import { FileRegistry } from './files/file-registry';
 import { RecentFiles } from './files/recent-files';
 import { SignatureStore } from './files/signatures';
@@ -34,6 +35,7 @@ import { boundsAtPoint, cascadeFrom, dropTarget, type Point } from './window-lay
 import { TabGhost } from './tab-ghost';
 import { isBlankDocumentPath, removeBlankDocuments } from './files/blank-document';
 import { defaultUpdateFolder, runPendingInstall, setCustomUpdateFolder } from './update/updater';
+import { checkOnline } from './update/online';
 import { attachNativeGlass, describeNativeGlass, nativeGlassAvailable } from './native-glass';
 
 // Testschalter wirken nur beim Entwickeln, nie in der installierten App.
@@ -197,8 +199,24 @@ function sendOpenResult(win: BrowserWindow | null, result: OpenResult): void {
   if (win && !win.isDestroyed()) win.webContents.send(IPC.fileOpened, result);
 }
 
-function broadcast(channel: string): void {
-  for (const ctx of windows.values()) if (!ctx.win.isDestroyed()) ctx.win.webContents.send(channel);
+function broadcast(channel: string, payload?: unknown): void {
+  for (const ctx of windows.values()) if (!ctx.win.isDestroyed()) ctx.win.webContents.send(channel, payload);
+}
+
+// Neue Version im Netz suchen und laden (ADR 0027); alle Fenster sehen Fortschritt und Ergebnis
+async function checkUpdatesOnline(): Promise<OnlineCheck> {
+  saveSettings({ lastUpdateCheck: Date.now() });
+  const result = await checkOnline((progress) => broadcast(IPC.updateProgress, progress));
+  broadcast(IPC.updateResult, result);
+  return result;
+}
+
+// Beim Start höchstens alle 12 Stunden still nachsehen; nur die installierte App, nie in Testläufen
+const AUTO_CHECK_INTERVAL = 12 * 60 * 60 * 1000;
+function scheduleAutoUpdateCheck(): void {
+  if (!app.isPackaged || runHidden || isE2E) return;
+  const due = (settings.lastUpdateCheck ?? 0) + AUTO_CHECK_INTERVAL <= Date.now();
+  if (due) setTimeout(() => void checkUpdatesOnline().catch(() => undefined), 5000);
 }
 
 async function rememberRecent(filePath: string): Promise<void> {
@@ -728,6 +746,7 @@ void app.whenReady().then(async () => {
     transferTab,
     onTabDrag,
     onTabDragHoverState,
+    checkUpdatesOnline,
     quit: () => app.quit(),
   });
 
@@ -737,4 +756,5 @@ void app.whenReady().then(async () => {
   const [first, ...rest] = startupPaths.splice(0);
   createWindow({ pending: first ? [{ kind: 'path', path: first }] : [] });
   for (const p of rest) requestOpen(p);
+  scheduleAutoUpdateCheck();
 });

@@ -1220,8 +1220,19 @@
     "unsupported": "Updates sind hier nicht möglich.",
     "reasons": {
       "development": "Das ist die Entwicklungsfassung.",
-      "platform": "Updates in der App gibt es nur unter macOS.",
+      "platform": "Updates in der App gibt es nur unter macOS und Windows.",
       "location": "Die App läuft nicht aus dem Programme-Ordner (z. B. direkt vom Disk-Image). Bitte einmal in „Programme“ ziehen."
+    },
+    "searching": "Suche nach einer neuen Version …",
+    "downloading": "Version {{version}} wird geladen …",
+    "downloadProgress": "{{percent}} % von {{total}} MB",
+    "downloadedMb": "{{received}} MB geladen",
+    "failed": {
+      "title": "Keine neue Version geladen",
+      "offline": "GitHub ist gerade nicht erreichbar. Besteht eine Internetverbindung?",
+      "no-release": "Für dieses System liegt noch keine Version zum Laden bereit.",
+      "download": "Das Laden ist abgebrochen. Bitte später noch einmal versuchen.",
+      "invalid": "Die geladene Datei ist keine gültige Version von {{appName}}."
     }
   },
   "mark": {

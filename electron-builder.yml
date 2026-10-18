@@ -42,6 +42,9 @@ mac:
   icon: build/icon.png
   target:
     - target: dmg
+    # Für Updates aus der App (ADR 0027): die App als Archiv, das der Updater entpackt
+    - target: zip
+  artifactName: ${productName}-${version}-${arch}-mac.${ext}
   # Ad-hoc-Signatur: nötig, damit die App auf Apple Silicon startet. Für Weitergabe an andere
   # braucht es ein Apple-Developer-Zertifikat und Notarisierung (dann identity setzen, hardenedRuntime an).
   identity: '-'

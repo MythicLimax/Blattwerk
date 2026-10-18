@@ -32,6 +32,8 @@ export const IPC = {
   // Updates ohne Internet (ADR 0025): Stand prüfen, bereitliegendes Update beim Beenden einspielen
   updateStatus: 'update:status',
   updateInstall: 'update:install',
+  // Neue Version im Netz suchen und laden (ADR 0027)
+  updateCheckOnline: 'update:check-online',
   // Phase 4: gespeicherte Unterschriften
   signaturesList: 'signatures:list',
   signaturesAdd: 'signatures:add',
@@ -72,6 +74,9 @@ export const IPC = {
   mergeRequest: 'window:merge-request',
   // Ein Tab aus einem anderen Fenster schwebt über diesem Fenster (null: nicht mehr)
   tabDragHover: 'window:tab-drag-hover',
+  // Laden einer neuen Version: Fortschritt und Ergebnis (auch bei der Suche beim Start)
+  updateProgress: 'update:progress',
+  updateResult: 'update:result',
 } as const;
 
 export type FileKind = 'pdf' | 'jpeg' | 'png';

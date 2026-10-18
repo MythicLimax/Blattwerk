@@ -1,7 +1,7 @@
 // Typen der Schnittstelle, die der Preload dem Renderer als window.blattwerk bereitstellt.
 import type { CommandId } from '../shared/commands';
 import type { SystemFont } from '../shared/fonts';
-import type { UpdateStatus } from '../shared/update';
+import type { OnlineCheck, UpdateProgress, UpdateStatus } from '../shared/update';
 import type {
   ConvertResult,
   GlassRegion,
@@ -61,6 +61,10 @@ export interface BlattwerkApi {
   update: {
     status(): Promise<UpdateStatus>;
     install(): Promise<boolean>;
+    // Neue Version im Netz suchen und in den Update-Ordner laden (ADR 0027)
+    checkOnline(): Promise<OnlineCheck>;
+    onProgress(listener: (progress: UpdateProgress) => void): () => void;
+    onResult(listener: (result: OnlineCheck) => void): () => void;
   };
   // Schriften des Rechners (Aptos, Arial, Times New Roman …), nur einbettbare
   fonts: {

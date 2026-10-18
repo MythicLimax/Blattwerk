@@ -52,7 +52,7 @@ import { atomicWrite } from './files/atomic-write';
 import { createBlankDocument, isBlankDocumentPath } from './files/blank-document';
 import { listSystemFonts, readSystemFont } from './files/system-fonts';
 import { checkForUpdate, scheduleInstall } from './update/updater';
-import type { UpdateStatus } from '../shared/update';
+import type { OnlineCheck, UpdateStatus } from '../shared/update';
 import { parseSystemFontKey, type SystemFont } from '../shared/fonts';
 import { DOCUMENT_EXTENSIONS } from '../shared/convert';
 import { ConvertError, MAX_DOCUMENT_BYTES, detectAndConvert } from './convert';
@@ -88,6 +88,8 @@ export interface IpcContext {
   // Tab über die Fenstergrenze ziehen (Vorschau am Zeiger) und Antwort des Fensters darunter
   onTabDrag: (win: BrowserWindow, message: TabDragMessage) => void;
   onTabDragHoverState: (win: BrowserWindow, state: TabDragHoverState) => void;
+  // Neue Version im Netz suchen und laden; Fortschritt und Ergebnis gehen an alle Fenster
+  checkUpdatesOnline: () => Promise<OnlineCheck>;
   // App beenden (alle Fenster fragen bei ungespeicherten Änderungen nach)
   quit: () => void;
   signatures: SignatureStore;
@@ -316,6 +318,8 @@ export function registerIpc(ctx: IpcContext): void {
   // Mehrere neue Dokumente in einen gewählten Ordner (Teilen, Extrahieren als einzelne Dateien).
   // Vorhandene Dateien werden nie überschrieben; bei gleichem Namen kommt eine Nummer dazu.
   handle(IPC.updateStatus, (): UpdateStatus => checkForUpdate());
+
+  handle(IPC.updateCheckOnline, (): Promise<OnlineCheck> => ctx.checkUpdatesOnline());
 
   // Update vormerken und die App über den normalen Weg beenden (jedes Fenster fragt bei ungespeicherten Änderungen
   // nach); beim Beenden tauscht ein Hilfsskript die App aus und öffnet sie neu

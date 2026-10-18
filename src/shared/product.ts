@@ -7,3 +7,6 @@ export const APP_ID = 'de.blattwerk.app';
 export const APP_PROTOCOL = 'app';
 export const APP_HOST = 'bundle';
 export const APP_ORIGIN = `${APP_PROTOCOL}://${APP_HOST}`;
+
+// Öffentliches GitHub-Projekt, in das CI jede neue Version stellt (ADR 0027). Der Quelltext bleibt privat.
+export const UPDATE_REPOSITORY = 'MythicLimax/Blattwerk-Downloads';

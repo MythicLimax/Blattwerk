@@ -95,10 +95,49 @@ jobs:
           for app in release/mac*/Blattwerk.app; do
             codesign --verify --deep --strict --verbose=2 "$app"
           done
+          # So entpackt auch der Updater in der App (ADR 0027): Die Signatur muss das Archiv überstehen
+          for zip in release/*-mac.zip; do
+            dir="$(mktemp -d)"
+            ditto -x -k "$zip" "$dir"
+            codesign --verify --deep --strict "$dir/Blattwerk.app"
+            rm -rf "$dir"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: Blattwerk-${{ matrix.name }}
           path: |
             release/*.dmg
+            release/*-mac.zip
             release/*.exe
           if-no-files-found: error
+
+  # Jede neue Version auf main kommt als Release in das öffentliche Projekt für Downloads (ADR 0027). Dort findet die App
+  # sie über „Nach Updates suchen“. Braucht das Secret DOWNLOADS_TOKEN (Schlüssel mit Schreibrecht nur für dieses Projekt).
+  release:
+    name: Veröffentlichen
+    needs: package
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ secrets.DOWNLOADS_TOKEN }}
+          REPOSITORY: MythicLimax/Blattwerk-Downloads
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::Secret DOWNLOADS_TOKEN fehlt, es wird nichts veröffentlicht."
+            exit 0
+          fi
+          version="$(node -p "require('./package.json').version")"
+          if gh release view "v$version" --repo "$REPOSITORY" > /dev/null 2>&1; then
+            echo "Version $version ist schon veröffentlicht."
+            exit 0
+          fi
+          ls -l dist
+          gh release create "v$version" dist/* --repo "$REPOSITORY" --title "Blattwerk $version" \
+            --notes "Automatisch gebaut aus ${GITHUB_SHA::7}. Updates lädt Blattwerk über „Nach Updates suchen …“ selbst."
