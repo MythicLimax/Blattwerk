@@ -34,7 +34,6 @@ export function blankPdf(now = new Date()): Uint8Array {
 }
 
 let folder: string | null = null;
-let counter = 0;
 
 const folderPrefix = `${PRODUCT_NAME.toLowerCase()}-neu-`;
 
@@ -82,9 +81,16 @@ function removeQuietly(target: string): void {
 
 // Legt „Unbenannt.pdf“ (bzw. „Unbenannt 2.pdf“ …) an und liefert den Pfad
 export async function createBlankDocument(baseName: string): Promise<string> {
-  counter++;
-  const file = path.join(blankFolder(), `${baseName}${counter > 1 ? ` ${counter}` : ''}.pdf`);
-  await writeFile(file, blankPdf());
+  return createUntitledDocument(baseName, blankPdf());
+}
+
+// Unbenanntes Dokument mit diesem Inhalt (z. B. aus einer Vorlage): „Brief.pdf“, beim nächsten Mal „Brief 2.pdf“
+const used = new Map<string, number>();
+export async function createUntitledDocument(baseName: string, bytes: Uint8Array): Promise<string> {
+  const count = (used.get(baseName) ?? 0) + 1;
+  used.set(baseName, count);
+  const file = path.join(blankFolder(), `${baseName}${count > 1 ? ` ${count}` : ''}.pdf`);
+  await writeFile(file, bytes);
   return file;
 }
 

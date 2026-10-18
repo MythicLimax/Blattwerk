@@ -2,6 +2,7 @@
 import type { CommandId } from '../shared/commands';
 import type { SystemFont } from '../shared/fonts';
 import type { OnlineCheck, UpdateProgress, UpdateStatus } from '../shared/update';
+import type { SaveTemplateResult, TemplateInfo } from '../shared/templates';
 import type {
   ConvertResult,
   GlassRegion,
@@ -28,6 +29,8 @@ import type {
   SignatureInput,
   TabDestination,
   TabDragHover,
+  ThumbnailRequest,
+  ThumbnailResult,
   TabDragHoverState,
   TabDragMessage,
   TabReceived,
@@ -47,6 +50,24 @@ export interface BlattwerkApi {
     open(path: string): Promise<OpenResult>;
     remove(path: string): Promise<RecentFile[]>;
     clear(): Promise<RecentFile[]>;
+    pin(path: string, pinned: boolean): Promise<RecentFile[]>;
+  };
+  // Vorlagen der Startseite (ADR 0028)
+  templates: {
+    list(): Promise<TemplateInfo[]>;
+    // Öffnet eine Kopie als unbenanntes Dokument
+    open(id: string): Promise<OpenResult>;
+    // PDF der Vorlage, um ein Vorschaubild zu zeichnen
+    preview(id: string): Promise<Uint8Array | null>;
+    save(bytes: Uint8Array, name: string): Promise<SaveTemplateResult>;
+    remove(id: string): Promise<TemplateInfo[]>;
+    onChanged(listener: () => void): () => void;
+  };
+  // Vorschaubilder der Startseite (PNG): gespeicherte abfragen, für eine offene Datei oder eine Vorlage ablegen
+  thumbnails: {
+    get(request: ThumbnailRequest): Promise<ThumbnailResult>;
+    setFile(fileId: string, png: Uint8Array): Promise<boolean>;
+    setTemplate(id: string, png: Uint8Array): Promise<boolean>;
   };
   print(request: PrintRequest): Promise<PrintResult>;
   // Speichert neue Bytes über die geöffnete Datei. force überschreibt auch bei Änderungen von außen.

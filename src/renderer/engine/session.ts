@@ -30,6 +30,7 @@ import { compareWithFile } from '../features/compare/actions';
 import { openPdfACheck } from '../features/pdfa/actions';
 import { useAccessibility } from '../features/accessibility/accessibility-store';
 import { useUpdate } from '../features/update/update-store';
+import { storeFileThumbnail } from '../features/start/thumbnails';
 import { useCertify } from '../features/certify/certify-store';
 import { isRunning as isProgressRunning } from '../features/progress/progress';
 import type { FieldOperation, FormFieldValue } from '../../shared/forms';
@@ -142,6 +143,8 @@ async function loadIntoTab(tabId: string, file: FileInfo, knownPassword: string 
     if (options.annotations) useAnnotations.getState().restore(tabId, options.annotations);
     else void loadAnnotations(tabId);
     void refreshSignatures(tabId);
+    // Vorschaubild für „Zuletzt geöffnet“ (nur die Datei selbst, keine ungespeicherten Stände und keine unbenannten)
+    if (!file.untitled && !options.data) void storeFileThumbnail(file.fileId, pdf);
   } catch (error) {
     if (!tabExists(tabId)) return;
     useDocuments.getState().updateTab(tabId, {
@@ -959,6 +962,18 @@ export function executeCommand(command: CommandId): void {
   }
   if (command === 'app.checkUpdates') {
     void checkForUpdates();
+    return;
+  }
+  if (command === 'app.home') {
+    // Ohne Dokument ist die Startseite ohnehin zu sehen
+    if (useDocuments.getState().tabs.length > 0) ui.setHomeOpen(!ui.homeOpen);
+    return;
+  }
+  if (command === 'file.saveAsTemplate') {
+    const active = getActiveTab();
+    if (active?.status !== 'ready') return;
+    commitPendingEdits();
+    ui.setTemplateDialogTab(active.id);
     return;
   }
   if (command === 'app.settings') {

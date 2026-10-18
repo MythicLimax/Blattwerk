@@ -22,6 +22,7 @@ import {
   type SaveResult,
   type SaveToFolderResult,
   type TabDestination,
+  type ThumbnailResult,
   type TabDragHoverState,
   type TabDragMessage,
   type TabTransfer,
@@ -49,7 +50,10 @@ import {
   validateTabTransfer,
 } from '../shared/validate';
 import { atomicWrite } from './files/atomic-write';
-import { createBlankDocument, isBlankDocumentPath } from './files/blank-document';
+import { createBlankDocument, createUntitledDocument, isBlankDocumentPath } from './files/blank-document';
+import type { ThumbnailStore } from './files/thumbnails';
+import type { TemplateService } from './templates';
+import { parseTemplateId, type SaveTemplateResult, type TemplateInfo } from '../shared/templates';
 import { listSystemFonts, readSystemFont } from './files/system-fonts';
 import { checkForUpdate, scheduleInstall } from './update/updater';
 import type { OnlineCheck, UpdateStatus } from '../shared/update';
@@ -88,6 +92,10 @@ export interface IpcContext {
   // Tab über die Fenstergrenze ziehen (Vorschau am Zeiger) und Antwort des Fensters darunter
   onTabDrag: (win: BrowserWindow, message: TabDragMessage) => void;
   onTabDragHoverState: (win: BrowserWindow, state: TabDragHoverState) => void;
+  // Startseite (ADR 0028): Vorlagen und Vorschaubilder
+  templates: TemplateService;
+  thumbnails: ThumbnailStore;
+  onTemplatesChanged: () => void;
   // Neue Version im Netz suchen und laden; Fortschritt und Ergebnis gehen an alle Fenster
   checkUpdatesOnline: () => Promise<OnlineCheck>;
   // App beenden (alle Fenster fragen bei ungespeicherten Änderungen nach)
@@ -196,6 +204,67 @@ export function registerIpc(ctx: IpcContext): void {
   });
 
   handle(IPC.recentClear, () => ctx.clearRecent());
+
+  handle(IPC.recentPin, async (_event, filePath: unknown, pinned: unknown) => {
+    if (typeof filePath !== 'string' || typeof pinned !== 'boolean') return ctx.recent.list();
+    const list = await ctx.recent.setPinned(filePath, pinned);
+    ctx.onRecentChanged();
+    return list;
+  });
+
+  // Vorlagen (ADR 0028): Liste, öffnen (Kopie als unbenanntes Dokument), PDF für das Vorschaubild, sichern, entfernen
+  handle(IPC.templatesList, (): Promise<TemplateInfo[]> => ctx.templates.list());
+
+  handle(IPC.templatesOpen, async (event, id: unknown): Promise<OpenResult> => {
+    const win = windowOf(event);
+    const template = typeof id === 'string' ? await ctx.templates.document(id).catch(() => null) : null;
+    if (!win || !template) return { ok: false, error: 'not-found' };
+    return ctx.openDocument(win, await createUntitledDocument(sanitizeFileName(template.name).replace(/\.pdf$/i, ''), template.bytes));
+  });
+
+  handle(IPC.templatesPreview, async (_event, id: unknown): Promise<Uint8Array | null> =>
+    typeof id === 'string' ? ((await ctx.templates.document(id).catch(() => null))?.bytes ?? null) : null,
+  );
+
+  handle(IPC.templatesSave, async (_event, bytes: unknown, name: unknown): Promise<SaveTemplateResult> => {
+    if (!isPdfBytes(bytes) || typeof name !== 'string' || name.length > 500) return { ok: false, error: 'invalid-data' };
+    const result = await ctx.templates.save(name, bytes);
+    if (result.ok) ctx.onTemplatesChanged();
+    return result;
+  });
+
+  handle(IPC.templatesRemove, async (_event, id: unknown): Promise<TemplateInfo[]> => {
+    if (typeof id === 'string' && (await ctx.templates.remove(id))) {
+      await ctx.thumbnails.remove(templateThumbnailKey(id, ctx.appVersion));
+      ctx.onTemplatesChanged();
+    }
+    return ctx.templates.list();
+  });
+
+  // Vorschaubilder: nur für Dateien der Zuletzt-Liste und für Vorlagen
+  handle(IPC.thumbnailsGet, async (_event, request: unknown): Promise<ThumbnailResult> => {
+    const result: ThumbnailResult = { recent: {}, templates: {} };
+    const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string').slice(0, 200) : []);
+    const req = (typeof request === 'object' && request !== null ? request : {}) as { recent?: unknown; templates?: unknown };
+    for (const filePath of strings(req.recent)) {
+      result.recent[filePath] = (await ctx.recent.contains(filePath)) ? await ctx.thumbnails.get(fileThumbnailKey(filePath)) : null;
+    }
+    for (const id of strings(req.templates)) {
+      result.templates[id] = parseTemplateId(id) ? await ctx.thumbnails.get(templateThumbnailKey(id, ctx.appVersion)) : null;
+    }
+    return result;
+  });
+
+  handle(IPC.thumbnailsSetFile, async (event, fileId: unknown, png: unknown): Promise<boolean> => {
+    const filePath = isFileId(fileId) ? ctx.files.pathOf(fileId, event.sender.id) : null;
+    if (!filePath || isBlankDocumentPath(filePath) || !(png instanceof Uint8Array)) return false;
+    return ctx.thumbnails.set(fileThumbnailKey(filePath), png);
+  });
+
+  handle(IPC.thumbnailsSetTemplate, async (_event, id: unknown, png: unknown): Promise<boolean> => {
+    if (typeof id !== 'string' || !parseTemplateId(id) || !(png instanceof Uint8Array)) return false;
+    return ctx.thumbnails.set(templateThumbnailKey(id, ctx.appVersion), png);
+  });
 
   handle(IPC.appInfo, (): AppInfo => ({
     platform: process.platform === 'darwin' || process.platform === 'win32' ? process.platform : 'linux',
@@ -625,3 +694,7 @@ export function registerIpc(ctx: IpcContext): void {
     if (win) ctx.onRendererReady(win);
   });
 }
+
+// Schlüssel der Vorschaubilder: Dateien nach Pfad, mitgelieferte Vorlagen je App-Version (sie können sich ändern)
+const fileThumbnailKey = (filePath: string): string => `file:${filePath}`;
+const templateThumbnailKey = (id: string, appVersion: string): string => (id.startsWith('builtin:') ? `template:${id}@${appVersion}` : `template:${id}`);

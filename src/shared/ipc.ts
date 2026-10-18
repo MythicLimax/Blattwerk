@@ -52,6 +52,16 @@ export const IPC = {
   convertDropped: 'convert:dropped',
   // Mehrere Fenster (ADR 0026): Tab in ein anderes oder neues Fenster geben
   tabTransfer: 'window:tab-transfer',
+  // Startseite (ADR 0028): Anheften, Vorlagen, Vorschaubilder
+  recentPin: 'recent:pin',
+  templatesList: 'templates:list',
+  templatesOpen: 'templates:open',
+  templatesPreview: 'templates:preview',
+  templatesSave: 'templates:save',
+  templatesRemove: 'templates:remove',
+  thumbnailsGet: 'thumbnails:get',
+  thumbnailsSetFile: 'thumbnails:set-file',
+  thumbnailsSetTemplate: 'thumbnails:set-template',
   // Renderer → Hauptprozess (send)
   // Glasflächen für Apples Liquid Glass unter macOS 26+ (ADR 0023)
   glassRegions: 'glass:regions',
@@ -77,7 +87,19 @@ export const IPC = {
   // Laden einer neuen Version: Fortschritt und Ergebnis (auch bei der Suche beim Start)
   updateProgress: 'update:progress',
   updateResult: 'update:result',
+  // Eigene Vorlagen wurden in einem Fenster gesichert oder entfernt
+  templatesChanged: 'templates:changed',
 } as const;
+
+// Vorschaubilder der Startseite: zuletzt geöffnete Dateien (nach Pfad) und Vorlagen (nach Kennung), als data:-Adresse
+export interface ThumbnailRequest {
+  recent: string[];
+  templates: string[];
+}
+export interface ThumbnailResult {
+  recent: Record<string, string | null>;
+  templates: Record<string, string | null>;
+}
 
 export type FileKind = 'pdf' | 'jpeg' | 'png';
 
@@ -212,6 +234,8 @@ export interface RecentFile {
   name: string;
   dir: string;
   openedAt: number;
+  // Oben in der Liste festgehalten (Startseite „Anheften“)
+  pinned?: boolean;
 }
 
 export type ViewMode = 'single' | 'continuous' | 'two-page' | 'two-page-continuous';
