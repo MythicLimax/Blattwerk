@@ -1,5 +1,5 @@
 # Baut Blattwerk für macOS (Apple Silicon und Intel) und Windows und führt alle Tests aus.
-# Signieren ist optional: Sind die Secrets nicht gesetzt, entstehen unsignierte Builds.
+# Signieren mit Zertifikat ist optional: Sind die Secrets nicht gesetzt, wird die Mac-App nur ad hoc signiert.
 name: Build
 
 on:
@@ -85,6 +85,16 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Sonst signiert electron-builder in Pull-Requests gar nicht. Die Fuses ändern die App aber trotzdem, ihre
+          # Signatur ist dann ungültig und macOS beendet sie beim Start (Code Signature Invalid). Das Zertifikat aus
+          # den Secrets bekommen Pull-Requests aus Forks ohnehin nicht; ohne Zertifikat wird ad hoc signiert.
+          CSC_FOR_PULL_REQUEST: 'true'
+      - name: Signatur prüfen
+        if: runner.os == 'macOS'
+        run: |
+          for app in release/mac*/Blattwerk.app; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: Blattwerk-${{ matrix.name }}
