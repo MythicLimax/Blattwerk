@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fixture, LARGE_PDF, PASSWORDS, TEXT_PDF } from '../fixtures/expectations';
-import { currentPage, expectWindowCount, launchApp, menuClick, menuItemState, mergeAllWindows, waitForDocument, windowWithTitle } from './app';
+import { appWindows, currentPage, expectWindowCount, launchApp, menuClick, menuItemState, mergeAllWindows, waitForDocument, windowWithTitle } from './app';
 
 test.describe('Start und Öffnen', () => {
   test('ohne Datei erscheint der Startbildschirm', async () => {
@@ -135,7 +135,7 @@ test.describe('Navigation und Ansicht', () => {
       .toEqual([TEXT_PDF.externalUrl]);
     expect(await app.evaluate(() => (globalThis as unknown as { __opened: string[] }).__opened)).toEqual([]);
     // Das Fenster bleibt auf der App, es öffnet sich kein zweites Fenster.
-    expect(app.windows()).toHaveLength(1);
+    expect(appWindows(app)).toHaveLength(1);
     await close();
   });
 

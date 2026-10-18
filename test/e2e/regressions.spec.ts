@@ -175,7 +175,8 @@ test('Absturz der Anzeige: Neu laden stellt die App wieder her', async () => {
       { timeout: 20_000 },
     )
     .toBe(true);
-  expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
+  // Kurzlebige Hilfsfenster (Vorschaubilder der Vorlagen auf der Startseite) zählen nicht
+  await expectWindowCount(app, 1);
   await close();
 });
 

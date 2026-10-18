@@ -90,16 +90,22 @@ export async function currentPage(page: Page): Promise<number> {
   return Number(await page.getByTestId('page-input').inputValue());
 }
 
+// Fenster der App mit Oberfläche. Kurzlebige Hilfsfenster zählen nicht: PDF aus HTML setzen (Vorlagen, Umwandeln) und die
+// Vorschau beim Herausziehen eines Tabs.
+export function appWindows(app: ElectronApplication): Page[] {
+  return app.windows().filter((win) => /\/index\.html(?:[?#]|$)/.test(win.url()));
+}
+
 // Mehrere Fenster (ADR 0026): Anzahl abwarten, Fenster eines Dokuments am Titel („Name – Blattwerk“) finden
 export async function expectWindowCount(app: ElectronApplication, count: number): Promise<void> {
-  await expect.poll(() => app.windows().length).toBe(count);
+  await expect.poll(() => appWindows(app).length).toBe(count);
 }
 
 export async function windowWithTitle(app: ElectronApplication, title: string): Promise<Page> {
   let found: Page | null = null;
   await expect
     .poll(async () => {
-      for (const win of app.windows()) {
+      for (const win of appWindows(app)) {
         const current = await win.title().catch(() => '');
         if (current === title || current.startsWith(`${title} – `)) {
           found = win;
@@ -119,7 +125,7 @@ export async function windowWithTitle(app: ElectronApplication, title: string): 
 export async function mergeAllWindows(app: ElectronApplication): Promise<Page> {
   await menuClick(app, 'window.mergeAll');
   await expectWindowCount(app, 1);
-  const [win] = app.windows();
+  const [win] = appWindows(app);
   if (!win) throw new Error('kein Fenster');
   return win;
 }
