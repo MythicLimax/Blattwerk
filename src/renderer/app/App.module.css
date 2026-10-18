@@ -6,6 +6,8 @@
 
 /* Arbeitsfläche: die Seitenleisten schweben über dem Hintergrund der Dokumentansicht */
 .workspace {
+  /* Bezug für die Startseite als Überlagerung */
+  position: relative;
   flex: 1;
   display: flex;
   min-height: 0;

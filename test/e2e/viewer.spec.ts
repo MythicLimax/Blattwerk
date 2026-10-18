@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fixture, LARGE_PDF, PASSWORDS, TEXT_PDF } from '../fixtures/expectations';
-import { currentPage, expectWindowCount, launchApp, menuClick, menuItemState, mergeAllWindows, waitForDocument, windowWithTitle } from './app';
+import { appWindows, currentPage, expectWindowCount, launchApp, menuClick, menuItemState, mergeAllWindows, waitForDocument, windowWithTitle } from './app';
 
 test.describe('Start und Öffnen', () => {
   test('ohne Datei erscheint der Startbildschirm', async () => {
@@ -135,7 +135,7 @@ test.describe('Navigation und Ansicht', () => {
       .toEqual([TEXT_PDF.externalUrl]);
     expect(await app.evaluate(() => (globalThis as unknown as { __opened: string[] }).__opened)).toEqual([]);
     // Das Fenster bleibt auf der App, es öffnet sich kein zweites Fenster.
-    expect(app.windows()).toHaveLength(1);
+    expect(appWindows(app)).toHaveLength(1);
     await close();
   });
 
@@ -332,7 +332,7 @@ test.describe('Oberfläche', () => {
   test('Sicherheitseinstellungen des Fensters', async () => {
     const { page, app, close } = await launchApp();
     const prefs = await app.evaluate(({ BrowserWindow }) => {
-      const win = BrowserWindow.getAllWindows()[0];
+      const win = BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().includes('/index.html'));
       // getLastWebPreferences fehlt in den Typen von Electron 44, ist zur Laufzeit aber vorhanden.
       const p = (win?.webContents as unknown as { getLastWebPreferences(): Electron.WebPreferences } | undefined)?.getLastWebPreferences();
       return { contextIsolation: p?.contextIsolation, nodeIntegration: p?.nodeIntegration, sandbox: p?.sandbox, webSecurity: p?.webSecurity };

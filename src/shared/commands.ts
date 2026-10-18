@@ -61,6 +61,8 @@ export const COMMANDS = [
   'file.exportText',
   'file.combine',
   'file.newBlank',
+  'file.saveAsTemplate',
+  'app.home',
   'file.fromImages',
   'file.fromDocument',
   'nav.firstPage',

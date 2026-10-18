@@ -84,6 +84,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       { type: 'separator' },
       cmd('file.save', t('menu.file.save'), { enabled: doc && state.activeDirty }),
       cmd('file.saveAs', t('menu.file.saveAs'), { enabled: doc }),
+      cmd('file.saveAsTemplate', t('menu.file.saveAsTemplate'), { enabled: doc }),
       { type: 'separator' },
       // Schließen wirkt auf jeden Tab, auch während des Ladens, bei Kennwortabfrage oder Fehler.
       // Ohne Tabs schließt dasselbe Kürzel unter macOS das Fenster, wie in anderen Mac-Apps.
@@ -145,6 +146,8 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
   const viewMenu: MenuItemConstructorOptions = {
     label: t('menu.view.title'),
     submenu: [
+      cmd('app.home', t('menu.view.home')),
+      { type: 'separator' },
       cmd('view.zoomIn', t('menu.view.zoomIn'), { enabled: viewing }),
       cmd('view.zoomOut', t('menu.view.zoomOut'), { enabled: viewing }),
       { type: 'separator' },

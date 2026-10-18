@@ -94,6 +94,12 @@ interface UiState {
   confirm: (message: string) => void;
   dismissNotice: (id: number) => void;
   setRecent: (recent: RecentFile[]) => void;
+  // Startseite über den offenen Dokumenten (Home-Knopf, ADR 0028)
+  homeOpen: boolean;
+  setHomeOpen: (open: boolean) => void;
+  // „Als Vorlage sichern“: Dialog für diesen Tab
+  templateDialogTab: string | null;
+  setTemplateDialogTab: (tabId: string | null) => void;
   setDraggingFiles: (dragging: boolean) => void;
   requestSearchFocus: () => void;
   markSearchFocusHandled: (request: number) => void;
@@ -136,6 +142,8 @@ export const useUi = create<UiState>((set) => ({
   print: null,
   notices: [],
   recent: [],
+  homeOpen: false,
+  templateDialogTab: null,
   draggingFiles: false,
   searchFocusRequest: 0,
   searchFocusHandled: 0,
@@ -168,6 +176,8 @@ export const useUi = create<UiState>((set) => ({
     set((state) => ({ notices: [...state.notices, { id: nextNoticeId++, message, tone: 'success' as const }].slice(-5) })),
   dismissNotice: (id) => set((state) => ({ notices: state.notices.filter((n) => n.id !== id) })),
   setRecent: (recent) => set({ recent }),
+  setHomeOpen: (homeOpen) => set({ homeOpen }),
+  setTemplateDialogTab: (templateDialogTab) => set({ templateDialogTab }),
   setDraggingFiles: (draggingFiles) => set({ draggingFiles }),
   requestSearchFocus: () =>
     set((state) => ({ rightPanelVisible: true, searchFocusRequest: state.searchFocusRequest + 1 })),

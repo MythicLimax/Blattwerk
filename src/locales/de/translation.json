@@ -32,7 +32,8 @@
       "exportImages": "Als Bilder …",
       "exportText": "Als Text …",
       "fromDocument": "PDF aus Textdokument erstellen …",
-      "newBlank": "Neues leeres Dokument"
+      "newBlank": "Neues leeres Dokument",
+      "saveAsTemplate": "Als Vorlage sichern …"
     },
     "edit": {
       "title": "Bearbeiten",
@@ -67,7 +68,8 @@
       "fullscreen": "Vollbild",
       "devTools": "Entwicklerwerkzeuge",
       "toggleCommentTools": "Kommentieren",
-      "highlight": "Markieren"
+      "highlight": "Markieren",
+      "home": "Startseite"
     },
     "nav": {
       "title": "Gehe zu",
@@ -231,7 +233,7 @@
     "remove": "Aus der Liste entfernen",
     "clear": "Liste leeren",
     "tagline": "PDFs lesen, kommentieren, bearbeiten und unterschreiben – alles auf diesem Mac, ohne Internet.",
-    "create": "Neu erstellen",
+    "create": "Neu",
     "tiles": {
       "combine": {
         "title": "Dateien zusammenführen",
@@ -258,7 +260,21 @@
       "pages": "Seiten organisieren",
       "redact": "Schwärzen",
       "sign": "Unterschreiben"
-    }
+    },
+    "searchPlaceholder": "Vorlagen und Dateien suchen",
+    "more": "Weitere Möglichkeiten",
+    "pinned": "Angeheftet",
+    "pin": "Anheften",
+    "unpin": "Nicht mehr anheften",
+    "noResults": "Nichts gefunden für „{{query}}“.",
+    "backToDocument": "Zurück zum Dokument",
+    "blankName": "Leeres Dokument",
+    "ownTemplate": "Eigene Vorlage",
+    "removeTemplate": "Vorlage entfernen",
+    "removeTemplateQuestion": "Vorlage entfernen?",
+    "removeTemplateConfirm": "Entfernen",
+    "cancel": "Abbrechen",
+    "templateHint": "Eigene Vorlagen: ein Dokument öffnen und im Menü „Als Vorlage sichern …“ wählen."
   },
   "toolbar": {
     "open": "Öffnen",
@@ -291,7 +307,8 @@
     "redact": "Schwärzen",
     "editContent": "Text und Bilder bearbeiten",
     "more": "Weitere Werkzeuge",
-    "highlight": "Markieren"
+    "highlight": "Markieren",
+    "home": "Startseite"
   },
   "viewMode": {
     "single": "Einzelne Seite",
@@ -1244,5 +1261,168 @@
     "notAllowed": "Dieses Dokument erlaubt keine Kommentare und Markierungen.",
     "hint": "Text auswählen, um ihn zu markieren. Ein Klick auf eine Markierung wählt sie aus.",
     "selectedHint": "Farbe oder Art wählen, löschen oder an den Enden ziehen, um die Markierung zu kürzen oder zu verlängern."
+  },
+  "templates": {
+    "names": {
+      "letter": "Brief",
+      "application": "Bewerbung",
+      "cv": "Lebenslauf",
+      "invoice": "Rechnung",
+      "minutes": "Protokoll",
+      "cover": "Deckblatt",
+      "todo": "To-do-Liste und Wochenplan",
+      "notepaper": "Notizpapier"
+    },
+    "details": {
+      "letter": "Nach DIN 5008, passt ins Fensterkuvert",
+      "application": "Anschreiben im Stil des Lebenslaufs",
+      "cv": "Tabellarisch, mit Platz für ein Foto",
+      "invoice": "Positionen, Summe, Mehrwertsteuer, Bankverbindung",
+      "minutes": "Teilnehmende, Tagesordnung, Beschlüsse, Aufgaben",
+      "cover": "Titelseite für Referate und Hausarbeiten",
+      "todo": "Aufgaben zum Abhaken und eine Woche im Überblick",
+      "notepaper": "Liniert, kariert und gepunktet"
+    },
+    "defaultName": "Vorlage",
+    "content": {
+      "common": {
+        "name": "[Vorname Nachname]",
+        "street": "[Straße Hausnummer]",
+        "city": "[PLZ Ort]",
+        "phone": "Telefon: [Nummer]",
+        "email": "E-Mail: [Adresse]",
+        "company": "[Firma]",
+        "recipientName": "[Frau/Herrn Vorname Nachname]",
+        "date": "Datum",
+        "placeDate": "[Ort], {{date}}",
+        "regards": "Mit freundlichen Grüßen",
+        "salutation": "Sehr geehrte Damen und Herren,",
+        "signaturePlaceDate": "Ort, Datum",
+        "signature": "Unterschrift"
+      },
+      "letter": {
+        "subject": "[Betreff]",
+        "body": "[Hier steht Ihr Text. Klicken Sie in einen Absatz, um ihn zu ändern, oder fügen Sie mit dem Werkzeug „Text“ neue Absätze hinzu.]"
+      },
+      "application": {
+        "subject": "Bewerbung als [Stellenbezeichnung]",
+        "reference": "Ihre Stellenanzeige vom [Datum] auf [Plattform]",
+        "p1": "[Einleitung: Warum Sie sich auf genau diese Stelle bewerben und wie Sie auf das Unternehmen aufmerksam geworden sind.]",
+        "p2": "[Hauptteil: Ihre wichtigsten Erfahrungen und Fähigkeiten, passend zu den Anforderungen der Stelle, mit einem konkreten Beispiel.]",
+        "p3": "[Schluss: frühestmöglicher Eintrittstermin, gegebenenfalls Gehaltsvorstellung und die Bitte um ein persönliches Gespräch.]",
+        "attachments": "Anlagen: Lebenslauf, Zeugnisse"
+      },
+      "cv": {
+        "title": "Lebenslauf",
+        "photo": "Foto",
+        "personal": "Persönliche Daten",
+        "birth": "Geburtsdatum und -ort",
+        "birthValue": "[TT.MM.JJJJ] in [Ort]",
+        "nationality": "Staatsangehörigkeit",
+        "nationalityValue": "[Staatsangehörigkeit]",
+        "experience": "Berufserfahrung",
+        "education": "Ausbildung",
+        "period": "[MM/JJJJ] – [MM/JJJJ]",
+        "periodNow": "seit [MM/JJJJ]",
+        "position": "[Position]",
+        "employer": "[Unternehmen], [Ort]",
+        "duty": "[Aufgaben und Erfolge in Stichworten]",
+        "degree": "[Abschluss]",
+        "school": "[Schule oder Hochschule], [Ort]",
+        "focus": "Schwerpunkte: [Fächer oder Themen]",
+        "skills": "Kenntnisse",
+        "languages": "Sprachen",
+        "languagesValue": "[Deutsch (Muttersprache), Englisch (fließend)]",
+        "it": "EDV",
+        "itValue": "[Programme und Kenntnisse]",
+        "license": "Führerschein",
+        "licenseValue": "[Klasse B]",
+        "interests": "Interessen",
+        "interestsValue": "[Hobbys und Ehrenamt]"
+      },
+      "invoice": {
+        "title": "Rechnung",
+        "number": "Rechnungsnummer",
+        "numberValue": "[RE-0001]",
+        "invoiceDate": "Rechnungsdatum",
+        "serviceDate": "Leistungsdatum",
+        "serviceDateValue": "[TT.MM.JJJJ]",
+        "customer": "Kundennummer",
+        "customerValue": "[K-0001]",
+        "intro": "Vielen Dank für Ihren Auftrag. Ich berechne Ihnen folgende Leistungen:",
+        "pos": "Pos.",
+        "description": "Beschreibung",
+        "quantity": "Menge",
+        "unitPrice": "Einzelpreis",
+        "total": "Gesamt",
+        "item": "[Leistung oder Artikel]",
+        "amount": "0,00 €",
+        "net": "Zwischensumme (netto)",
+        "vat": "zzgl. 19 % MwSt.",
+        "gross": "Gesamtbetrag",
+        "terms": "Bitte überweisen Sie den Gesamtbetrag innerhalb von 14 Tagen ohne Abzug auf das unten genannte Konto. Geben Sie dabei die Rechnungsnummer an.",
+        "bank": "Bankverbindung",
+        "bankName": "[Name der Bank]",
+        "iban": "IBAN: [DE00 0000 0000 0000 0000 00]",
+        "bic": "BIC: [XXXXXXXXXXX]",
+        "tax": "Steuernummer: [000/000/00000]"
+      },
+      "minutes": {
+        "title": "Protokoll",
+        "occasion": "[Anlass der Besprechung]",
+        "time": "Uhrzeit",
+        "timeValue": "[Beginn] bis [Ende] Uhr",
+        "place": "Ort",
+        "placeValue": "[Raum oder Online]",
+        "writer": "Protokoll",
+        "present": "Anwesend",
+        "presentValue": "[Namen]",
+        "absent": "Entschuldigt",
+        "absentValue": "[Namen]",
+        "agenda": "Tagesordnung",
+        "topic": "TOP {{n}}: [Thema]",
+        "notes": "[Wichtigste Punkte der Besprechung und Ergebnisse]",
+        "decisions": "Beschlüsse",
+        "decision": "[Beschluss]",
+        "tasks": "Aufgaben",
+        "task": "Aufgabe",
+        "owner": "Verantwortlich",
+        "due": "Bis",
+        "writerSignature": "Unterschrift Protokoll",
+        "taskValue": "[Aufgabe]",
+        "ownerValue": "[Name]",
+        "dueValue": "[TT.MM.JJJJ]"
+      },
+      "cover": {
+        "school": "[Name der Schule oder Hochschule]",
+        "kind": "[Referat / Facharbeit / Hausarbeit]",
+        "title": "[Titel der Arbeit]",
+        "subtitle": "[Untertitel oder Thema]",
+        "author": "Verfasst von",
+        "course": "Klasse / Kurs",
+        "courseValue": "[Klasse oder Kurs]",
+        "subject": "Fach",
+        "subjectValue": "[Fach]",
+        "teacher": "Betreuung",
+        "teacherValue": "[Lehrkraft oder Dozent]",
+        "due": "Abgabedatum"
+      },
+      "todo": {
+        "tasks": "Aufgaben",
+        "week": "Woche vom [TT.MM.] bis [TT.MM.]",
+        "plan": "Wochenplan",
+        "days": "Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag"
+      }
+    }
+  },
+  "templateDialog": {
+    "title": "Als Vorlage sichern",
+    "message": "Der aktuelle Stand des Dokuments erscheint danach auf der Startseite unter „Neu“. Jedes Öffnen erzeugt eine Kopie, die Vorlage selbst bleibt unverändert.",
+    "name": "Name der Vorlage",
+    "save": "Sichern",
+    "cancel": "Abbrechen",
+    "saved": "Vorlage „{{name}}“ gesichert. Sie steht jetzt auf der Startseite.",
+    "failed": "Die Vorlage konnte nicht gesichert werden.",
+    "tooMany": "Es gibt schon 100 eigene Vorlagen. Bitte zuerst eine auf der Startseite entfernen."
   }
 }

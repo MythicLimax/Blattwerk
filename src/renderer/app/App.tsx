@@ -45,6 +45,7 @@ import { LeftSidebar } from './LeftSidebar';
 import { Notices } from './Notices';
 import { RightPanel } from './RightPanel';
 import { StartScreen } from './StartScreen';
+import { SaveTemplateDialog } from '../features/start/SaveTemplateDialog';
 import { TabBar } from './TabBar';
 import { Toolbar } from './Toolbar';
 import { useAnnotationSync, useFileDrop, useGlobalKeys, useMenuStateSync } from './hooks';
@@ -60,6 +61,8 @@ export function App() {
   const print = useUi((s) => s.print);
   const prompt = useUi((s) => s.prompt);
   const settingsOpen = useUi((s) => s.settingsOpen);
+  const homeOpen = useUi((s) => s.homeOpen);
+  const templateDialogTab = useUi((s) => (s.templateDialogTab ? (tabs.find((tab) => tab.id === s.templateDialogTab) ?? null) : null));
   const commentToolsVisible = useUi((s) => s.commentToolsVisible);
   const markToolsVisible = useUi((s) => s.markToolsVisible);
   const redactToolsVisible = useUi((s) => s.redactToolsVisible);
@@ -115,6 +118,11 @@ export function App() {
     document.title = active ? `${active.name} – ${PRODUCT_NAME}` : PRODUCT_NAME;
   }, [active]);
 
+  // Ein neuer oder anderer Tab beendet die Startseite als Überlagerung (Dokument aus Vorlage, zuletzt geöffnet, Tabwechsel)
+  useEffect(() => {
+    useUi.getState().setHomeOpen(false);
+  }, [tabs.length, activeId]);
+
   const propertiesTab = tabs.find((tab) => tab.id === propertiesTabId);
   const showDocumentChrome = tabs.length > 0 && active !== null;
 
@@ -122,16 +130,17 @@ export function App() {
     <div className={styles.app} data-glass-app>
       <Toolbar />
       {tabs.length > 0 && <TabBar />}
-      {commentToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <CommentToolbar tab={active} />}
-      {active?.status === 'ready' && active.mode === 'view' && active.formEditing && <FormEditToolbar tab={active} />}
-      {active?.status === 'ready' && active.mode === 'view' && active.contentEditing && <ContentEditToolbar tab={active} />}
-      {markToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <MarkToolbar tab={active} />}
-      {redactToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <RedactToolbar tab={active} />}
+      {!homeOpen && commentToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <CommentToolbar tab={active} />}
+      {!homeOpen && active?.status === 'ready' && active.mode === 'view' && active.formEditing && <FormEditToolbar tab={active} />}
+      {!homeOpen && active?.status === 'ready' && active.mode === 'view' && active.contentEditing && <ContentEditToolbar tab={active} />}
+      {!homeOpen && markToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <MarkToolbar tab={active} />}
+      {!homeOpen && redactToolsVisible && active?.status === 'ready' && active.mode === 'view' && !active.formEditing && !active.contentEditing && <RedactToolbar tab={active} />}
       <div className={styles.workspace} data-glass-workspace>
         {!showDocumentChrome ? (
           <StartScreen />
         ) : (
           <>
+            {homeOpen && <StartScreen overlay />}
             {sidebarVisible && active.status === 'ready' && active.mode === 'view' && <LeftSidebar tab={active} />}
             <main className={styles.documents}>
               {tabs.map((tab) => (
@@ -147,6 +156,7 @@ export function App() {
       {goToPageOpen && active?.status === 'ready' && <GoToPageDialog tab={active} />}
       {print && <PrintProgressDialog progress={print} />}
       {settingsOpen && <SettingsDialog />}
+      {templateDialogTab && <SaveTemplateDialog key={templateDialogTab.id} tab={templateDialogTab} />}
       {pageDialog && <PageDialogs key={`${pageDialog.kind}-${pageDialog.tabId}`} dialog={pageDialog} />}
       {combine && <CombineDialog sources={combine} />}
       {signatureDialog === 'choose' && <ChooseSignatureDialog />}

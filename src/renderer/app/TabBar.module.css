@@ -1,3 +1,29 @@
+/* Home-Knopf am Anfang der Tableiste (ADR 0028): rund, wie die Knöpfe der Werkzeugleiste */
+.home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-right: 4px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.home:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.home[aria-pressed='true'] {
+  background: var(--color-brand);
+  color: var(--color-text-inverse);
+}
+
 /* Tabs als Kapseln; der aktive als helle, leicht erhabene Kapsel (wie die Auswahl in Liquid-Glass-Leisten) */
 .bar {
   display: flex;

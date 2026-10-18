@@ -31,6 +31,9 @@ import { handleAppScheme, registerAppScheme } from './protocol';
 import { hardenSession, hardenWebContents, isTrustedAppUrl } from './security';
 import { createMainWindow, createSettingsStore, visibleBounds, type SettingsData, type WindowState } from './window';
 import { WindowPositions } from './files/window-positions';
+import { ThumbnailStore } from './files/thumbnails';
+import { TemplateService } from './templates';
+import { UserTemplates } from './templates/user-templates';
 import { boundsAtPoint, cascadeFrom, dropTarget, type Point } from './window-layout';
 import { TabGhost } from './tab-ghost';
 import { isBlankDocumentPath, removeBlankDocuments } from './files/blank-document';
@@ -73,6 +76,8 @@ const files = new FileRegistry();
 let recent: RecentFiles;
 let signatures: SignatureStore;
 let positions: WindowPositions;
+let templates: TemplateService;
+let thumbnails: ThumbnailStore;
 
 const EMPTY_MENU_STATE: MenuState = {
   hasDocument: false,
@@ -677,6 +682,12 @@ void app.whenReady().then(async () => {
   positions = new WindowPositions(path.join(app.getPath('userData'), 'window-positions.json'));
   await positions.load();
   settings = await settingsStore.read();
+  thumbnails = new ThumbnailStore(path.join(app.getPath('userData'), 'Vorschaubilder'));
+  // Vorlagen setzen den Autorennamen ein: aus den Einstellungen, unter macOS sonst den vollen Namen des Benutzers (unter
+  // Windows ist der Benutzername oft nur ein Kürzel, dann bleibt der Platzhalter)
+  templates = new TemplateService(new UserTemplates(path.join(app.getPath('userData'), 'Vorlagen')), () =>
+    settings.authorName ?? (process.platform === 'darwin' ? defaultAuthor() : ''),
+  );
   setCustomUpdateFolder(() => settings.updateFolder);
   windowState = settings.window;
   if (process.platform === 'darwin') {
@@ -747,6 +758,9 @@ void app.whenReady().then(async () => {
     onTabDrag,
     onTabDragHoverState,
     checkUpdatesOnline,
+    templates,
+    thumbnails,
+    onTemplatesChanged: () => broadcast(IPC.templatesChanged),
     quit: () => app.quit(),
   });
 
