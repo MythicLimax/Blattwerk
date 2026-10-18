@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { isCommandId } from '../shared/commands';
-import { IPC, type MenuCommandMessage, type OpenResult, type TabReceived } from '../shared/ipc';
+import { IPC, type MenuCommandMessage, type OpenResult, type TabDragHover, type TabReceived } from '../shared/ipc';
+import type { OnlineCheck, UpdateProgress } from '../shared/update';
 import type { BlattwerkApi } from './api-types';
 
 // Kleine, feste Schnittstelle. Der Renderer bekommt nie direkten Zugriff auf ipcRenderer.
@@ -45,6 +46,9 @@ const api: BlattwerkApi = {
   update: {
     status: () => ipcRenderer.invoke(IPC.updateStatus),
     install: () => ipcRenderer.invoke(IPC.updateInstall),
+    checkOnline: () => ipcRenderer.invoke(IPC.updateCheckOnline),
+    onProgress: (listener) => subscribe(IPC.updateProgress, (p) => (typeof p === 'object' && p !== null ? (p as UpdateProgress) : null), listener),
+    onResult: (listener) => subscribe(IPC.updateResult, (p) => (typeof p === 'object' && p !== null ? (p as OnlineCheck) : null), listener),
   },
   fonts: {
     list: () => ipcRenderer.invoke(IPC.fontsList),
@@ -82,6 +86,16 @@ const api: BlattwerkApi = {
   onTabReceived: (listener) =>
     subscribe(IPC.tabReceived, (p) => (typeof p === 'object' && p !== null ? (p as TabReceived) : null), listener),
   onMergeRequest: (listener) => subscribe(IPC.mergeRequest, () => true, () => listener()),
+  tabDrag: (message) => ipcRenderer.send(IPC.tabDrag, message),
+  // null heißt: Der schwebende Tab hat das Fenster verlassen. Eigene Hülle, weil subscribe null verwirft.
+  onTabDragHover: (listener) => {
+    const handler = (_event: IpcRendererEvent, payload: unknown) => listener(typeof payload === 'object' && payload !== null ? (payload as TabDragHover) : null);
+    ipcRenderer.on(IPC.tabDragHover, handler);
+    return () => {
+      ipcRenderer.removeListener(IPC.tabDragHover, handler);
+    };
+  },
+  setTabDragHoverState: (state) => ipcRenderer.send(IPC.tabDragHoverState, state),
   onRequestClose: (listener) => subscribe(IPC.requestClose, () => true, () => listener()),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
   setMenuState: (state) => ipcRenderer.send(IPC.menuState, state),

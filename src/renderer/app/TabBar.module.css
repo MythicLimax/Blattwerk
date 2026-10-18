@@ -9,6 +9,8 @@
   overflow-x: auto;
   flex: none;
   scrollbar-width: none;
+  /* Bezug für den Platzhalter eines Tabs aus einem anderen Fenster */
+  position: relative;
 }
 
 .tab {
@@ -23,7 +25,11 @@
   color: var(--color-text-muted);
   cursor: default;
   flex: 0 1 auto;
-  transition: background-color 120ms ease;
+  /* Ausweichen beim Ziehen eines anderen Tabs */
+  transition:
+    background-color 120ms ease,
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 140ms ease;
 }
 
 .tab:hover {
@@ -38,17 +44,42 @@
 }
 
 /* Tab wird innerhalb der Leiste verschoben: liegt über den anderen und folgt dem Zeiger */
-.dragging {
+.dragging,
+.dragging:hover {
   position: relative;
   z-index: 1;
-  transition: none;
+  transition: background-color 120ms ease;
   cursor: grabbing;
+  background: var(--fill-selected);
+  color: var(--color-text);
+  box-shadow: 0 4px 14px rgba(40, 30, 10, 0.18), inset 0 0 0 0.5px var(--separator);
 }
 
-/* Tab wird gerade aus der Leiste gezogen: Loslassen gibt ihn an ein anderes oder neues Fenster */
+/* Tab ist aus der Leiste heraus und hängt am Zeiger (Vorschau des Hauptprozesses); die anderen schließen die Lücke */
+.collapsed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Einziger Tab des Fensters, aus der Leiste gezogen: bleibt blass stehen (das Fenster wandert beim Loslassen) */
 .detaching {
   opacity: 0.45;
   cursor: grabbing;
+}
+
+/* Tab aus einem anderen Fenster schwebt über der Leiste */
+.phantom {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(40, 30, 10, 0.18), inset 0 0 0 0.5px var(--separator);
+}
+
+/* Unmittelbar nach dem Loslassen: Die Tabs stehen schon an ihrem Platz, ohne Übergang dorthin */
+.settling .tab {
+  transition: none;
 }
 
 .name {

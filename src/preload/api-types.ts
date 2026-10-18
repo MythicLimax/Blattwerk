@@ -1,7 +1,7 @@
 // Typen der Schnittstelle, die der Preload dem Renderer als window.blattwerk bereitstellt.
 import type { CommandId } from '../shared/commands';
 import type { SystemFont } from '../shared/fonts';
-import type { UpdateStatus } from '../shared/update';
+import type { OnlineCheck, UpdateProgress, UpdateStatus } from '../shared/update';
 import type {
   ConvertResult,
   GlassRegion,
@@ -27,6 +27,9 @@ import type {
   SavedSignature,
   SignatureInput,
   TabDestination,
+  TabDragHover,
+  TabDragHoverState,
+  TabDragMessage,
   TabReceived,
   TabTransfer,
   TabTransferResult,
@@ -58,6 +61,10 @@ export interface BlattwerkApi {
   update: {
     status(): Promise<UpdateStatus>;
     install(): Promise<boolean>;
+    // Neue Version im Netz suchen und in den Update-Ordner laden (ADR 0027)
+    checkOnline(): Promise<OnlineCheck>;
+    onProgress(listener: (progress: UpdateProgress) => void): () => void;
+    onResult(listener: (result: OnlineCheck) => void): () => void;
   };
   // Schriften des Rechners (Aptos, Arial, Times New Roman …), nur einbettbare
   fonts: {
@@ -100,6 +107,10 @@ export interface BlattwerkApi {
   transferTab(fileId: string, transfer: TabTransfer, destination: TabDestination): Promise<TabTransferResult>;
   onTabReceived(listener: (message: TabReceived) => void): () => void;
   onMergeRequest(listener: () => void): () => void;
+  // Tab über die Fenstergrenze ziehen: Vorschau am Zeiger, schwebender Tab über einem anderen Fenster
+  tabDrag(message: TabDragMessage): void;
+  onTabDragHover(listener: (hover: TabDragHover | null) => void): () => void;
+  setTabDragHoverState(state: TabDragHoverState): void;
   // Fenster schließen, nachdem sein letzter Tab weitergegeben wurde
   closeWindow(): void;
   openExternal(url: string): Promise<boolean>;

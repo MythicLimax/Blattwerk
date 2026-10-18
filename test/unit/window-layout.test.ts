@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundsAtPoint, CASCADE_OFFSET, cascadeFrom, dropTarget, fitInto } from '../../src/main/window-layout';
+import { boundsAtPoint, CASCADE_OFFSET, cascadeFrom, dropTarget, fitInto, GHOST_PADDING, GHOST_TAB, ghostLayout } from '../../src/main/window-layout';
 
 const workArea = { x: 0, y: 25, width: 1440, height: 875 };
 
@@ -70,5 +70,19 @@ describe('Fensterlage je Dokument', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('Vorschau beim Herausziehen eines Tabs', () => {
+  it('verkleinert das Fenster mit gleichem Seitenverhältnis und hält den Tab an der gegriffenen Stelle', () => {
+    const layout = ghostLayout({ width: 1200, height: 800 }, { x: 40, y: 12 });
+    expect(layout.preview).toEqual({ width: 340, height: 227 });
+    expect(layout.anchor).toEqual({ x: GHOST_PADDING + 40, y: GHOST_PADDING + GHOST_TAB.height / 2 });
+    expect(layout.width).toBe(GHOST_PADDING * 2 + 340);
+  });
+
+  it('greift den Tab höchstens innerhalb der Kapsel', () => {
+    expect(ghostLayout({ width: 800, height: 600 }, { x: 500, y: 0 }).anchor.x).toBe(GHOST_PADDING + GHOST_TAB.width - 14);
+    expect(ghostLayout({ width: 800, height: 600 }, { x: -20, y: 0 }).anchor.x).toBe(GHOST_PADDING + 14);
   });
 });

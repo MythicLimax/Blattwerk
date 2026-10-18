@@ -133,6 +133,37 @@ test('Tab auf ein anderes Fenster ziehen führt beide zusammen', async () => {
   await close();
 });
 
+test('Tab über der Leiste eines anderen Fensters: Platzhalter zeigt die Stelle, dort landet der Tab', async () => {
+  const { app, close } = await launchApp([fixture('text.pdf'), fixture('formular.pdf')]);
+  await expectWindowCount(app, 2);
+  const target = await windowWithTitle(app, 'text.pdf');
+  await waitForDocument(target, TEXT_PDF.pages);
+  const source = await windowWithTitle(app, 'formular.pdf');
+  await waitForDocument(source, FORM_PAGES);
+  await setBounds(app, 'text.pdf', { x: 0, y: 0, width: 800, height: 600 });
+  await setBounds(app, 'formular.pdf', { x: 850, y: 0, width: 800, height: 600 });
+
+  // Zum linken Rand des Tabs „text.pdf“ im anderen Fenster ziehen und dort kurz halten
+  const from = await source.getByTestId('tab').first().boundingBox();
+  const onto = await target.getByTestId('tab').first().boundingBox();
+  if (!from || !onto) throw new Error('kein Tab');
+  const x = from.x + from.width / 2;
+  const y = from.y + from.height / 2;
+  await source.mouse.move(x, y);
+  await source.mouse.down();
+  await source.mouse.move(x - 100, y, { steps: 3 });
+  await source.mouse.move(onto.x + 10 - 850, onto.y + onto.height / 2, { steps: 4 });
+  await expect(target.getByTestId('tab-phantom')).toBeVisible();
+  await source.mouse.move(onto.x + 12 - 850, onto.y + onto.height / 2);
+  await source.mouse.up();
+
+  await expectWindowCount(app, 1);
+  await expect(target.getByTestId('tab')).toHaveCount(2);
+  await expect(target.getByTestId('tab').first()).toContainText('formular.pdf');
+  await expect(target.getByTestId('tab-phantom')).toHaveCount(0);
+  await close();
+});
+
 test('ungespeicherte Änderungen wandern mit; Speichern schreibt in die Originaldatei', async () => {
   const { files } = copies('text.pdf', 'formular.pdf');
   const [textFile, formFile] = files as [string, string];

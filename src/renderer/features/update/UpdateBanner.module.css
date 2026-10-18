@@ -67,3 +67,30 @@
 .close:hover {
   background: var(--color-hover);
 }
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Fortschritt beim Laden einer neuen Version */
+.progress {
+  width: 120px;
+  height: 5px;
+  margin-right: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+  overflow: hidden;
+}
+
+.progress > div {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-brand);
+  transition: width 150ms linear;
+}

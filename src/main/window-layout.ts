@@ -54,3 +54,30 @@ export function dropTarget<T>(point: Point, source: WindowCandidate<T>, others: 
   const hit = others.find((candidate) => candidate.id !== source.id && contains(candidate.bounds, point));
   return hit ? { kind: 'window', id: hit.id } : { kind: 'new' };
 }
+
+// Vorschau am Zeiger beim Herausziehen eines Tabs (ADR 0026): oben der Tab als Kapsel, darunter das Fenster verkleinert.
+// Der Zeiger hält den Tab an derselben Stelle, an der er ihn gegriffen hat.
+export const GHOST_PADDING = 18;
+export const GHOST_TAB = { width: 200, height: 30 };
+const GHOST_GAP = 6;
+const GHOST_PREVIEW_MAX = 340;
+
+export interface GhostLayout {
+  width: number;
+  height: number;
+  preview: { width: number; height: number };
+  // Zeiger relativ zur Vorschau
+  anchor: Point;
+}
+
+export function ghostLayout(windowSize: { width: number; height: number }, tabOffset: Point): GhostLayout {
+  const previewWidth = Math.round(Math.min(GHOST_PREVIEW_MAX, windowSize.width * 0.35));
+  const previewHeight = Math.round((previewWidth * windowSize.height) / Math.max(1, windowSize.width));
+  const anchorX = GHOST_PADDING + Math.min(Math.max(tabOffset.x, 14), GHOST_TAB.width - 14);
+  return {
+    width: GHOST_PADDING * 2 + Math.max(previewWidth, GHOST_TAB.width),
+    height: GHOST_PADDING * 2 + GHOST_TAB.height + GHOST_GAP + previewHeight,
+    preview: { width: previewWidth, height: previewHeight },
+    anchor: { x: Math.round(anchorX), y: GHOST_PADDING + GHOST_TAB.height / 2 },
+  };
+}

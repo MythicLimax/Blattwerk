@@ -15,6 +15,13 @@ export default defineConfig({
     sourcemap: true,
     assetsInlineLimit: 0,
     chunkSizeWarningLimit: 4096,
+    // Zweite Seite: Vorschau am Zeiger beim Herausziehen eines Tabs (src/main/tab-ghost.ts)
+    rollupOptions: {
+      input: {
+        main: path.resolve(import.meta.dirname, 'src/renderer/index.html'),
+        ghost: path.resolve(import.meta.dirname, 'src/renderer/ghost.html'),
+      },
+    },
   },
   worker: {
     format: 'es',

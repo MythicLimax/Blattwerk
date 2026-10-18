@@ -227,6 +227,26 @@ export async function transferTab(tabId: string, destination: TabDestination): P
   return true;
 }
 
+// „Nach Updates suchen“: erst der Update-Ordner (ADR 0025), dann das Netz (ADR 0027). Eine neue Version erscheint als
+// Leiste „Jetzt aktualisieren“; sonst sagt eine Meldung, warum nicht.
+async function checkForUpdates(): Promise<void> {
+  const update = useUpdate.getState();
+  const ui = useUi.getState();
+  const local = await update.check();
+  useUpdate.setState({ dismissed: null });
+  if (!local) return;
+  if (local.state === 'available') return;
+  if (local.state === 'unsupported') {
+    ui.notify(t('update.unsupported'), t(`update.reasons.${local.reason}`));
+    return;
+  }
+  const result = await update.searchOnline();
+  if (!result || result.state === 'downloaded') return;
+  if (result.state === 'current') ui.confirm(t('update.upToDate', { version: result.current }));
+  else if (result.state === 'unsupported') ui.notify(t('update.unsupported'), t(`update.reasons.${result.reason}`));
+  else ui.notify(t('update.failed.title'), t(`update.failed.${result.reason}`));
+}
+
 // „Alle Fenster zusammenführen“: alle Tabs nacheinander an das vordere Fenster abgeben
 export async function giveAllTabs(): Promise<void> {
   for (const tab of [...useDocuments.getState().tabs]) {
@@ -236,9 +256,11 @@ export async function giveAllTabs(): Promise<void> {
 
 // Übernimmt einen Tab aus einem anderen Fenster. Mit Änderungen liegt der übergebene Stand als neuer Stand über der
 // Datei (wie nach einer Seitenoperation): Der Tab gilt als ungespeichert, Speichern schreibt in die Originaldatei.
-export async function receiveTab({ file, transfer }: TabReceived): Promise<void> {
+export async function receiveTab({ file, transfer, index }: TabReceived): Promise<void> {
   const tabId = crypto.randomUUID();
   useDocuments.getState().addTab({ id: tabId, fileId: file.fileId, name: file.name, dir: file.dir, size: file.size, untitled: file.untitled === true });
+  // Auf die Tableiste gezogen: an die Stelle, an der die Leiste beim Schweben Platz gemacht hat
+  if (index !== undefined) useDocuments.getState().moveTab(tabId, index);
   useAnnotations.getState().init(tabId);
   useHistory.getState().reset(tabId);
   useDocuments.getState().updateTab(tabId, { currentPage: transfer.page });
@@ -936,15 +958,7 @@ export function executeCommand(command: CommandId): void {
     return;
   }
   if (command === 'app.checkUpdates') {
-    void useUpdate
-      .getState()
-      .check()
-      .then((status) => {
-        if (!status) return;
-        useUpdate.setState({ dismissed: null });
-        if (status.state === 'current') ui.confirm(t('update.upToDate', { version: status.current }));
-        else if (status.state === 'unsupported') ui.notify(t('update.unsupported'), t(`update.reasons.${status.reason}`));
-      });
+    void checkForUpdates();
     return;
   }
   if (command === 'app.settings') {

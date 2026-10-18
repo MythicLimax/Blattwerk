@@ -32,6 +32,8 @@ export const IPC = {
   // Updates ohne Internet (ADR 0025): Stand prüfen, bereitliegendes Update beim Beenden einspielen
   updateStatus: 'update:status',
   updateInstall: 'update:install',
+  // Neue Version im Netz suchen und laden (ADR 0027)
+  updateCheckOnline: 'update:check-online',
   // Phase 4: gespeicherte Unterschriften
   signaturesList: 'signatures:list',
   signaturesAdd: 'signatures:add',
@@ -59,6 +61,9 @@ export const IPC = {
   closeCancelled: 'app:close-cancelled',
   // Fenster ohne Tabs schließen (nachdem sein letzter Tab in ein anderes Fenster gewandert ist)
   closeWindow: 'window:close',
+  // Tab wird über die Fenstergrenze gezogen (Vorschau am Zeiger) bzw. das Zielfenster meldet seine Einfügestelle
+  tabDrag: 'window:tab-drag',
+  tabDragHoverState: 'window:tab-drag-hover-state',
   // Hauptprozess → Renderer
   fileOpened: 'file:opened',
   menuCommand: 'menu:command',
@@ -67,6 +72,11 @@ export const IPC = {
   // Tab aus einem anderen Fenster übernehmen bzw. alle Tabs an das vordere Fenster abgeben
   tabReceived: 'window:tab-received',
   mergeRequest: 'window:merge-request',
+  // Ein Tab aus einem anderen Fenster schwebt über diesem Fenster (null: nicht mehr)
+  tabDragHover: 'window:tab-drag-hover',
+  // Laden einer neuen Version: Fortschritt und Ergebnis (auch bei der Suche beim Start)
+  updateProgress: 'update:progress',
+  updateResult: 'update:result',
 } as const;
 
 export type FileKind = 'pdf' | 'jpeg' | 'png';
@@ -166,6 +176,35 @@ export type TabTransferResult = { ok: true } | { ok: false; error: 'nothing-to-d
 export interface TabReceived {
   file: FileInfo;
   transfer: TabTransfer;
+  // Stelle in der Tableiste (Tab auf die Leiste gezogen); sonst ans Ende
+  index?: number;
+}
+
+// Ziehen eines Tabs über die Fenstergrenze (ADR 0026). Der Renderer meldet Beginn, Zeigerbewegungen (Bildschirmpunkt;
+// detached: außerhalb der eigenen Tableiste) und das Ende ohne Übergabe. Der Hauptprozess zeigt dazu eine Vorschau am
+// Zeiger und meldet dem Fenster darunter den schwebenden Tab.
+export type TabDragMessage =
+  | {
+      kind: 'start';
+      title: string;
+      // Zeiger relativ zum Tab und zum Fenster (für die Vorschau und die Lage eines neuen Fensters)
+      tabOffset: { x: number; y: number };
+      grip: { x: number; y: number };
+    }
+  | { kind: 'move'; x: number; y: number; detached: boolean }
+  | { kind: 'end' };
+
+// Schwebender Tab über diesem Fenster, Zeiger in Fensterkoordinaten
+export interface TabDragHover {
+  x: number;
+  y: number;
+  title: string;
+}
+
+// Antwort des Fensters unter dem Zeiger: Zeiger über der Tableiste und Stelle, an der der Tab landen würde
+export interface TabDragHoverState {
+  overBar: boolean;
+  index: number;
 }
 
 export interface RecentFile {
