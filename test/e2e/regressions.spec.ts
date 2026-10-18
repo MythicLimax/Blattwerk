@@ -318,7 +318,14 @@ test('schmales Fenster: was nicht in die Leiste passt, steht im Menü „Weitere
   const toolbar = page.getByTestId('toolbar');
   const fits = () => toolbar.evaluate((element) => element.scrollWidth <= element.clientWidth + 1);
   await expect(page.getByTestId('toolbar-more')).toHaveCount(0);
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(780, 700));
+  // Unter Windows kommt eine Größenänderung kurz nach dem Anzeigen des Fensters manchmal nicht an: so lange setzen, bis
+  // die Leiste wirklich schmal ist
+  await expect
+    .poll(async () => {
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(780, 700));
+      return toolbar.evaluate((element) => element.clientWidth);
+    })
+    .toBeLessThanOrEqual(780);
   await expect(page.getByTestId('toolbar-more')).toBeVisible();
   expect(await fits()).toBe(true);
   await expect(toolbar.getByTestId('zoom-select')).toHaveCount(0);
