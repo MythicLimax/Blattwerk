@@ -181,3 +181,10 @@
 .ghosts image {
   opacity: 0.95;
 }
+
+/* Eingabe mit gemischter Gestaltung: wächst mit dem Text, Zeilen wie später auf der Seite */
+.rich {
+  min-height: 1.2em;
+  cursor: text;
+  overflow-wrap: break-word;
+}

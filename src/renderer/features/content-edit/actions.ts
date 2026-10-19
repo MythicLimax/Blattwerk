@@ -2,6 +2,7 @@
 // Jede Änderung ist eine Inhaltsoperation und damit ein neuer Dokumentstand (Rückgängig wie bei Seiten).
 import type { Point, Rect } from '../../../shared/annotations';
 import { LINE_HEIGHT, type ContentOperation, type EditUnit, type Matrix, type ParagraphStyle } from '../../../shared/content';
+import { isMixed, normalizeRuns, restyleRange, runsText, type StylePatch, type TextRun } from '../../../shared/rich-text';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { applyContentOperations, commitPendingEdits } from '../../engine/session';
 import { t } from '../../i18n';
@@ -46,13 +47,38 @@ async function run(tabId: string, operation: ContentOperation | ContentOperation
   return applyContentOperations(tabId, operations, { keepScroll: true });
 }
 
-// Neuer Text: at ist die linke obere Ecke der ersten Zeile in PDF-Punkten; baseline die erste Grundlinie
-// width: Breite (Punkt), in der der Text umbricht; ohne Angabe nur an Zeilenumbrüchen
-export async function addText(tabId: string, pageIndex: number, baseline: Point, value: string, width?: number, flow?: { top: number; bottom: number }): Promise<boolean> {
-  const lines = value.replace(/\s+$/, '').split('\n');
-  if (lines.every((line) => line.trim() === '')) return false;
-  const { style } = useContentEdit.getState();
-  return run(tabId, { type: 'addText', pageIndex, origin: baseline, lines, font: style.font, size: style.size, color: style.color, ...(width ? { width } : {}), ...(flow ? { flow } : {}) });
+// Text mit gemischter Gestaltung: origin = Anfang und Oberkante der ersten Zeile (PDF-Punkte), replace = Objekte, an
+// deren Stelle er tritt. Danach wird der Text an seiner linken oberen Ecke wieder ausgewählt (nur beim Ersetzen).
+export async function addRichText(
+  tabId: string,
+  pageIndex: number,
+  origin: Point,
+  value: TextRun[],
+  options: { width?: number; flow?: { top: number; bottom: number }; replace?: number[] } = {},
+): Promise<boolean> {
+  // Leerraum am Ende entfällt
+  const runs = normalizeRuns(value.map((run) => ({ ...run })));
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const piece = runs[i] as TextRun;
+    piece.text = piece.text.replace(/\s+$/, '');
+    if (piece.text !== '') break;
+  }
+  const cleaned = normalizeRuns(runs);
+  const replace = options.replace ?? [];
+  if (runsText(cleaned).trim() === '') return replace.length > 0 ? run(tabId, { type: 'delete', pageIndex, indices: replace }) : false;
+  const store = useContentEdit.getState();
+  if (replace.length > 0) store.select(tabId, null);
+  const done = await run(tabId, {
+    type: 'addRichText',
+    pageIndex,
+    origin,
+    runs: cleaned,
+    ...(options.width ? { width: options.width } : {}),
+    ...(options.flow ? { flow: options.flow } : {}),
+    ...(replace.length > 0 ? { replace } : {}),
+  });
+  if (done && replace.length > 0) store.setReselect({ tabId, pageIndex, at: { x: origin.x + 1, y: origin.y - 1 } });
+  return done;
 }
 
 // merge: weitere Stücke derselben Zeile (siehe lineOf), die im ersten aufgehen
@@ -78,10 +104,22 @@ export async function editParagraph(tabId: string, pageIndex: number, lines: num
 export async function reflowText(
   tabId: string,
   pageIndex: number,
-  unit: Pick<EditUnit, 'index' | 'members' | 'lines' | 'bounds'>,
+  unit: Pick<EditUnit, 'index' | 'members' | 'lines' | 'bounds' | 'runs' | 'origin' | 'mark'>,
   text: string,
   change: { box?: { left: number; right: number }; style?: ParagraphStyle; bounds?: Rect },
 ): Promise<boolean> {
+  // Gemischte Gestaltung (z. B. ein größeres Wort): neu setzen, jedes Stück behält, was sich nicht ändert
+  if (unit.runs && unit.origin && isMixed(unit.runs) && text === runsText(unit.runs)) {
+    const patch: StylePatch = {
+      ...(change.style?.size !== undefined ? { size: change.style.size } : {}),
+      ...(change.style?.color ? { color: change.style.color } : {}),
+      ...(change.style?.font ? { font: change.style.font } : {}),
+    };
+    const runs = restyleRange(unit.runs, 0, text.length, patch);
+    const shift = change.box ? change.box.left - unit.bounds[0] : 0;
+    const width = change.box ? change.box.right - change.box.left : unit.mark?.w;
+    return addRichText(tabId, pageIndex, { x: unit.origin.x + shift, y: unit.origin.y }, runs, { ...(width ? { width } : {}), replace: unit.members });
+  }
   const value = text.replace(/\r/g, '').replace(/[ \t]+$/gm, '');
   if (value.trim() === '') return run(tabId, { type: 'delete', pageIndex, indices: unit.members });
   const store = useContentEdit.getState();
@@ -165,13 +203,7 @@ export async function addImage(tab: TabState): Promise<void> {
   });
 }
 
-// Abstand der ersten Grundlinie von der Oberkante einer Zeile (Zeilenhöhe 1,2): halber Durchschuss 0,1 plus
-// Oberlänge der Standardschriften (etwa 0,76). So steht der Text nach dem Übernehmen dort, wo er in der Eingabe stand.
-export const baselineOffset = (size: number) => size * 0.86;
 export const lineHeight = (size: number) => size * LINE_HEIGHT;
-// Neuer Text: Die Klickstelle ist die Mitte der ersten Zeile (wie der Strich des Textzeigers). Abstand der Grundlinie
-// von dort nach unten.
-export const baselineBelowClick = (size: number) => baselineOffset(size) - lineHeight(size) / 2;
 
 // Seitenränder für Fließtext (Punkt, Ansicht): 2,5 cm links, rechts und oben, 2 cm unten; auf kleinen Seiten weniger
 export function flowMargins(width: number, height: number): { left: number; right: number; top: number; bottom: number } {

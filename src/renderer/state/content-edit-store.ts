@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import type { Point, Rect, Rgb } from '../../shared/annotations';
 import type { EditUnit, ParagraphStyle } from '../../shared/content';
 import type { TextFont } from '../../shared/fonts';
+import type { RunStyle, TextRun } from '../../shared/rich-text';
 
 // flow: Fließtext über die ganze Breite zwischen den Seitenrändern, wie in einer Textverarbeitung
 export type ContentTool = 'select' | 'text' | 'flow';
@@ -20,10 +21,27 @@ export interface SelectedObject {
 }
 
 // Texteingabe direkt auf der Seite: neue Zeilen an einer Stelle (at = Klickstelle, Anfang und Mitte der ersten Zeile,
-// in Ansichtskoordinaten) oder eine vorhandene Zeile ändern
+// in Ansichtskoordinaten) oder eine vorhandene Zeile ändern. runs, origin, width: von Blattwerk gesetzter Text, der
+// mit gemischter Gestaltung bearbeitet wird (Stücke, Anfang und Oberkante der ersten Zeile, Breite)
 export type TextEditing =
   | { tabId: string; pageIndex: number; mode: 'new'; at: Point; flow?: boolean }
-  | { tabId: string; pageIndex: number; mode: 'edit'; index: number; merge: number[]; bounds: Rect; text: string; fontSize: number; font?: string; lines?: number[][]; color?: Rgb; style?: ParagraphStyle };
+  | {
+      tabId: string;
+      pageIndex: number;
+      mode: 'edit';
+      index: number;
+      merge: number[];
+      bounds: Rect;
+      text: string;
+      fontSize: number;
+      font?: string;
+      lines?: number[][];
+      color?: Rgb;
+      style?: ParagraphStyle;
+      runs?: TextRun[];
+      origin?: Point;
+      width?: number;
+    };
 
 export interface TextStyle {
   font: TextFont;
@@ -36,6 +54,9 @@ interface ContentEditState {
   selected: Record<string, SelectedObject | null>;
   editing: TextEditing | null;
   style: TextStyle;
+  // Gestaltung an der Einfügestelle der offenen Eingabe (für die Anzeige in der Leiste)
+  caret: RunStyle | null;
+  setCaret: (caret: RunStyle | null) => void;
   // Lage eines Objekts, die gerade übernommen wird (bis zum Neuladen)
   // Neue Lage von Objekten, die gerade übernommen wird (bis zum Neuladen), je Index
   pending: Record<string, { pageIndex: number; bounds: Record<number, Rect> } | null>;
@@ -57,6 +78,8 @@ export const useContentEdit = create<ContentEditState>((set) => ({
   style: { font: 'Helvetica', size: 12, color: { r: 0, g: 0, b: 0 } },
   pending: {},
   reselect: null,
+  caret: null,
+  setCaret: (caret) => set({ caret }),
   setReselect: (reselect) => set({ reselect }),
   setTool: (tool) => set({ tool }),
   select: (tabId, selected) => set((state) => ({ selected: { ...state.selected, [tabId]: selected } })),

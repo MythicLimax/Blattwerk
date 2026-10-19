@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { normalizeRect, type Point, type Rect } from '../../../shared/annotations';
 import { editUnits, LINE_HEIGHT, missingChars, scalingAbout, translation, type EditUnit, type PageObjectInfo, type PageObjects } from '../../../shared/content';
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
-import { useContentEdit, type TextEditing } from '../../state/content-edit-store';
+import { useContentEdit, type TextEditing, type TextStyle } from '../../state/content-edit-store';
+import { isMixed, runsText, sameStyle, type RunStyle, type TextRun } from '../../../shared/rich-text';
+import { RichTextEditor, type RichEditorHandle } from './RichTextEditor';
 import { isSystemFontKey } from '../../../shared/fonts';
 import { previewFamily, registerPreview } from './system-fonts';
-import { addText, baselineBelowClick, baselineOffset, editParagraph, editText, flowMargins, lineHeight, reflowText, transformObjects } from './actions';
+import { addRichText, editParagraph, editText, flowMargins, lineHeight, reflowText, transformObjects } from './actions';
 import styles from './ContentEditOverlay.module.css';
 import { pageObjects } from './page-objects';
 
@@ -360,6 +362,8 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
       ...(unit.font ? { font: unit.font } : {}),
       ...(unit.lines ? { lines: unit.lines } : {}),
       ...(unit.color ? { color: unit.color } : {}),
+      // Von Blattwerk gesetzter Text: mit gemischter Gestaltung bearbeiten
+      ...(unit.runs && unit.origin ? { runs: unit.runs, origin: unit.origin, ...(unit.mark?.w ? { width: unit.mark.w } : {}) } : {}),
     });
   };
 
@@ -564,16 +568,30 @@ function lookOf(name: string): { fontWeight: number; fontFamily: string } {
   return { fontWeight: /bold|black|heavy/.test(lower) ? 700 : 400, fontFamily };
 }
 
-// Eingabe für neuen Text oder eine vorhandene Zeile, direkt auf der Seite
+// Dasselbe als Stilangaben für eine Spanne (Werte als Zeichenketten)
+function lookCss(name: string): CSSProperties {
+  const look = lookOf(name);
+  return { fontFamily: look.fontFamily, fontWeight: String(look.fontWeight) };
+}
+
+// Eingabe für neuen Text oder eine vorhandene Zeile, direkt auf der Seite. Neuer Text und von Blattwerk gesetzter Text
+// lassen sich gemischt gestalten (RichTextEditor), Text aus anderen Programmen nur als Ganzes (Textfeld).
 function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditing; geometry: PageGeometry; scale: number; listing: PageObjects | null }) {
   const { t } = useTranslation();
   const style = useContentEdit((s) => s.style);
   const initial = editing.mode === 'edit' ? editing.text : '';
-  const [value, setValue] = useState(initial);
+  const rich = editing.mode === 'new' || editing.runs !== undefined;
+  const [initialRuns] = useState<TextRun[]>(() => (editing.mode === 'edit' ? (editing.runs ?? []) : []));
+  const [runs, setRuns] = useState<TextRun[]>(initialRuns);
+  const [plain, setPlain] = useState(initial);
+  const value = rich ? runsText(runs) : plain;
   const ref = useRef<HTMLTextAreaElement>(null);
+  const richRef = useRef<RichEditorHandle | null>(null);
   const done = useRef(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const viewScale = scale * (96 / 72);
+  // Gestaltung beim Öffnen: Lage der Eingabe für neuen Text (bleibt stehen, auch wenn sich die Größe danach ändert)
+  const [opening] = useState<TextStyle>(style);
   // Fließtext: Breite zwischen den Seitenrändern
   const flow = editing.mode === 'new' && editing.flow === true;
   const margins = flowMargins(geometry.width, geometry.height);
@@ -585,7 +603,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
   const restyle = editing.mode === 'edit' ? editing.style : undefined;
 
   // Bei kleinem Zoom bleibt die Eingabe lesbar, auch wenn sie dann etwas größer ist als der Text auf der Seite.
-  const pointSize = editing.mode === 'edit' ? (restyle?.size ?? editing.fontSize) : style.size;
+  const pointSize = editing.mode === 'edit' ? (restyle?.size ?? editing.fontSize) : rich ? opening.size : style.size;
   const fontSize = Math.max(MIN_EDITOR_PX, pointSize * viewScale);
   // Neuer Text: Eingabe so legen, dass der Text an der Klickstelle beginnt und die erste Zeile mittig auf ihr liegt
   const box =
@@ -605,17 +623,69 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
   // Schrift des Rechners: wird eingebettet und hat (fast) alle Zeichen, keine Warnung
   const chosen = editing.mode === 'new' ? style.font : restyle?.font;
   const embedded = chosen !== undefined && isSystemFontKey(chosen);
-  const missing = embedded ? '' : editing.mode === 'edit' ? missingChars(value, font) : missingChars(value, undefined);
-  const impossible = embedded ? '' : missingChars(value, undefined);
+  const plainMissing = embedded ? '' : editing.mode === 'edit' ? missingChars(value, font) : missingChars(value, undefined);
+  const plainImpossible = embedded ? '' : missingChars(value, undefined);
+  const { missing, impossible } = rich ? runWarnings(runs, listing) : { missing: plainMissing, impossible: plainImpossible };
+  const previewFonts = rich ? runs.map((run) => run.font ?? '').join(' ') : (chosen ?? '');
   useEffect(() => {
-    if (chosen && isSystemFontKey(chosen)) void registerPreview(chosen);
-  }, [chosen]);
+    for (const key of new Set([...previewFonts.split(' '), style.font])) if (key && isSystemFontKey(key)) void registerPreview(key);
+  }, [previewFonts, style.font]);
+
+  // Anzeige eines Stücks in der Eingabe (Größe in Bildpunkten der Ansicht, Schrift ähnlich der auf der Seite)
+  const cssFor = (run: RunStyle): CSSProperties => {
+    const family = run.font ?? (run.key ? (listing?.fonts[run.key]?.name ?? '') : '');
+    return {
+      fontSize: `${Math.max(MIN_EDITOR_PX, run.size * viewScale)}px`,
+      lineHeight: '1.2',
+      ...(isSystemFontKey(family) ? { fontFamily: `"${previewFamily(family)}", Helvetica, sans-serif`, fontWeight: '400' } : lookCss(family)),
+      color: `rgb(${run.color.r * 255} ${run.color.g * 255} ${run.color.b * 255})`,
+    };
+  };
+
+  const commitRich = () => {
+    const current = richRef.current?.runs() ?? runs;
+    const y = box.y;
+    if (editing.mode === 'new') {
+      // Oberkante der ersten Zeile: innerhalb des Rahmens der Eingabe; der Text beginnt dort, wo die Eingabe steht
+      const origin = geometry.toPdf(editing.at.x + (left - box.x), box.y + 1 / viewScale);
+      const width = frame ? frame.width - (2 * EDITOR_INSET_PX) / viewScale : undefined;
+      // Fließtext: unterhalb des unteren Rands geht es auf einer neuen Seite oben am Rand weiter
+      const flowLimits = flow ? { top: geometry.toPdf(margins.left, margins.top).y, bottom: geometry.toPdf(margins.left, geometry.height - margins.bottom).y } : undefined;
+      void addRichText(editing.tabId, editing.pageIndex, origin, current, { ...(width ? { width } : {}), ...(flowLimits ? { flow: flowLimits } : {}) });
+      return;
+    }
+    const text = runsText(current);
+    const members = [editing.index, ...editing.merge];
+    const unit = { index: editing.index, members, bounds: editing.bounds, ...(editing.lines ? { lines: editing.lines } : {}) };
+    const sides = frame ? { left: geometry.toPdf(frame.left, y).x, right: geometry.toPdf(frame.left + frame.width, y).x } : undefined;
+    const [before] = initialRuns;
+    const [after] = current;
+    if (!isMixed(initialRuns) && !isMixed(current)) {
+      // Einheitlich vorher und nachher: wie bisher (behält die Objekte, wo es geht)
+      const changed = before && after && !sameStyle(before, after);
+      if (sides || changed) {
+        const restyled = changed && after ? { size: after.size, color: after.color, ...(after.font !== undefined ? { font: after.font } : {}) } : undefined;
+        void reflowText(editing.tabId, editing.pageIndex, unit, text, { ...(sides ? { box: sides } : {}), ...(restyled ? { style: restyled } : {}) });
+      } else if (editing.lines) void editParagraph(editing.tabId, editing.pageIndex, editing.lines, text, initial);
+      else void editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, text, initial);
+      return;
+    }
+    // Gemischt: an derselben Stelle neu setzen (gezogene Ränder verschieben den Anfang und ändern die Breite)
+    const origin = editing.origin ?? { x: editing.bounds[0], y: editing.bounds[3] };
+    const x = origin.x + (sides ? sides.left - editing.bounds[0] : 0);
+    const width = sides ? sides.right - x : editing.width;
+    void addRichText(editing.tabId, editing.pageIndex, { x, y: origin.y }, current, { ...(width ? { width } : {}), replace: members });
+  };
 
   const commit = () => {
     if (done.current) return;
     done.current = true;
     useContentEdit.getState().setEditing(null);
     if (impossible) return;
+    if (rich) {
+      commitRich();
+      return;
+    }
     if (editing.mode === 'edit' && (frame || (restyle && Object.keys(restyle).length > 0))) {
       // Neue Breite oder Gestaltung: Zeile bzw. Absatz neu setzen (bricht in der Breite um)
       const y = box.y;
@@ -629,15 +699,6 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
       void editParagraph(editing.tabId, editing.pageIndex, editing.lines, value, initial);
     } else if (editing.mode === 'edit') {
       void editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, value, initial);
-    } else {
-      // Text beginnt dort, wo die Eingabe steht (auch nach Ziehen am linken Rand)
-      const baseline = geometry.toPdf(editing.at.x + (left - box.x), editing.at.y + baselineBelowClick(style.size));
-      const width = frame ? frame.width - (2 * EDITOR_INSET_PX) / viewScale : undefined;
-      // Fließtext: unterhalb des unteren Rands geht es auf einer neuen Seite oben am Rand weiter
-      const flowLimits = flow
-        ? { top: geometry.toPdf(margins.left, margins.top + baselineOffset(style.size)).y, bottom: geometry.toPdf(margins.left, geometry.height - margins.bottom).y }
-        : undefined;
-      void addText(editing.tabId, editing.pageIndex, baseline, value, width, flowLimits);
     }
   };
 
@@ -663,6 +724,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
   };
 
   const paragraph = editing.mode === 'edit' && editing.lines !== undefined;
+  const focusEditor = () => (rich ? wrapRef.current?.querySelector<HTMLElement>('[data-testid="content-text-editor"]') : ref.current)?.focus({ preventScroll: true });
 
   // Breite ziehen: Anfasser links und rechts der Eingabe
   const onHandleDown = (event: ReactPointerEvent<HTMLDivElement>, side: 'left' | 'right') => {
@@ -690,14 +752,14 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
       handle.removeEventListener('pointermove', move);
       handle.removeEventListener('pointerup', end);
       handle.removeEventListener('pointercancel', end);
-      ref.current?.focus({ preventScroll: true });
+      focusEditor();
     };
     handle.addEventListener('pointermove', move);
     handle.addEventListener('pointerup', end);
     handle.addEventListener('pointercancel', end);
   };
 
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     event.stopPropagation();
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -720,30 +782,47 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
   };
   const textColor = editing.mode === 'new' ? style.color : (restyle?.color ?? editing.color);
   const family = editing.mode === 'new' ? style.font : (restyle?.font ?? font?.name ?? '');
+  const className = [styles.editor, fixedWidth !== null ? styles.paragraph : '', flow ? styles.flow : '', rich ? styles.rich : ''].join(' ');
 
   return (
     <div ref={wrapRef} className={styles.editorWrap} style={position}>
-      <textarea
-        ref={ref}
-        className={[styles.editor, fixedWidth !== null ? styles.paragraph : '', flow ? styles.flow : ''].join(' ')}
-        style={{
-          fontSize: `${fontSize}px`,
-          lineHeight: 1.2,
-          ...(isSystemFontKey(family) ? { fontFamily: `"${previewFamily(family)}", Helvetica, sans-serif`, fontWeight: 400 } : lookOf(family)),
-          color: textColor ? `rgb(${textColor.r * 255} ${textColor.g * 255} ${textColor.b * 255})` : undefined,
-        }}
-        rows={editing.mode === 'edit' && fixedWidth === null ? 1 : Math.max(1, value.split('\n').length)}
-        value={value}
-        aria-label={t('contentEdit.textInput')}
-        onChange={(event) => setValue(event.target.value)}
-        onBlur={(event) => {
-          // Größe, Schrift oder Farbe in der Leiste wählen beendet die Eingabe nicht
-          if (!inToolbar(event.relatedTarget)) commit();
-        }}
-        onKeyDown={onKeyDown}
-        onPointerDown={(event) => event.stopPropagation()}
-        data-testid="content-text-editor"
-      />
+      {rich ? (
+        <RichTextEditor
+          initial={initialRuns}
+          typing={{ size: style.size, color: style.color, font: style.font }}
+          css={cssFor}
+          className={className}
+          handleRef={richRef}
+          onChange={setRuns}
+          onKeyDown={onKeyDown}
+          onBlur={(related) => {
+            // Größe, Schrift oder Farbe in der Leiste wählen beendet die Eingabe nicht
+            if (!inToolbar(related)) commit();
+          }}
+        />
+      ) : (
+        <textarea
+          ref={ref}
+          className={className}
+          style={{
+            fontSize: `${fontSize}px`,
+            lineHeight: 1.2,
+            ...(isSystemFontKey(family) ? { fontFamily: `"${previewFamily(family)}", Helvetica, sans-serif`, fontWeight: 400 } : lookOf(family)),
+            color: textColor ? `rgb(${textColor.r * 255} ${textColor.g * 255} ${textColor.b * 255})` : undefined,
+          }}
+          rows={editing.mode === 'edit' && fixedWidth === null ? 1 : Math.max(1, value.split('\n').length)}
+          value={value}
+          aria-label={t('contentEdit.textInput')}
+          onChange={(event) => setPlain(event.target.value)}
+          onBlur={(event) => {
+            // Größe, Schrift oder Farbe in der Leiste wählen beendet die Eingabe nicht
+            if (!inToolbar(event.relatedTarget)) commit();
+          }}
+          onKeyDown={onKeyDown}
+          onPointerDown={(event) => event.stopPropagation()}
+          data-testid="content-text-editor"
+        />
+      )}
       {resizable &&
         (['left', 'right'] as const).map((side) => (
           <div
@@ -762,4 +841,22 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
       )}
     </div>
   );
+}
+
+// Zeichen, die eine Schrift der Stücke nicht kennt: fehlt die Form in der Schrift des Absatzes, nimmt der Worker eine
+// ähnliche Standardschrift (missing); kennen auch die Standardschriften das Zeichen nicht, geht es nicht (impossible)
+function runWarnings(runs: TextRun[], listing: PageObjects | null): { missing: string; impossible: string } {
+  const missing = new Set<string>();
+  const impossible = new Set<string>();
+  for (const run of runs) {
+    if (run.font !== undefined) {
+      if (!isSystemFontKey(run.font)) for (const char of missingChars(run.text, undefined)) impossible.add(char);
+      continue;
+    }
+    const lacking = missingChars(run.text, run.key ? listing?.fonts[run.key] : undefined);
+    if (!lacking) continue;
+    for (const char of lacking) missing.add(char);
+    for (const char of missingChars(run.text, undefined)) impossible.add(char);
+  }
+  return { missing: [...missing].join(''), impossible: [...impossible].join('') };
 }

@@ -3,6 +3,7 @@
 // wird inkrementell. Siehe docs/entscheidungen/0010-inhalt-bearbeiten.md.
 import type { Rgb } from '../../shared/annotations';
 import {
+  FIRST_BASELINE,
   imageMatrix,
   LINE_HEIGHT,
   MAX_PAGE_OBJECTS,
@@ -17,6 +18,7 @@ import {
 import type { StampFont } from '../../shared/stamping';
 import { isSystemFontKey, type SystemFontKey, type TextFont } from '../../shared/fonts';
 import type { OcrWord } from '../../shared/ocr';
+import type { TextRun } from '../../shared/rich-text';
 import { withBuffer, withFloats, withWString, type Pdfium } from './memory';
 import type { Allocations } from './pages';
 
@@ -123,7 +125,7 @@ export function listPageObjects(m: Pdfium, doc: number, pageIndex: number): Page
           const scale = matrix ? Math.hypot(matrix[2] ?? 0, matrix[3] ?? 0) : 1;
           const upright = matrix !== null && (matrix[0] ?? 0) > 0 && (matrix[3] ?? 0) > 0 && Math.abs(matrix[1] ?? 0) < 1e-3 && Math.abs(matrix[2] ?? 0) < 1e-3;
           const mark = readMark(m, object);
-          Object.assign(info, { text, fontSize, visualSize: fontSize * (scale || 1), font: key, color: fillColor(m, object), upright, ...(upright ? { baseline: matrix[5] } : {}), ...(mark ? { mark } : {}) });
+          Object.assign(info, { text, fontSize, visualSize: fontSize * (scale || 1), font: key, color: fillColor(m, object), upright, ...(upright ? { baseline: matrix[5], x: matrix[4] } : {}), ...(mark ? { mark } : {}) });
         }
         objects.push(info);
       }
@@ -180,6 +182,7 @@ function useSystemFonts(operation: ContentOperation): void {
     if (font && isSystemFontKey(font) && data) systemFontData.set(font, new Uint8Array(data));
   };
   if (operation.type === 'addText') register(operation.font, operation.fontData);
+  if (operation.type === 'addRichText') for (const run of operation.runs) register(run.font, run.fontData);
   if (operation.type === 'editParagraph') register(operation.style?.font, operation.style?.fontData);
 }
 
@@ -234,7 +237,7 @@ export function applyContentOperation(m: Pdfium, doc: number, operation: Content
 
 function applyOperation(m: Pdfium, doc: number, operation: ContentOperation, memory: Allocations): void {
   // Vorher auflisten: Ein zweites Laden derselben Seite, während sie offen ist, macht Schrift-Handles ungültig
-  const listing = operation.type === 'editParagraph' ? listPageObjects(m, doc, operation.pageIndex) : null;
+  const listing = operation.type === 'editParagraph' || operation.type === 'addRichText' ? listPageObjects(m, doc, operation.pageIndex) : null;
   withPage(m, doc, operation.pageIndex, (page) => {
     switch (operation.type) {
       case 'addText': {
@@ -291,6 +294,9 @@ function applyOperation(m: Pdfium, doc: number, operation: ContentOperation, mem
         }
         break;
       }
+      case 'addRichText':
+        if (listing) addRichText(m, doc, page, listing, operation);
+        break;
       case 'addImage': {
         const { image, rect } = operation;
         const object = m.FPDFPageObj_NewImageObj(doc);
@@ -429,7 +435,8 @@ function readMark(m: Pdfium, object: number): TextMark | undefined {
   const p = int('P');
   if (p === null) return undefined;
   const w = withBuffer(m, 4, (ptr) => (m.FPDFPageObjMark_GetParamFloatValue(mark, 'W', ptr) ? (m.pdfium.getValue(ptr, 'float') as number) : null));
-  return { p, ...(w !== null && w > 0 ? { w } : {}), ...(int('H') === 1 ? { h: true } : {}) };
+  const b = int('B');
+  return { p, ...(w !== null && w > 0 ? { w } : {}), ...(int('H') === 1 ? { h: true } : {}), ...(b !== null && b > 0 ? { b } : {}) };
 }
 
 function writeMark(m: Pdfium, doc: number, object: number, value: TextMark): void {
@@ -439,6 +446,7 @@ function writeMark(m: Pdfium, doc: number, object: number, value: TextMark): voi
   m.FPDFPageObjMark_SetIntParam(doc, object, mark, 'P', value.p);
   if (value.w) m.FPDFPageObjMark_SetFloatParam(doc, object, mark, 'W', value.w);
   if (value.h) m.FPDFPageObjMark_SetIntParam(doc, object, mark, 'H', 1);
+  if (value.b) m.FPDFPageObjMark_SetIntParam(doc, object, mark, 'B', value.b);
 }
 
 // Kennzahl eines neuen Absatzes (nur innerhalb der Seite von Bedeutung)
@@ -570,6 +578,212 @@ function setParagraph(
     place(object, matrixFor(i));
     m.FPDFPage_InsertObject(page, object);
   });
+}
+
+// Text mit gemischter Gestaltung setzen (ContentOperation addRichText): Wörter dürfen aus Stücken verschiedener Größe,
+// Schrift und Farbe bestehen. Umgebrochen wird Wort für Wort mit den echten Zeichenbreiten jedes Stücks; jede Zeile ist
+// so hoch wie ihre größte Schrift, die Grundlinien liegen wie bei einheitlichem Text. Jedes Stück einer Zeile wird ein
+// eigenes Textobjekt; alle tragen die Kennzeichnung des Absatzes.
+interface Token {
+  text: string;
+  run: number;
+  space: boolean;
+}
+
+interface RichLine {
+  tokens: Token[];
+  hard: boolean;
+  // Leerzeilen danach
+  blank: number;
+  size: number;
+}
+
+function addRichText(m: Pdfium, doc: number, page: number, listing: PageObjects, operation: Extract<ContentOperation, { type: 'addRichText' }>): void {
+  const runs = operation.runs.filter((run) => run.text !== '');
+  if (runs.length === 0) throw new ContentError('Text fehlt');
+  const infos = new Map(listing.objects.map((info) => [info.index, info]));
+  // Erst alles von den bisherigen Objekten lesen: Nach dem Entfernen gelten ihre Positionen nicht mehr
+  const replaced = [...new Set(operation.replace ?? [])].map((index) => objectAt(m, page, index));
+  const sources = new Map<number, { font: number; mode: number }>();
+  for (const run of runs) {
+    if (run.font !== undefined || run.source === undefined || sources.has(run.source)) continue;
+    const object = objectAt(m, page, run.source);
+    if (m.FPDFPageObj_GetType(object) !== OBJECT.text) throw new ContentError(`Objekt ${run.source} ist kein Text`);
+    sources.set(run.source, { font: m.FPDFTextObj_GetFont(object), mode: m.FPDFTextObj_GetTextRenderMode(object) });
+  }
+  // Schrift je Stück: neue Schrift, die Schrift des Quellobjekts oder, wenn diese Zeichen fehlen, eine ähnliche
+  // Standardschrift. Die Standardschriften kennen nur den westeuropäischen Zeichensatz.
+  const fonts = runs.map((run): { standard: TextFont } | { handle: number; mode: number } => {
+    if (run.font !== undefined) {
+      if (!isSystemFontKey(run.font)) {
+        const impossible = missingChars(run.text, undefined);
+        if (impossible) throw new ContentError(impossible, 'content-characters');
+      }
+      return { standard: run.font };
+    }
+    const source = run.source !== undefined ? sources.get(run.source) : undefined;
+    const info = run.source !== undefined ? infos.get(run.source) : undefined;
+    const font = info?.font ? listing.fonts[info.font] : undefined;
+    if (source && missingChars(run.text, font) === '') return { handle: source.font, mode: source.mode };
+    const impossible = missingChars(run.text, undefined);
+    if (impossible) throw new ContentError(impossible, 'content-characters');
+    return { standard: substituteFont(font?.name ?? '', source ? m.FPDFFont_GetWeight(source.font) : 400) };
+  });
+  const make = (run: number, value: string): number => {
+    const style = runs[run] as TextRun;
+    const font = fonts[run] as (typeof fonts)[number];
+    if ('standard' in font) return newTextObject(m, doc, font.standard, style.size, value, style.color);
+    const object = m.FPDFPageObj_CreateTextObj(doc, font.handle, style.size);
+    if (!object) throw new ContentError('Textobjekt lässt sich nicht anlegen');
+    withWString(m, value, (ptr) => m.FPDFText_SetText(object, ptr));
+    m.FPDFPageObj_SetFillColor(object, byte(style.color.r), byte(style.color.g), byte(style.color.b), 255);
+    m.FPDFTextObj_SetTextRenderMode(object, font.mode);
+    return object;
+  };
+
+  // Vorschub eines Textes: Breite mit einem folgenden x minus Breite des x allein (zählt auch Leerzeichen am Ende)
+  const rulers = runs.map((_, i) => make(i, 'x'));
+  const lines: RichLine[] = [];
+  try {
+    const advances = rulers.map((ruler) => {
+      const widthOf = measureWith(m, ruler, 1, 1);
+      const x = widthOf('x');
+      const cache = new Map<string, number>();
+      return (value: string) => {
+        if (value === '') return 0;
+        let width = cache.get(value);
+        if (width === undefined) {
+          width = widthOf(`${value}x`) - x;
+          cache.set(value, width);
+        }
+        return width;
+      };
+    });
+    const widthOf = (tokens: Token[]) => tokens.reduce((sum, token) => sum + (advances[token.run] as (value: string) => number)(token.text), 0);
+    // Zeichen mit ihrem Stück, getrennt in Blöcke an harten Umbrüchen
+    const blocks: Array<{ tokens: Token[]; size: number }> = [{ tokens: [], size: runs[0]?.size ?? 12 }];
+    runs.forEach((run, index) => {
+      for (const char of run.text) {
+        const block = blocks[blocks.length - 1] as { tokens: Token[]; size: number };
+        if (char === '\n') {
+          // Leere Zeile: so hoch wie die Schrift an dieser Stelle
+          if (block.tokens.length === 0) block.size = run.size;
+          blocks.push({ tokens: [], size: run.size });
+          continue;
+        }
+        const space = char === ' ' || char === '\t';
+        const last = block.tokens[block.tokens.length - 1];
+        if (last && last.run === index && last.space === space) last.text += char;
+        else block.tokens.push({ text: char, run: index, space });
+      }
+    });
+    for (const block of blocks) {
+      // Wörter: zusammenhängende Zeichen ohne Leerraum, auch über Stücke hinweg
+      const words: Array<{ spaces: Token[]; word: Token[] }> = [];
+      let spaces: Token[] = [];
+      let word: Token[] = [];
+      for (const token of block.tokens) {
+        if (token.space) {
+          if (word.length > 0) {
+            words.push({ spaces, word });
+            spaces = [];
+            word = [];
+          }
+          spaces.push(token);
+        } else word.push(token);
+      }
+      if (word.length > 0) words.push({ spaces, word });
+      const blockLines: Token[][] = [];
+      let current: Token[] = [];
+      let currentWidth = 0;
+      for (const entry of words) {
+        const addition = widthOf(entry.spaces) + widthOf(entry.word);
+        if (current.length === 0 || !operation.width || currentWidth + addition <= operation.width + 0.5) {
+          // Am Zeilenanfang nach einem Umbruch entfällt der Leerraum davor
+          const lead = current.length === 0 && blockLines.length > 0 ? [] : entry.spaces;
+          current.push(...lead, ...entry.word);
+          currentWidth += widthOf(lead) + widthOf(entry.word);
+        } else {
+          blockLines.push(current);
+          current = [...entry.word];
+          currentWidth = widthOf(entry.word);
+        }
+      }
+      blockLines.push(current);
+      blockLines.forEach((tokens, i) => {
+        const size = tokens.length > 0 ? Math.max(...tokens.map((token) => (runs[token.run] as TextRun).size)) : block.size;
+        lines.push({ tokens, hard: i === blockLines.length - 1, blank: 0, size });
+      });
+    }
+    // Leere Zeilen am Ende entfallen; Leerzeilen merkt sich die Zeile davor
+    while (lines.length > 0 && (lines[lines.length - 1] as RichLine).tokens.length === 0) lines.pop();
+    for (let i = 0, owner = -1; i < lines.length; i++) {
+      const line = lines[i] as RichLine;
+      if (line.tokens.length > 0) owner = i;
+      else if (owner >= 0) (lines[owner] as RichLine).blank++;
+    }
+
+    const rotation = (m.FPDFPage_GetRotation(page) * 90) % 360;
+    const angle = (rotation * Math.PI) / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const flow = operation.flow && rotation === 0 ? operation.flow : undefined;
+    // Zeilen auf eine Seite setzen, Oberkante der ersten bei top; liefert die Zeilen, die nicht mehr passen
+    const place = (target: number, rows: RichLine[], top: number): RichLine[] => {
+      const paragraph = newParagraphId();
+      let down = 0;
+      for (let i = 0; i < rows.length; i++) {
+        const line = rows[i] as RichLine;
+        const baseline = down + FIRST_BASELINE * line.size;
+        const x0 = operation.origin.x + sin * baseline;
+        const y0 = top - cos * baseline;
+        if (flow && i > 0 && y0 < flow.bottom) return rows.slice(i);
+        down += LINE_HEIGHT * line.size;
+        // Leerraum am Zeilenende zeichnet nichts
+        const tokens = [...line.tokens];
+        while (tokens.length > 0 && tokens[tokens.length - 1]?.space) tokens.pop();
+        let advance = 0;
+        let start = 0;
+        while (start < tokens.length) {
+          // Benachbarte Zeichen desselben Stücks werden ein Objekt
+          const run = (tokens[start] as Token).run;
+          let end = start;
+          let value = '';
+          while (end < tokens.length && (tokens[end] as Token).run === run) value += (tokens[end++] as Token).text;
+          const object = make(run, value);
+          writeMark(m, doc, object, {
+            p: paragraph,
+            ...(operation.width ? { w: operation.width } : {}),
+            ...(line.hard ? { h: true } : {}),
+            ...(line.hard && line.blank > 0 ? { b: line.blank } : {}),
+          });
+          m.FPDFPageObj_Transform(object, cos, sin, -sin, cos, x0 + cos * advance, y0 + sin * advance);
+          m.FPDFPage_InsertObject(target, object);
+          advance += (advances[run] as (value: string) => number)(value);
+          start = end;
+        }
+      }
+      return [];
+    };
+    let rest = place(page, lines, operation.origin.y);
+    // Überlauf: neue Seiten gleicher Größe direkt hinter dieser, oben am Rand weiter
+    const size = { width: m.FPDF_GetPageWidthF(page), height: m.FPDF_GetPageHeightF(page) };
+    for (let next = operation.pageIndex + 1; rest.length > 0 && flow && next < operation.pageIndex + 200; next++) {
+      const added = m.FPDFPage_New(doc, next, size.width, size.height);
+      if (!added) throw new ContentError('Neue Seite lässt sich nicht anlegen');
+      try {
+        // Leerzeilen am Seitenanfang entfallen, wie in einer Textverarbeitung
+        while (rest.length > 0 && rest[0]?.tokens.length === 0) rest = rest.slice(1);
+        rest = place(added, rest, flow.top);
+        if (!m.FPDFPage_GenerateContent(added)) throw new ContentError(`Seite ${next + 1} lässt sich nicht schreiben`);
+      } finally {
+        m.FPDF_ClosePage(added);
+      }
+    }
+  } finally {
+    for (const ruler of rulers) m.FPDFPageObj_Destroy(ruler);
+  }
+  for (const object of replaced) removeObject(m, page, object);
 }
 
 const TEXT_INVISIBLE = 3;

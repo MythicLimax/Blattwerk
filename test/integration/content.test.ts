@@ -221,6 +221,78 @@ describe('Inhalt bearbeiten', () => {
     expect((await items(output, 3)).map((item) => item.str).join('')).toContain('Alte zweite Seite');
   });
 
+  it('gemischte Größen: jedes Stück behält seine Größe, die Zeile wird so hoch wie die größte Schrift', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([400, 400]);
+    const bytes = await doc.save();
+    const black = { r: 0, g: 0, b: 0 };
+    const red = { r: 1, g: 0, b: 0 };
+    const runs = [
+      { text: 'Klein und ', size: 12, color: black, font: 'Helvetica' as const },
+      { text: 'Groß', size: 24, color: red, font: 'Helvetica' as const },
+      { text: ' wieder klein\n\nNeuer Absatz', size: 12, color: black, font: 'Helvetica' as const },
+    ];
+    const output = run(bytes, [{ type: 'addRichText', pageIndex: 0, origin: { x: 50, y: 350 }, runs }]);
+    const list = await items(output);
+    const at = (str: string) => list.find((item) => item.str.includes(str));
+    // Erste Zeile: Grundlinie nach der größten Schrift (Oberkante 350, 0,86 · 24), alle Stücke auf derselben Grundlinie
+    const baseline = 350 - 0.86 * 24;
+    for (const str of ['Klein und', 'Groß', 'wieder klein']) expect(at(str)?.transform[5]).toBeCloseTo(baseline, 1);
+    expect(at('Groß')?.transform[0]).toBeCloseTo(24, 1);
+    expect(at('wieder klein')?.transform[0]).toBeCloseTo(12, 1);
+    // Stücke stehen hintereinander, nicht übereinander
+    expect(at('Groß')?.transform[4] ?? 0).toBeGreaterThan((at('Klein und')?.transform[4] ?? 0) + 40);
+    expect(at('wieder klein')?.transform[4] ?? 0).toBeGreaterThan((at('Groß')?.transform[4] ?? 0) + 40);
+    // Zeilen darunter: erste Zeile 1,2 · 24 hoch, die Leerzeile 1,2 · 12
+    expect(at('Neuer Absatz')?.transform[5]).toBeCloseTo(350 - 1.2 * 24 - 1.2 * 12 - 0.86 * 12, 1);
+
+    // Wieder gelesen: eine Einheit mit allen Stücken, Text und Gestaltung wie geschrieben
+    const listing = engine.listObjects(output, null, [0])[0];
+    const units = editUnits(listing?.objects ?? [], listing?.fonts);
+    expect(units).toHaveLength(1);
+    const [unit] = units;
+    expect(unit?.text).toBe('Klein und Groß wieder klein\n\nNeuer Absatz');
+    expect(unit?.runs?.map((r) => [r.text, r.size])).toEqual([
+      ['Klein und ', 12],
+      ['Groß', 24],
+      [' wieder klein\n\nNeuer Absatz', 12],
+    ]);
+    expect(unit?.origin?.x).toBeCloseTo(50, 1);
+    expect(unit?.origin?.y).toBeCloseTo(350, 1);
+
+    // Neu setzen an derselben Stelle (Bearbeiten): die Schriften der Stücke bleiben, Lage auch
+    const edited = (unit?.runs ?? []).map((r, i) => (i === 2 ? { ...r, text: ' wieder klein\n\nGeänderter Absatz' } : r));
+    const again = run(output, [{ type: 'addRichText', pageIndex: 0, origin: unit?.origin ?? { x: 0, y: 0 }, runs: edited, replace: unit?.members ?? [] }]);
+    const after = await items(again);
+    expect(after.map((item) => item.str).join('|')).not.toContain('Neuer Absatz');
+    expect(after.find((item) => item.str.includes('Groß'))?.transform[5]).toBeCloseTo(baseline, 1);
+    expect(after.find((item) => item.str.includes('Geänderter'))?.transform[5]).toBeCloseTo(350 - 1.2 * 24 - 1.2 * 12 - 0.86 * 12, 1);
+    const relisted = engine.listObjects(again, null, [0])[0];
+    expect(editUnits(relisted?.objects ?? [], relisted?.fonts)).toHaveLength(1);
+  });
+
+  it('gemischte Größen: Umbruch in der Breite misst jedes Stück in seiner Größe', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([400, 400]);
+    const bytes = await doc.save();
+    const black = { r: 0, g: 0, b: 0 };
+    const runs = [
+      { text: 'eins zwei drei ', size: 10, color: black, font: 'Helvetica' as const },
+      { text: 'VIER FÜNF SECHS', size: 30, color: black, font: 'Helvetica' as const },
+    ];
+    const output = run(bytes, [{ type: 'addRichText', pageIndex: 0, origin: { x: 50, y: 350 }, runs, width: 200 }]);
+    const list = await items(output);
+    const font = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+    // Jede Zeile passt in die Breite
+    const lines = new Map<number, Item[]>();
+    for (const item of list) lines.set(Math.round(item.transform[5] ?? 0), [...(lines.get(Math.round(item.transform[5] ?? 0)) ?? []), item]);
+    expect(lines.size).toBeGreaterThan(1);
+    for (const line of lines.values()) {
+      const end = Math.max(...line.map((item) => (item.transform[4] ?? 0) + font.widthOfTextAtSize(item.str, item.transform[0] ?? 0)));
+      expect(end).toBeLessThanOrEqual(251);
+    }
+  });
+
   it('bricht einen geänderten Absatz in seiner Breite neu um', async () => {
     const bytes = await paragraphPdf();
     const listing = engine.listObjects(bytes, null, [0])[0];

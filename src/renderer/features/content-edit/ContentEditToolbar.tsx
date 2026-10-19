@@ -29,6 +29,7 @@ import { canRedoState, canUndoState, useTabHistory } from '../../state/dirty';
 import { useDocuments, type TabState } from '../../state/documents-store';
 import styles from '../annotations/CommentToolbar.module.css';
 import { addImage, reflowText, toggleContentEditing } from './actions';
+import { applyToRichEditor } from './RichTextEditor';
 import type { ParagraphStyle } from '../../../shared/content';
 
 // Größe, Schrift oder Farbe gewählt: gilt für die Texteingabe, sonst für den ausgewählten Text, immer auch für neuen Text
@@ -37,6 +38,8 @@ function applyStyle(tab: TabState, patch: ParagraphStyle): void {
   store.setStyle(patch);
   const editing = store.editing?.tabId === tab.id ? store.editing : null;
   if (editing) {
+    // Eingabe mit gemischter Gestaltung: ohne Auswahl für das Folgende, mit Auswahl für den ausgewählten Text
+    if (applyToRichEditor(patch)) return;
     if (editing.mode === 'edit')
       store.setEditing({ ...editing, style: { ...editing.style, ...patch } });
     requestAnimationFrame(() =>
@@ -105,10 +108,14 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
   const style = useContentEdit((s) => s.style);
   const selected = useContentEdit((s) => s.selected[tab.id] ?? null);
   const editing = useContentEdit((s) => (s.editing?.tabId === tab.id ? s.editing : null));
-  // Angezeigt wird die Gestaltung des bearbeiteten oder ausgewählten Textes, sonst die Vorgabe für neuen Text
+  const caret = useContentEdit((s) => s.caret);
+  // Angezeigt wird die Gestaltung an der Einfügestelle, des bearbeiteten oder ausgewählten Textes, sonst die Vorgabe
+  // für neuen Text
   const unit = !editing && !selected?.group && selected?.unit?.kind === 'text' ? selected.unit : null;
   const shown =
-    editing?.mode === 'edit'
+    editing && caret
+      ? { size: caret.size, font: (caret.font ?? null) as TextFont | null, color: caret.color }
+      : editing?.mode === 'edit'
       ? {
           size: editing.style?.size ?? editing.fontSize,
           font: editing.style?.font ?? null,
