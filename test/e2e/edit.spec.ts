@@ -548,7 +548,8 @@ test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
     await expect(editor.locator('span').first()).toHaveCSS('font-size', '16px');
     await expect(editor.locator('span').nth(1)).toHaveCSS('font-size', '32px');
     // Ein Wort auswählen und rot färben: nur dieses ändert sich
-    await page.keyboard.press('Home');
+    // Zeilenanfang: unter macOS Cmd+Pfeil links (Pos1 blättert dort nur)
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowLeft' : 'Home');
     await page.keyboard.down('Shift');
     for (let i = 0; i < 'Kleiner'.length; i++) await page.keyboard.press('ArrowRight');
     await page.keyboard.up('Shift');
