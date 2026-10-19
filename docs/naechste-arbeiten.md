@@ -91,7 +91,19 @@ sichtbar, Fenster und App laufen weiter; Fenster schließen → App beendet).
 **Wunsch des Auftraggebers:** nicht nur alle 12 Stunden, sondern bei jedem Start. `AUTO_CHECK_INTERVAL` in
 `src/main/index.ts` entfernen (still im Hintergrund, 5 s nach dem Start wie bisher). ADR 0027 und CLAUDE.md anpassen.
 
-## 6. Schon geplante Erweiterungen
+## 6. „Über Blattwerk“ unter Windows
+
+**Gemeldet vom Auftraggeber:** Unter Windows gibt es kein „Über Blattwerk“. Ursache: Der Eintrag steht nur im
+App-Menü von macOS (`role: 'about'` in `src/main/menu.ts`); unter Windows gibt es dieses Menü nicht.
+
+**Ziel:** Unter Windows ein Menü „Hilfe“ mit „Über Blattwerk …“ (dort, wo Windows-Programme es üblicherweise haben). Es
+zeigt Name, Version und Lizenzhinweise. Electrons eingebauter Dialog (`app.setAboutPanelOptions`/`showAboutPanel`) oder
+ein eigener Dialog im Stil der App. „Nach Updates suchen …“ und „Update-Ordner wählen …“ gehören dann ebenfalls dorthin
+statt ins Menü „Bearbeiten“. Texte über `t()`, Name über `{{appName}}`.
+
+**Test:** Oberflächentest, der den Eintrag unter Windows/Linux im Menü findet und den Dialog mit der Version zeigt.
+
+## 7. Schon geplante Erweiterungen
 
 Vor Beginn kurz prüfen, ob ein Punkt inzwischen erledigt ist.
 
