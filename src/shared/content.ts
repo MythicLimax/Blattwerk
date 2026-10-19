@@ -4,6 +4,7 @@ import type { Point, Rect, Rgb } from './annotations';
 import type { ImageSource } from './pages';
 import type { TextFont } from './fonts';
 import type { OcrWord } from './ocr';
+import { normalizeRuns, runsText, type TextRun } from './rich-text';
 
 export type PageObjectKind = 'text' | 'image' | 'form';
 
@@ -24,17 +25,20 @@ export interface PageObjectInfo {
   color?: Rgb;
   // Text läuft waagerecht von links nach rechts (nicht gedreht oder gespiegelt); nur solche Zeilen bilden Absätze
   upright?: boolean;
-  // Höhe der Grundlinie (nur bei upright)
+  // Höhe der Grundlinie und Anfang der Zeile (nur bei upright)
   baseline?: number;
+  x?: number;
   // Von Blattwerk gesetzter Text (Kennzeichnung im PDF)
   mark?: TextMark;
 }
 
-// Kennzeichnung gesetzter Texte: p = Absatz, w = Breite (Punkt, vom Zeilenanfang), h = Zeile endet mit hartem Umbruch
+// Kennzeichnung gesetzter Texte: p = Absatz, w = Breite (Punkt, vom Zeilenanfang), h = Zeile endet mit hartem Umbruch,
+// b = so viele Leerzeilen folgen (bei gemischten Größen lässt sich das nicht aus dem Abstand ablesen)
 export interface TextMark {
   p: number;
   w?: number;
   h?: boolean;
+  b?: number;
 }
 
 export interface PageFontInfo {
@@ -61,6 +65,11 @@ export type ContentOperation =
   // flow: Fließtext wie in einer Textverarbeitung; Zeilen unterhalb von bottom (Grundlinie, PDF-y) wandern auf neue
   // Seiten gleicher Größe direkt dahinter, dort ab der Grundlinie top. Nur auf ungedrehten Seiten.
   | { type: 'addText'; pageIndex: number; origin: Point; lines: string[]; font: TextFont; size: number; color: Rgb; width?: number; flow?: { top: number; bottom: number }; fontData?: ArrayBuffer }
+  // Text mit gemischter Gestaltung (shared/rich-text.ts). origin: Anfang und Oberkante der ersten Zeile. Jede Zeile ist
+  // LINE_HEIGHT mal so hoch wie ihre größte Schrift. width und flow wie bei addText, flow.top ist hier die Oberkante der
+  // ersten Zeile auf neuen Seiten. replace: Objekte, an deren Stelle der Text tritt (der bisherige Absatz); Stücke mit
+  // source behalten die Schrift dieser Objekte.
+  | { type: 'addRichText'; pageIndex: number; origin: Point; runs: TextRun[]; width?: number; flow?: { top: number; bottom: number }; replace?: number[] }
   | { type: 'addImage'; pageIndex: number; rect: Rect; image: ImageSource }
   // Zusätzliche Abbildung (Verschieben, Skalieren) auf ein vorhandenes Objekt
   | { type: 'transform'; pageIndex: number; index: number; matrix: Matrix }
@@ -95,6 +104,9 @@ export interface ParagraphStyle {
 export const MAX_PAGE_OBJECTS = 3000;
 
 export const LINE_HEIGHT = 1.2;
+// Abstand der Grundlinie von der Oberkante ihrer Zeile, als Anteil der Schriftgröße: halber Durchschuss 0,1 plus
+// Oberlänge der Standardschriften (etwa 0,76)
+export const FIRST_BASELINE = 0.86;
 
 // Zeichen des westeuropäischen Zeichensatzes (WinAnsi), die Standardschriften ohne Einbetten darstellen
 const WIN_ANSI_EXTRA = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
@@ -190,14 +202,53 @@ export function lineText(pieces: PageObjectInfo[]): string {
   return text.trimEnd();
 }
 
+// Gestaltung eines Textstücks; die Schrift bleibt die des Stücks (source). Gleiche Schriften, die das PDF mehrfach
+// enthält (jedes neue Stück in einer Standardschrift bekommt eine eigene), tragen denselben Schlüssel.
+function styleOfPiece(piece: PageObjectInfo, fonts: Fonts) {
+  const font = piece.font ? fonts?.[piece.font] : undefined;
+  const same = font && fonts ? Object.keys(fonts).find((key) => fonts[key]?.name === font.name && fonts[key]?.embedded === font.embedded && fonts[key]?.chars === font.chars) : undefined;
+  const key = same ?? piece.font;
+  return { size: sizeOf(piece), color: piece.color ?? { r: 0, g: 0, b: 0 }, source: piece.index, ...(key ? { key } : {}) };
+}
+
+// Stücke einer Zeile mit ihrer Gestaltung, Lücken wie in lineText
+function lineRuns(pieces: PageObjectInfo[], fonts: Fonts): TextRun[] {
+  const runs: TextRun[] = [];
+  let text = '';
+  pieces.forEach((piece, i) => {
+    const previous = pieces[i - 1];
+    const own = piece.text ?? '';
+    const last = runs[runs.length - 1];
+    // PDFium hängt beim Auslesen oft selbst ein Leerzeichen an ein Stück; beginnt das nächste mit einem, gilt dieses
+    if (last && /\s$/.test(last.text) && /^\s/.test(own)) {
+      last.text = last.text.slice(0, -1);
+      text = text.slice(0, -1);
+    }
+    if (previous && last && !/\s$/.test(text) && !/^\s/.test(own) && piece.bounds[0] - previous.bounds[2] > sizeOf(piece) * 0.12) {
+      last.text += ' ';
+      text += ' ';
+    }
+    runs.push({ ...styleOfPiece(piece, fonts), text: own });
+    text += own;
+  });
+  // wie trimEnd: Leerraum am Zeilenende entfällt
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const run = runs[i] as TextRun;
+    run.text = run.text.trimEnd();
+    if (run.text !== '') break;
+  }
+  return runs;
+}
+
 // Seitenobjekte für die Bearbeitung: Textstücke einer Zeile als eine Einheit (Anker = erstes Stück, members = alle
 // Stücke einschließlich Anker), Bilder und Grafikgruppen einzeln
 // lines: nur bei Absätzen, Stücke je Zeile
-export type EditUnit = PageObjectInfo & { members: number[]; lines?: number[][] };
+// runs, origin: nur bei von Blattwerk gesetztem Text, die Stücke mit Gestaltung und Anfang/Oberkante der ersten Zeile
+export type EditUnit = PageObjectInfo & { members: number[]; lines?: number[][]; runs?: TextRun[]; origin?: Point };
 
 export function editUnits(objects: PageObjectInfo[], fonts?: Record<string, PageFontInfo>): EditUnit[] {
   const assigned = new Set<number>();
-  const units: EditUnit[] = markedUnits(objects, assigned);
+  const units: EditUnit[] = markedUnits(objects, assigned, fonts);
   for (const object of objects) {
     if (assigned.has(object.index)) continue;
     if (object.kind !== 'text') {
@@ -214,7 +265,7 @@ export function editUnits(objects: PageObjectInfo[], fonts?: Record<string, Page
 
 // Von Blattwerk gesetzte Texte (Kennzeichnung im PDF): Stücke mit derselben Absatzkennzahl bilden eine Einheit,
 // unabhängig von Breite und Abständen. Zeilen nach Grundlinie, harte Umbrüche und Leerzeilen aus der Kennzeichnung.
-function markedUnits(objects: PageObjectInfo[], assigned: Set<number>): EditUnit[] {
+function markedUnits(objects: PageObjectInfo[], assigned: Set<number>, fonts: Fonts): EditUnit[] {
   const groups = new Map<number, PageObjectInfo[]>();
   for (const object of objects) {
     if (object.kind !== 'text' || !object.mark || !object.upright || object.baseline === undefined) continue;
@@ -235,28 +286,42 @@ function markedUnits(objects: PageObjectInfo[], assigned: Set<number>): EditUnit
     }
     for (const line of lines) line.sort((a, b) => a.bounds[0] - b.bounds[0]);
     const step = size * LINE_HEIGHT;
-    let text = '';
+    const runs: TextRun[] = [];
     lines.forEach((line, i) => {
-      text += lineText(line);
+      const own = lineRuns(line, fonts);
+      runs.push(...own);
       const next = lines[i + 1];
       if (!next) return;
       const hard = line.some((piece) => piece.mark?.h);
-      // Leerzeilen zwischen Absätzen haben kein eigenes Objekt: aus dem Abstand der Grundlinien
-      const skipped = Math.max(0, Math.round(((line[0]?.baseline ?? 0) - (next[0]?.baseline ?? 0)) / step) - 1);
-      text += hard ? '\n'.repeat(1 + skipped) : ' ';
+      // Leerzeilen zwischen Absätzen haben kein eigenes Objekt: aus der Kennzeichnung, sonst aus dem Abstand der Grundlinien
+      const marked = line.find((piece) => piece.mark?.b !== undefined)?.mark?.b;
+      const skipped = marked ?? Math.max(0, Math.round(((line[0]?.baseline ?? 0) - (next[0]?.baseline ?? 0)) / step) - 1);
+      const separator = hard ? '\n'.repeat(1 + skipped) : ' ';
+      const last = own[own.length - 1];
+      if (last) last.text += separator;
+      else runs.push({ ...styleOfPiece(line[0] as PageObjectInfo, fonts), text: separator });
     });
+    const merged = normalizeRuns(runs);
+    const text = runsText(merged);
     const all = lines.flat();
     for (const piece of all) assigned.add(piece.index);
     const [anchor] = lines[0] as [PageObjectInfo];
     const bounds = unionBounds(all);
     const width = anchor.mark?.w;
     if (width) bounds[2] = Math.max(bounds[2], Math.min(...lines.map((line) => line[0]?.bounds[0] ?? Infinity)) + width);
+    const first = lines[0] as PageObjectInfo[];
+    const origin = {
+      x: Math.min(...lines.map((line) => line[0]?.x ?? line[0]?.bounds[0] ?? Infinity)),
+      y: (anchor.baseline ?? 0) + FIRST_BASELINE * Math.max(...first.map(sizeOf)),
+    };
     units.push({
       ...anchor,
       bounds,
       text,
       members: all.map((piece) => piece.index),
       ...(lines.length > 1 ? { lines: lines.map((line) => line.map((piece) => piece.index)) } : {}),
+      runs: merged,
+      origin,
     });
   }
   return units;

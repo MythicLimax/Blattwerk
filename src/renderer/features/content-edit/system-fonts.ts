@@ -57,6 +57,15 @@ export async function withFontData(operation: ContentOperation): Promise<Content
     const bytes = await fetch(operation.font);
     return bytes ? { ...operation, fontData: bytes.slice().buffer as ArrayBuffer } : operation;
   }
+  if (operation.type === 'addRichText') {
+    const runs = await Promise.all(
+      operation.runs.map(async (run) => {
+        const bytes = await fetch(run.font);
+        return bytes ? { ...run, fontData: bytes.slice().buffer as ArrayBuffer } : run;
+      }),
+    );
+    return { ...operation, runs };
+  }
   if (operation.type === 'editParagraph' && operation.style?.font) {
     const bytes = await fetch(operation.style.font);
     return bytes ? { ...operation, style: { ...operation.style, fontData: bytes.slice().buffer as ArrayBuffer } } : operation;

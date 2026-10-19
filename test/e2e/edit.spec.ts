@@ -484,7 +484,7 @@ test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
     await close();
   });
 
-  test('neuer Text: Größe während des Tippens ändern und Breite des Feldes ziehen', async () => {
+  test('neuer Text: alles auswählen, Größe ändern und Breite des Feldes ziehen', async () => {
     const { page, close } = await openActualSize();
     await page.getByTestId('content-tool-text').click();
     const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
@@ -493,12 +493,13 @@ test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
     await page.mouse.click(overlay.x + 100, overlay.y + 420);
     const editor = page.getByTestId('content-text-editor');
     await page.keyboard.type('Ein neuer Absatz, der in einem schmalen Feld mehrere Zeilen bekommt.');
-    // Größe in der Leiste: die Eingabe bleibt offen
+    // Alles ausgewählt: die Größe in der Leiste gilt für den ganzen Text, die Eingabe bleibt offen
+    await page.keyboard.press('ControlOrMeta+A');
     await page.getByTestId('content-size').fill('18');
     await page.getByTestId('content-size').press('Enter');
-    await page.getByTestId('content-text-editor').focus();
     await expect(editor).toHaveCount(1);
-    await expect(editor).toHaveCSS('font-size', '24px');
+    await expect(editor.locator('span')).toHaveCount(1);
+    await expect(editor.locator('span')).toHaveCSS('font-size', '24px');
     const handle = await page.getByTestId('content-editor-width-right').boundingBox();
     if (!handle) throw new Error('kein Anfasser');
     await page.mouse.move(handle.x + 3, handle.y + 9);
@@ -514,6 +515,54 @@ test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
     // Mehrere Zeilen in Größe 18 (Zeilenhöhe bei 100 %: 18 pt · 4/3 · 1,2 ≈ 29 px)
     expect(box?.height ?? 0).toBeGreaterThan(60);
     expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThan(overlay.x + 310);
+    await close();
+  });
+
+  test('Fließtext: neue Größe ohne Auswahl gilt nur für das danach Geschriebene, wie in Word', async () => {
+    const { page, close } = await openActualSize();
+    await page.getByTestId('content-tool-flow').click();
+    const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
+    if (!overlay) throw new Error('keine Ebene');
+    await page.mouse.click(overlay.x + 200, overlay.y + 420);
+    const editor = page.getByTestId('content-text-editor');
+    await page.keyboard.type('Kleiner Anfang');
+    // Größe ohne Auswahl: die Leiste zeigt sie, der geschriebene Text bleibt klein
+    await page.getByTestId('content-size').fill('24');
+    await page.getByTestId('content-size').press('Enter');
+    await expect(page.getByTestId('content-size')).toHaveValue('24');
+    await expect(editor.locator('span')).toHaveCount(1);
+    await expect(editor.locator('span').first()).toHaveCSS('font-size', '16px');
+    await page.keyboard.type(' und großes Ende');
+    await expect(editor.locator('span')).toHaveCount(2);
+    await expect(editor.locator('span').nth(1)).toHaveText(' und großes Ende');
+    await expect(editor.locator('span').nth(1)).toHaveCSS('font-size', '32px');
+    await page.keyboard.press('Meta+Enter');
+    await expect(editor).toHaveCount(0);
+
+    // Im Dokument: ein Text mit zwei Größen; beim erneuten Bearbeiten sind sie wieder da
+    const placed = textObject(page, 'Kleiner Anfang und großes Ende');
+    await expect(placed).toBeVisible();
+    await placed.dblclick();
+    await expect(editor.locator('span')).toHaveCount(2);
+    await expect(editor.locator('span').first()).toHaveText('Kleiner Anfang');
+    await expect(editor.locator('span').first()).toHaveCSS('font-size', '16px');
+    await expect(editor.locator('span').nth(1)).toHaveCSS('font-size', '32px');
+    // Ein Wort auswählen und rot färben: nur dieses ändert sich
+    // Zeilenanfang: unter macOS Cmd+Pfeil links (Pos1 blättert dort nur)
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowLeft' : 'Home');
+    await page.keyboard.down('Shift');
+    for (let i = 0; i < 'Kleiner'.length; i++) await page.keyboard.press('ArrowRight');
+    await page.keyboard.up('Shift');
+    await page.getByTestId('content-color-red').click();
+    await expect(editor.locator('span')).toHaveCount(3);
+    await expect(editor.locator('span').first()).toHaveText('Kleiner');
+    await expect(editor.locator('span').first()).not.toHaveCSS('color', 'rgb(0, 0, 0)');
+    await page.keyboard.press('Meta+Enter');
+    await expect(editor).toHaveCount(0);
+    await textObject(page, 'Kleiner Anfang').dblclick();
+    await expect(editor.locator('span')).toHaveCount(3);
+    await expect(editor.locator('span').nth(2)).toHaveCSS('font-size', '32px');
+    await page.keyboard.press('Escape');
     await close();
   });
 });
