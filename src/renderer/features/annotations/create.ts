@@ -60,8 +60,9 @@ export function createShape(
   rect: Rect,
   color: Rgb,
   width: number,
+  fill: Rgb | null = null,
 ): ShapeAnnotation {
-  return { ...base, kind, rect, color, width, fill: null };
+  return { ...base, kind, rect, color, width, fill };
 }
 
 export function createLine(

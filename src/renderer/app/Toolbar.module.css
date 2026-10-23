@@ -108,6 +108,57 @@
   background: var(--color-hover);
 }
 
+/* Zoom: Prozentwert zum Eintippen, daneben die Liste der Stufen (nur der Pfeil ist sichtbar) */
+.zoomField {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-pill);
+}
+
+.zoomField:hover,
+.zoomField:focus-within {
+  background: var(--color-hover);
+}
+
+.zoomInput {
+  width: 58px;
+  height: 30px;
+  padding: 0 0 0 10px;
+  border: none;
+  border-radius: var(--radius-pill) 0 0 var(--radius-pill);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+
+.zoomInput:focus {
+  outline: none;
+}
+
+.zoomPresets {
+  width: 26px;
+  padding: 0 4px;
+  color: transparent;
+}
+
+.zoomPresets option {
+  color: var(--color-text);
+}
+
+.zoomPresets:hover {
+  background: transparent;
+}
+
+/* Der Pfeil der Liste ist mit der Schrift durchsichtig; ein eigener liegt darüber (Klicks gehen an die Liste) */
+.zoomChevron {
+  position: absolute;
+  right: 7px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
 /* Liegt Apples Glas unter dem Fenster, ist die Leiste durchsichtig (ADR 0023) */
 :global([data-native-glass='on']) .toolbar {
   background: transparent;

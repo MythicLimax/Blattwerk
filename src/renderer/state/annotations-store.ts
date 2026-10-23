@@ -90,6 +90,9 @@ interface AnnotationsState {
   colors: Record<Tool, Rgb>;
   width: number;
   fontSize: number;
+  // Deckkraft neuer Kommentare (0–1) und Füllfarbe neuer Rechtecke und Ellipsen (null = keine)
+  opacity: number;
+  fill: Rgb | null;
   stamp: StampId;
   pendingSignature: PendingSignature | null;
   init: (tabId: string) => void;
@@ -109,6 +112,8 @@ interface AnnotationsState {
   setColor: (tool: Tool, color: Rgb) => void;
   setWidth: (width: number) => void;
   setFontSize: (size: number) => void;
+  setOpacity: (opacity: number) => void;
+  setFill: (fill: Rgb | null) => void;
   setStamp: (stamp: StampId) => void;
   // Unterschrift zum Setzen wählen (schaltet das Werkzeug ein) oder verwerfen
   setPendingSignature: (signature: PendingSignature | null) => void;
@@ -161,6 +166,8 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     colors: DEFAULT_COLORS,
     width: 2,
     fontSize: 12,
+    opacity: 1,
+    fill: null,
     stamp: 'approved',
     pendingSignature: null,
     init: (tabId) => set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...EMPTY } } })),
@@ -221,6 +228,8 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     setColor: (tool, color) => set((state) => ({ colors: { ...state.colors, [tool]: color } })),
     setWidth: (width) => set({ width }),
     setFontSize: (fontSize) => set({ fontSize }),
+    setOpacity: (opacity) => set({ opacity }),
+    setFill: (fill) => set({ fill }),
     setStamp: (stamp) => set({ stamp }),
     setPendingSignature: (pendingSignature) =>
       set((state) => ({ pendingSignature, tool: pendingSignature ? 'signature' : state.tool === 'signature' ? 'select' : state.tool })),

@@ -403,3 +403,31 @@ test.describe('Große Datei', () => {
     await close();
   });
 });
+
+test('Zoom: Prozentwert eintippen, Enter übernimmt, Esc verwirft', async () => {
+  const { page, close } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, TEXT_PDF.pages);
+  const input = page.getByTestId('zoom-input');
+  await input.click();
+  await input.fill('137');
+  await input.press('Enter');
+  await expect(input).toHaveValue('137 %');
+  await expect(page.getByTestId('zoom-select')).toHaveValue('custom');
+  // Komma und Prozentzeichen sind erlaubt; Unsinn ändert nichts
+  await input.click();
+  await input.fill('62,5 %');
+  await input.press('Enter');
+  await expect(input).toHaveValue(/^6[23] %$/);
+  await input.click();
+  await input.fill('abc');
+  await input.press('Enter');
+  await expect(input).toHaveValue(/^6[23] %$/);
+  await input.click();
+  await input.fill('300');
+  await input.press('Escape');
+  await expect(input).toHaveValue(/^6[23] %$/);
+  // Die Liste wählt weiter feste Stufen
+  await page.getByTestId('zoom-select').selectOption('page-fit');
+  await expect(page.getByTestId('zoom-select')).toHaveValue('page-fit');
+  await close();
+});

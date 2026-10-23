@@ -358,7 +358,7 @@ export function PageOverlay({
           store().setEditing(tabId, box.id);
         } else {
           const rect = dragRect(current.from, current.to, SHAPE_SIZE);
-          addAnnotation(tabId, createShape(baseFields(pageIndex), current.tool, rect, colors[current.tool], width));
+          addAnnotation(tabId, createShape(baseFields(pageIndex), current.tool, rect, colors[current.tool], width, store().fill));
         }
         store().setTool('select');
         return;

@@ -1,4 +1,5 @@
 import {
+  Ban,
   Circle,
   Highlighter,
   Minus,
@@ -51,6 +52,8 @@ const TOOLS: Array<{ tool: Tool; icon: LucideIcon }> = [
 const WIDTHS = [1, 2, 3, 4, 6, 8];
 const FONT_SIZES = [8, 9, 10, 12, 14, 18, 24, 36];
 const WIDTH_KINDS = new Set<Tool>(['ink', 'square', 'circle', 'line', 'arrow']);
+const FILL_KINDS = new Set<Tool>(['square', 'circle']);
+const OPACITIES = [1, 0.75, 0.5, 0.25];
 
 export function CommentToolbar({ tab }: { tab: TabState }) {
   const { t } = useTranslation();
@@ -72,6 +75,13 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const showColor = target !== null && target !== 'stamp' && target !== 'signature' && !readOnly;
   const showWidth = target !== null && WIDTH_KINDS.has(target) && !readOnly;
   const showFontSize = target === 'freetext' && !readOnly;
+  const opacity = useAnnotations((s) => s.opacity);
+  const fill = useAnnotations((s) => s.fill);
+  const currentOpacity = selected ? selected.opacity : opacity;
+  // Füllung: beim ausgewählten Rechteck seine (undefined = aus der Datei, unbekannt), sonst die für neue
+  const currentFill = selected && 'fill' in selected ? (selected.fill ?? null) : fill;
+  const showFill = target !== null && FILL_KINDS.has(target) && !readOnly;
+  const showOpacity = showColor;
 
   const chooseTool = (next: Tool) => {
     const store = useAnnotations.getState();
@@ -84,7 +94,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
     focusViewer(getRuntime(tab.id));
   };
 
-  const restyle = (patch: Partial<{ color: Rgb; width: number; fontSize: number }>) => {
+  const restyle = (patch: Partial<{ color: Rgb; width: number; fontSize: number; opacity: number; fill: Rgb | null }>) => {
     if (!selected) return;
     updateAnnotation(tab.id, selected, { ...selected, ...patch } as Annotation);
   };
@@ -93,6 +103,16 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
     if (!target) return;
     useAnnotations.getState().setColor(target, color);
     restyle({ color });
+  };
+
+  const chooseOpacity = (value: number) => {
+    useAnnotations.getState().setOpacity(value);
+    restyle({ opacity: value });
+  };
+
+  const chooseFill = (value: Rgb | null) => {
+    useAnnotations.getState().setFill(value);
+    if (selected && 'fill' in selected) restyle({ fill: value });
   };
 
   const chooseWidth = (value: number) => {
@@ -135,7 +155,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
         ))}
       </div>
 
-      {(showColor || showWidth || showFontSize || (tool === 'stamp' && !readOnly)) && <span className={styles.separator} />}
+      {(showColor || showWidth || showFontSize || showFill || (tool === 'stamp' && !readOnly)) && <span className={styles.separator} />}
 
       {showColor && (
         <ColorPicker
@@ -146,6 +166,38 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
           testId="color"
           favoriteSet="comment"
         />
+      )}
+
+      {showFill && (
+        <>
+          <ColorPicker
+            value={currentFill}
+            onChange={(color) => chooseFill(color)}
+            nameOf={(id) => t(`colors.${id}`)}
+            label={t('comments.fill')}
+            testId="fill"
+            favoriteSet="comment"
+            compact
+          />
+          <IconButton icon={Ban} label={t('comments.noFill')} pressed={currentFill === null} onClick={() => chooseFill(null)} data-testid="fill-none" />
+        </>
+      )}
+
+      {showOpacity && (
+        <select
+          className={styles.select}
+          aria-label={t('comments.opacity')}
+          data-tooltip={t('comments.opacity')}
+          value={OPACITIES.reduce((best, value) => (Math.abs(value - currentOpacity) < Math.abs(best - currentOpacity) ? value : best))}
+          onChange={(event) => chooseOpacity(Number(event.target.value))}
+          data-testid="opacity-select"
+        >
+          {OPACITIES.map((value) => (
+            <option key={value} value={value}>
+              {t('comments.opacityValue', { value: Math.round(value * 100) })}
+            </option>
+          ))}
+        </select>
       )}
 
       {showWidth && (

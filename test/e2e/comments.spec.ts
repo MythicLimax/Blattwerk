@@ -463,3 +463,37 @@ test('Markieren: eigener Modus, Markierung auswählen, Farbe ändern, kürzen un
   expect((saved.match(/\/Subtype\s*\/Underline/g) ?? []).length).toBe(1);
   await close();
 });
+
+test('Rechteck mit Füllfarbe und halber Deckkraft: Leiste, Speichern und Datei', async () => {
+  const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+  const { page, app } = handle;
+  const at = await pageSpace(page);
+  await page.getByTestId('tool-square').click();
+  // Füllfarbe und Deckkraft gelten für das nächste Rechteck
+  await page.getByTestId('fill-more').click();
+  await page.getByTestId('fill-palette').nth(12 * 4 + 2).click();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('opacity-select').selectOption('0.5');
+  await drag(page, at(80, 600), at(220, 690));
+  const hit = page.locator('[data-annotation-hit]').first();
+  await hit.click({ position: { x: 3, y: 10 } });
+  await expect(page.getByTestId('opacity-select')).toHaveValue('0.5');
+  await expect(page.getByTestId('fill-none')).toHaveAttribute('aria-pressed', 'false');
+  // Am ausgewählten Rechteck: Deckkraft ändern
+  await page.getByTestId('opacity-select').selectOption('0.75');
+  await save(page, app);
+  const { PDFDocument, PDFName, PDFArray, PDFNumber } = await import('@cantoo/pdf-lib');
+  type Dict = { get: (name: unknown) => unknown };
+  const doc = await PDFDocument.load(readFileSync(handle.file));
+  const annots = doc.getPage(0).node.Annots();
+  const square = annots
+    ?.asArray()
+    .map((ref) => doc.context.lookup(ref))
+    .find((a) => (a as Partial<Dict>).get?.(PDFName.of('Subtype'))?.toString() === '/Square') as Dict | undefined;
+  if (!square) throw new Error('Rechteck nicht gespeichert');
+  const opacity = square.get(PDFName.of('CA'));
+  const interior = square.get(PDFName.of('IC'));
+  expect(opacity instanceof PDFNumber && opacity.asNumber()).toBeCloseTo(0.75, 2);
+  expect(interior instanceof PDFArray && interior.size()).toBe(3);
+  await handle.close();
+});
