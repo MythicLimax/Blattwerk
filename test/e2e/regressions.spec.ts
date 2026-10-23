@@ -348,3 +348,31 @@ test('schmales Fenster: was nicht in die Leiste passt, steht im Menü „Weitere
   await expect(toolbar.getByTestId('zoom-select')).toBeVisible();
   await close();
 });
+
+test('Tab schließen, während ein neuer Text noch eingegeben wird: ein Klick auf ✕ reicht', async () => {
+  const { page, app, close } = await launchApp([]);
+  await menuClick(app, 'file.newBlank');
+  await waitForDocument(page, 1);
+  await expect(page.getByTestId('content-edit-toolbar')).toBeVisible();
+  await page.getByTestId('content-tool-text').click();
+  const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
+  if (!overlay) throw new Error('keine Ebene');
+  await page.mouse.click(overlay.x + overlay.width * 0.3, overlay.y + overlay.height * 0.3);
+  await page.keyboard.type('Noch offen');
+  await page.getByTestId('tab').getByRole('button', { name: 'Tab schließen' }).click();
+  await expect(page.getByTestId('prompt-discard')).toBeVisible({ timeout: 3000 });
+  await page.getByTestId('prompt-discard').click();
+  await expect(page.getByTestId('tab')).toHaveCount(0);
+
+  // Dasselbe über das Menü (⌘W): Die Eingabe hat dabei noch den Fokus
+  await menuClick(app, 'file.newBlank');
+  await waitForDocument(page, 1);
+  await page.getByTestId('content-tool-text').click();
+  await page.mouse.click(overlay.x + overlay.width * 0.3, overlay.y + overlay.height * 0.3);
+  await page.keyboard.type('Auch offen');
+  await menuClick(app, 'file.close');
+  await expect(page.getByTestId('prompt-discard')).toBeVisible({ timeout: 3000 });
+  await page.getByTestId('prompt-discard').click();
+  await expect(page.getByTestId('tab')).toHaveCount(0);
+  await close();
+});

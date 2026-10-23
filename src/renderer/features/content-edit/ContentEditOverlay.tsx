@@ -4,6 +4,7 @@ import { normalizeRect, type Point, type Rect } from '../../../shared/annotation
 import { editUnits, LINE_HEIGHT, missingChars, scalingAbout, translation, type EditUnit, type PageObjectInfo, type PageObjects } from '../../../shared/content';
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
+import { trackPending } from '../../engine/session';
 import { useContentEdit, type TextEditing, type TextStyle } from '../../state/content-edit-store';
 import { isMixed, runsText, sameStyle, type RunStyle, type TextRun } from '../../../shared/rich-text';
 import { RichTextEditor, type RichEditorHandle } from './RichTextEditor';
@@ -651,7 +652,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
       const width = frame ? frame.width - (2 * EDITOR_INSET_PX) / viewScale : undefined;
       // Fließtext: unterhalb des unteren Rands geht es auf einer neuen Seite oben am Rand weiter
       const flowLimits = flow ? { top: geometry.toPdf(margins.left, margins.top).y, bottom: geometry.toPdf(margins.left, geometry.height - margins.bottom).y } : undefined;
-      void addRichText(editing.tabId, editing.pageIndex, origin, current, { ...(width ? { width } : {}), ...(flowLimits ? { flow: flowLimits } : {}) });
+      void trackPending(editing.tabId, addRichText(editing.tabId, editing.pageIndex, origin, current, { ...(width ? { width } : {}), ...(flowLimits ? { flow: flowLimits } : {}) }));
       return;
     }
     const text = runsText(current);
@@ -665,16 +666,16 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
       const changed = before && after && !sameStyle(before, after);
       if (sides || changed) {
         const restyled = changed && after ? { size: after.size, color: after.color, ...(after.font !== undefined ? { font: after.font } : {}) } : undefined;
-        void reflowText(editing.tabId, editing.pageIndex, unit, text, { ...(sides ? { box: sides } : {}), ...(restyled ? { style: restyled } : {}) });
-      } else if (editing.lines) void editParagraph(editing.tabId, editing.pageIndex, editing.lines, text, initial);
-      else void editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, text, initial);
+        void trackPending(editing.tabId, reflowText(editing.tabId, editing.pageIndex, unit, text, { ...(sides ? { box: sides } : {}), ...(restyled ? { style: restyled } : {}) }));
+      } else if (editing.lines) void trackPending(editing.tabId, editParagraph(editing.tabId, editing.pageIndex, editing.lines, text, initial));
+      else void trackPending(editing.tabId, editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, text, initial));
       return;
     }
     // Gemischt: an derselben Stelle neu setzen (gezogene Ränder verschieben den Anfang und ändern die Breite)
     const origin = editing.origin ?? { x: editing.bounds[0], y: editing.bounds[3] };
     const x = origin.x + (sides ? sides.left - editing.bounds[0] : 0);
     const width = sides ? sides.right - x : editing.width;
-    void addRichText(editing.tabId, editing.pageIndex, { x, y: origin.y }, current, { ...(width ? { width } : {}), replace: members });
+    void trackPending(editing.tabId, addRichText(editing.tabId, editing.pageIndex, { x, y: origin.y }, current, { ...(width ? { width } : {}), replace: members }));
   };
 
   const commit = () => {
@@ -694,11 +695,11 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
         ...(restyle ? { style: restyle } : {}),
       };
       const unit = { index: editing.index, members: [editing.index, ...editing.merge], bounds: editing.bounds, ...(editing.lines ? { lines: editing.lines } : {}) };
-      void reflowText(editing.tabId, editing.pageIndex, unit, value, change);
+      void trackPending(editing.tabId, reflowText(editing.tabId, editing.pageIndex, unit, value, change));
     } else if (editing.mode === 'edit' && editing.lines) {
-      void editParagraph(editing.tabId, editing.pageIndex, editing.lines, value, initial);
+      void trackPending(editing.tabId, editParagraph(editing.tabId, editing.pageIndex, editing.lines, value, initial));
     } else if (editing.mode === 'edit') {
-      void editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, value, initial);
+      void trackPending(editing.tabId, editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, value, initial));
     }
   };
 
