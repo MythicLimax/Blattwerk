@@ -255,6 +255,7 @@ export type WorkerErrorCode =
   | 'invalid'
   | 'range'
   | 'all-pages'
+  | 'crop-too-small'
   | 'image'
   | 'import'
   | 'form'

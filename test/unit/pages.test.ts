@@ -2,7 +2,7 @@
 import { deflateSync, crc32 } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { imagePageLayout, isPdf, readImageInfo } from '../../src/shared/image-info';
-import { A4, chunkPages, formatPageRanges, moveTarget, orderAfterMove, parsePageRanges, splitAtPages } from '../../src/shared/pages';
+import { A4, chunkPages, formatPageRanges, marginsToUser, moveTarget, orderAfterMove, parsePageRanges, splitAtPages } from '../../src/shared/pages';
 
 describe('Seitenangaben', () => {
   it('liest Einzelseiten, Bereiche und offene Bereiche (1-basiert → 0-basiert)', () => {
@@ -167,5 +167,16 @@ describe('Seitengröße für Bilder', () => {
     const left = imagePageLayout({ width: 400, height: 300, rotation: 270 });
     expect(apply(left.matrix, 0, 1)).toEqual([0, 0]);
     expect(apply(left.matrix, 1, 1)).toEqual([0, 400]);
+  });
+});
+
+describe('Zuschneiden', () => {
+  it('rechnet Ränder der angezeigten Seite in Kanten der ungedrehten Seite um', () => {
+    const margins = { top: 1, right: 2, bottom: 3, left: 4 };
+    expect(marginsToUser(margins, 0)).toEqual(margins);
+    // 90° im Uhrzeigersinn: die linke Kante steht oben, die obere rechts
+    expect(marginsToUser(margins, 90)).toEqual({ left: 1, top: 2, right: 3, bottom: 4 });
+    expect(marginsToUser(margins, 180)).toEqual({ left: 2, top: 3, right: 4, bottom: 1 });
+    expect(marginsToUser(margins, 270)).toEqual({ left: 3, top: 4, right: 1, bottom: 2 });
   });
 });

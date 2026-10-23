@@ -67,6 +67,17 @@ export function runPageCommand(command: CommandId, tab: TabState | null): boolea
         });
       }
       return true;
+    case 'pages.replace':
+      if (requireAssemble(tab)) {
+        void pickSources('pdf').then((sources) => {
+          const source = sources?.[0];
+          if (source) useUi.getState().setPageDialog({ kind: 'replace', tabId: tab.id, pages, source });
+        });
+      }
+      return true;
+    case 'pages.crop':
+      if (requireAssemble(tab)) ui.setPageDialog({ kind: 'crop', tabId: tab.id, pages });
+      return true;
     case 'pages.extract':
       if (tab.canExtract) ui.setPageDialog({ kind: 'extract', tabId: tab.id, pages });
       return true;

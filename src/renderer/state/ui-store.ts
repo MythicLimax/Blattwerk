@@ -18,7 +18,9 @@ export type PageDialog =
   | { kind: 'insertBlank'; tabId: string; after: number }
   | { kind: 'insertFiles'; tabId: string; after: number; sources: SourceFile[] }
   | { kind: 'extract'; tabId: string; pages: number[] }
-  | { kind: 'split'; tabId: string };
+  | { kind: 'split'; tabId: string }
+  | { kind: 'replace'; tabId: string; pages: number[]; source: SourceFile }
+  | { kind: 'crop'; tabId: string; pages: number[] };
 
 export interface PasswordRequest {
   name: string;

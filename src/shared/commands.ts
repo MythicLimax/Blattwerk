@@ -35,6 +35,8 @@ export const COMMANDS = [
   'pages.delete',
   'pages.insertBlank',
   'pages.insertFromFile',
+  'pages.replace',
+  'pages.crop',
   'pages.extract',
   'pages.split',
   'tools.sign',

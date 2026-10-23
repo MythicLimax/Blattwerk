@@ -217,6 +217,8 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
           cmd('pages.insertBlank', t('menu.pages.insertBlank'), { enabled: assemble }),
         ],
       },
+      cmd('pages.replace', t('menu.pages.replace'), { enabled: assemble }),
+      cmd('pages.crop', t('menu.pages.crop'), { enabled: assemble }),
       { type: 'separator' },
       cmd('pages.extract', t('menu.pages.extract'), { enabled: doc && state.canExtract }),
       cmd('pages.split', t('menu.pages.split'), { enabled: doc && state.canExtract }),

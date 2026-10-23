@@ -26,7 +26,35 @@ export type PageOperation =
   | { type: 'move'; pages: number[]; to: number }
   | { type: 'insertBlank'; at: number; width: number; height: number; count: number }
   | { type: 'insertPdf'; at: number; source: PdfSource }
-  | { type: 'insertImages'; at: number; images: ImageSource[] };
+  | { type: 'insertImages'; at: number; images: ImageSource[] }
+  // Zuschneiden: Ränder in Punkt, so wie die Seite angezeigt wird (oben = oberer Rand der gedrehten Seite)
+  | { type: 'crop'; pages: number[]; margins: Margins };
+
+export interface Margins {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+// Kleinste Seite nach dem Zuschneiden (1/2 Zoll)
+export const MIN_CROPPED_SIZE = 36;
+
+// Ränder der angezeigten Seite auf die Kanten im PDF-Benutzerraum (ungedrehte Seite) umrechnen. Drehung im
+// Uhrzeigersinn: bei 90° liegt die linke Kante des Benutzerraums oben.
+export function marginsToUser(margins: Margins, rotation: 0 | 90 | 180 | 270): Margins {
+  const { top, right, bottom, left } = margins;
+  switch (rotation) {
+    case 90:
+      return { left: top, top: right, right: bottom, bottom: left };
+    case 180:
+      return { left: right, top: bottom, right: left, bottom: top };
+    case 270:
+      return { left: bottom, top: left, right: top, bottom: right };
+    default:
+      return { ...margins };
+  }
+}
 
 // Teil eines neu zusammengesetzten Dokuments (Zusammenführen, Extrahieren, Teilen, Bilder → PDF)
 export type ComposePart = { type: 'pdf'; source: PdfSource } | { type: 'image'; image: ImageSource };
