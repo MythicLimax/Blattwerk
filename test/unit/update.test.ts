@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { INSTALL_SCRIPT, windowsInstallCommand } from '../../src/main/update/install-script';
+import { INSTALL_SCRIPT } from '../../src/main/update/install-script';
 import { fetchChecked } from '../../src/main/update/online';
 import { compareVersions, isAllowedUpdateUrl, parseRelease, plistString, updateAssetName } from '../../src/shared/update';
 
@@ -30,20 +30,6 @@ describe('Updates', () => {
     expect(compareVersions('1.0', '1.0.0')).toBe(0);
   });
 
-  it('baut den Windows-Befehl mit sicher eingesetzten Pfaden', () => {
-    const base = { pid: 1234, installer: "C:\\Users\\Max O'Brien\\Blattwerk-Setup-1.0.0.exe", app: 'C:\\Programme\\Blattwerk\\Blattwerk.exe', log: 'C:\\Profil\\update.log' };
-    const command = windowsInstallCommand({ ...base, reopen: true, cleanup: false });
-    expect(command).toContain("$installer = 'C:\\Users\\Max O''Brien\\Blattwerk-Setup-1.0.0.exe'");
-    expect(command).toContain('$appPid = 1234');
-    expect(command).toContain("$log = 'C:\\Profil\\update.log'");
-    // Still installieren, danach startet das Skript die App selbst neu
-    expect(command).toContain("-ArgumentList '/S'");
-    expect(command).toContain('Start-Process -FilePath $app');
-    expect(command).not.toContain('Remove-Item');
-    const quiet = windowsInstallCommand({ ...base, reopen: false, cleanup: true });
-    expect(quiet).toContain('Remove-Item');
-    expect(quiet).not.toContain('Start-Process -FilePath $app');
-  });
 
   it('liest Werte aus der Info.plist', () => {
     const xml = '<dict><key>CFBundleIdentifier</key>\n\t<string>de.blattwerk.app</string><key>CFBundleShortVersionString</key><string>0.9.9</string></dict>';

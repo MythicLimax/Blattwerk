@@ -37,7 +37,7 @@ import { UserTemplates } from './templates/user-templates';
 import { boundsAtPoint, cascadeFrom, dropTarget, type Point } from './window-layout';
 import { TabGhost } from './tab-ghost';
 import { isBlankDocumentPath, removeBlankDocuments } from './files/blank-document';
-import { defaultUpdateFolder, runPendingInstall, setCustomUpdateFolder } from './update/updater';
+import { cleanupInstalledUpdates, defaultUpdateFolder, runPendingInstall, setCustomUpdateFolder } from './update/updater';
 import { checkOnline } from './update/online';
 import { attachNativeGlass, describeNativeGlass, nativeGlassAvailable } from './native-glass';
 
@@ -703,6 +703,7 @@ void app.whenReady().then(async () => {
     settings.authorName ?? (process.platform === 'darwin' ? defaultAuthor() : ''),
   );
   setCustomUpdateFolder(() => settings.updateFolder);
+  cleanupInstalledUpdates();
   windowState = settings.window;
   if (process.platform === 'darwin') {
     app.setAboutPanelOptions({ applicationName: PRODUCT_NAME, applicationVersion: app.getVersion() });

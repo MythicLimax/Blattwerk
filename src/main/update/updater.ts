@@ -9,11 +9,11 @@
 // sich neu.
 import { app } from 'electron';
 import { spawn, spawnSync } from 'node:child_process';
-import { accessSync, constants, existsSync, openSync, readSync, closeSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { accessSync, appendFileSync, constants, existsSync, mkdirSync, openSync, readSync, closeSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { APP_ID, PRODUCT_NAME } from '../../shared/product';
 import { compareVersions, plistString, type UpdateStatus } from '../../shared/update';
-import { INSTALL_SCRIPT, windowsInstallCommand } from './install-script';
+import { INSTALL_SCRIPT } from './install-script';
 
 export const UPDATE_APP_NAME = `${PRODUCT_NAME}.app`;
 const INSTALLER_PATTERN = new RegExp(`^${PRODUCT_NAME}-Setup-(\\d+(?:\\.\\d+){1,3})\\.exe$`, 'i');
@@ -160,12 +160,53 @@ export function runPendingInstall(): void {
       stdio: 'ignore',
     }).unref();
   } else if (process.platform === 'win32') {
-    // Voller Pfad: PowerShell liegt immer dort, ein veränderter Suchpfad (PATH) spielt keine Rolle
-    spawn(
-      path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', windowsInstallCommand({ pid: process.pid, installer: pending.path, app: process.execPath, log: path.join(defaultUpdateFolder(), 'update.log'), reopen, cleanup })],
-      { detached: true, stdio: 'ignore', windowsHide: true },
-    ).unref();
+    // Wie electron-updater: das Installationsprogramm direkt und losgelöst starten. Es wartet selbst, bis die App zu
+    // ist, installiert still an den bisherigen Ort (--updated) und startet sie danach (--force-run). Ein Hilfsskript
+    // über PowerShell startete unter Windows gar nicht erst (bis 0.15.0: App zu, sonst nichts). Aufgeräumt wird beim
+    // nächsten Start (cleanupInstalledUpdates).
+    const installer = pending.path;
+    logUpdate(`Starte ${path.basename(installer)} (Version ${pending.version})`);
+    try {
+      const child = spawn(installer, ['/S', '--updated', ...(reopen ? ['--force-run'] : [])], { detached: true, stdio: 'ignore', windowsHide: true });
+      child.on('error', (error) => logUpdate(`Installationsprogramm nicht gestartet: ${error.message}`));
+      child.unref();
+    } catch (error) {
+      logUpdate(`Installationsprogramm nicht gestartet: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
   pending = null;
+}
+
+// Protokoll der Updates unter Windows (update.log im Update-Ordner), damit sich Fehler nachvollziehen lassen
+function logUpdate(text: string): void {
+  try {
+    const folder = defaultUpdateFolder();
+    mkdirSync(folder, { recursive: true });
+    appendFileSync(path.join(folder, 'update.log'), `${new Date().toISOString()} ${text}\n`, 'utf8');
+  } catch {
+    // Protokoll ist nur eine Hilfe
+  }
+}
+
+// Windows, beim Start: eingespielte oder ältere Installationsprogramme aus dem eigenen Update-Ordner löschen
+export function cleanupInstalledUpdates(): void {
+  if (process.platform !== 'win32' || !app.isPackaged) return;
+  const folder = defaultUpdateFolder();
+  let names: string[];
+  try {
+    names = readdirSync(folder);
+  } catch {
+    return;
+  }
+  const current = app.getVersion();
+  for (const name of names) {
+    const version = INSTALLER_PATTERN.exec(name)?.[1];
+    if (!version || compareVersions(version, current) > 0) continue;
+    try {
+      rmSync(path.join(folder, name), { force: true });
+      logUpdate(`Version ${current} läuft, ${name} gelöscht`);
+    } catch {
+      // noch in Benutzung: beim nächsten Start
+    }
+  }
 }

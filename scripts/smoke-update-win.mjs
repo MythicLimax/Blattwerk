@@ -1,6 +1,7 @@
 // Prüft das Update unter Windows mit dem fertigen Installationsprogramm (ADR 0025), in einem Testordner: still
 // installieren, dasselbe Installationsprogramm als „Version 99.0.0“ in den Update-Ordner legen, die App starten, auf
-// „Jetzt aktualisieren“ klicken und prüfen, dass das Hilfsskript installiert, aufräumt und die App neu startet.
+// „Jetzt aktualisieren“ klicken und prüfen, dass das Installationsprogramm die App neu installiert und neu startet.
+// (Aufräumen prüft der Test nicht: Die „neue“ Version ist in Wahrheit dieselbe, ihr Update bleibt also liegen.)
 // Läuft in CI auf Windows (dort sind Fenster ohnehin sichtbar). Aufruf: node scripts/smoke-update-win.mjs <Setup.exe>
 import { chromium } from '@playwright/test';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
@@ -30,6 +31,7 @@ const installedAt = statSync(exe).mtimeMs;
 const port = 9335;
 const env = { ...process.env, BLATTWERK_USER_DATA: profile };
 const child = spawn(exe, [`--remote-debugging-port=${port}`], { env, stdio: 'ignore' });
+const exited = new Promise((resolve) => child.once('exit', resolve));
 let failed = false;
 try {
   let browser;
@@ -51,17 +53,14 @@ try {
   if (!offered) failed = true;
   await page.getByTestId('update-install').click().catch(() => undefined);
 
-  // Das Hilfsskript installiert nach dem Beenden und startet die App neu
-  const done = () => existsSync(log) && /neu gestartet|gescheitert|nicht gefunden/.test(readFileSync(log, 'utf8'));
-  for (let i = 0; i < 360 && !done(); i++) await sleep(500);
+  // Die App beendet sich, das Installationsprogramm installiert still und startet sie neu
+  await Promise.race([exited, sleep(30000)]);
+  const reinstalled = () => existsSync(exe) && statSync(exe).mtimeMs > installedAt;
+  for (let i = 0; i < 360 && !(reinstalled() && running()); i++) await sleep(500);
   const protocol = existsSync(log) ? readFileSync(log, 'utf8') : '(kein Protokoll)';
   console.log(`Protokoll:\n${protocol}`);
-  await sleep(3000);
-  const reinstalled = existsSync(exe) && statSync(exe).mtimeMs > installedAt;
-  const cleaned = !existsSync(update);
-  const restarted = running();
-  const ok = protocol.includes('beendet mit 0') && protocol.includes('neu gestartet') && reinstalled && cleaned && restarted;
-  console.log(`Update eingespielt: ${ok ? 'ok' : 'FEHLER'} (neu installiert: ${reinstalled}, aufgeräumt: ${cleaned}, neu gestartet: ${restarted})`);
+  const ok = protocol.includes('Starte Blattwerk-Setup-99.0.0.exe') && reinstalled() && running();
+  console.log(`Update eingespielt: ${ok ? 'ok' : 'FEHLER'} (neu installiert: ${reinstalled()}, neu gestartet: ${running()})`);
   if (!ok) failed = true;
 } finally {
   child.kill();
