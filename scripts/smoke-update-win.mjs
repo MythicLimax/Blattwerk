@@ -19,14 +19,22 @@ const updates = path.join(profile, 'Updates');
 const update = path.join(updates, 'Blattwerk-Setup-99.0.0.exe');
 const log = path.join(updates, 'update.log');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const running = () => spawnSync('tasklist', ['/FI', 'IMAGENAME eq Blattwerk.exe', '/FO', 'CSV', '/NH'], { encoding: 'utf8' }).stdout.includes('Blattwerk.exe');
+// Prozessnummern aller laufenden Blattwerk.exe
+const runningPids = () =>
+  spawnSync('tasklist', ['/FI', 'IMAGENAME eq Blattwerk.exe', '/FO', 'CSV', '/NH'], { encoding: 'utf8' })
+    .stdout.split(/\r?\n/)
+    .map((line) => /^"Blattwerk\.exe","(\d+)"/.exec(line)?.[1])
+    .filter(Boolean)
+    .map(Number);
 
 // NSIS will „/D=…“ als letztes Argument und ohne Anführungszeichen
 const install = spawnSync(setup, ['/S', `/D=${target}`], { windowsVerbatimArguments: true, stdio: 'inherit' });
 if (install.status !== 0 || !existsSync(exe)) throw new Error(`Installation gescheitert (${install.status})`);
 mkdirSync(updates, { recursive: true });
 copyFileSync(setup, update);
-const installedAt = statSync(exe).mtimeMs;
+// Das Installationsprogramm behält das Datum der Programmdateien; das Deinstallationsprogramm schreibt es neu
+const uninstaller = path.join(target, 'Uninstall Blattwerk.exe');
+const installedAt = statSync(uninstaller).mtimeMs;
 
 const port = 9335;
 const env = { ...process.env, BLATTWERK_USER_DATA: profile };
@@ -55,12 +63,14 @@ try {
 
   // Die App beendet sich, das Installationsprogramm installiert still und startet sie neu
   await Promise.race([exited, sleep(30000)]);
-  const reinstalled = () => existsSync(exe) && statSync(exe).mtimeMs > installedAt;
-  for (let i = 0; i < 360 && !(reinstalled() && running()); i++) await sleep(500);
+  const reinstalled = () => existsSync(uninstaller) && statSync(uninstaller).mtimeMs > installedAt;
+  // Neu gestartet heißt: eine andere Blattwerk-Instanz als die beendete
+  const restarted = () => runningPids().some((pid) => pid !== child.pid);
+  for (let i = 0; i < 360 && !(reinstalled() && restarted()); i++) await sleep(500);
   const protocol = existsSync(log) ? readFileSync(log, 'utf8') : '(kein Protokoll)';
   console.log(`Protokoll:\n${protocol}`);
-  const ok = protocol.includes('Starte Blattwerk-Setup-99.0.0.exe') && reinstalled() && running();
-  console.log(`Update eingespielt: ${ok ? 'ok' : 'FEHLER'} (neu installiert: ${reinstalled()}, neu gestartet: ${running()})`);
+  const ok = protocol.includes('Starte Blattwerk-Setup-99.0.0.exe') && reinstalled() && restarted();
+  console.log(`Update eingespielt: ${ok ? 'ok' : 'FEHLER'} (neu installiert: ${reinstalled()}, neu gestartet: ${restarted()}, Prozesse: ${runningPids().join(', ') || 'keine'}, alt: ${child.pid})`);
   if (!ok) failed = true;
 } finally {
   child.kill();
