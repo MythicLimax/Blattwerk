@@ -87,8 +87,10 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       cmd('file.saveAsTemplate', t('menu.file.saveAsTemplate'), { enabled: doc }),
       { type: 'separator' },
       // Schließen wirkt auf jeden Tab, auch während des Ladens, bei Kennwortabfrage oder Fehler.
-      // Ohne Tabs schließt dasselbe Kürzel unter macOS das Fenster, wie in anderen Mac-Apps.
-      ...(isMac && state.tabCount === 0
+      // Ohne Tabs schließt dasselbe Kürzel unter macOS ein weiteres leeres Fenster. Das letzte Fenster bleibt mit der
+      // Startseite offen (Wunsch des Auftraggebers, 2026-10-19: Tabs nacheinander mit ⌘W schließen beendete sonst die
+      // App); beendet wird über den roten Knopf oder ⌘Q.
+      ...(isMac && state.tabCount === 0 && ctx.windowCount > 1
         ? [{ role: 'close' as const, label: t('menu.file.closeWindow'), accelerator: SHORTCUTS['file.close']?.accelerator }]
         : [cmd('file.close', t('menu.file.close'), { enabled: state.tabCount > 0 })]),
       { type: 'separator' },

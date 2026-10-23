@@ -38,6 +38,9 @@ Tab herausziehen und wird zu einem eigenen Fenster. Muss auch unter Windows gehe
 - **Schließen und Beenden:** Rückfrage bei ungespeicherten Änderungen je Fenster. Beenden fragt die Fenster
   nacheinander (Electron hält das Beenden beim ersten an, nach der Antwort geht es weiter). Letztes Fenster zu → App
   beendet. „Jetzt aktualisieren“ beendet die App (`app.quit()`) statt ein Fenster zu schließen.
+  Nachtrag 2026-10-24: Den letzten Tab zu schließen zeigt die Startseite. ⌘W ohne Tabs schließt unter macOS nur ein
+  weiteres Fenster; im letzten Fenster ist „Schließen“ dann ausgegraut. Wer Tabs nacheinander mit ⌘W schloss, beendete
+  sonst mit einem Druck zu viel die App. Beenden bleibt beim roten Knopf und ⌘Q.
 
 ## Verworfen
 
