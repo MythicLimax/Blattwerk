@@ -201,3 +201,27 @@ test.describe('PDF aus Textdokument', () => {
     await handle.close();
   });
 });
+
+test('Alternativtext einer Abbildung in der Seitenleiste „Tags“ eintragen und speichern', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+  tempDirs.push(dir);
+  const file = path.join(dir, 'getaggt.pdf');
+  writeFileSync(file, await taggedPdf());
+  const { page, app, close } = await launchApp([file], { userData: dir });
+  await waitForDocument(page, 1);
+  await page.getByTestId('sidebar-tags').click();
+  const tags = page.getByTestId('tags');
+  await expect(tags).toContainText('(ohne Alternativtext)');
+  await tags.getByTestId('tag-alt-edit').first().click();
+  await page.getByTestId('tag-alt-input').fill('Foto der Schule');
+  await page.getByTestId('tag-alt-save').click();
+  await expect(tags).toContainText('Foto der Schule');
+  await expect(tags).not.toContainText('(ohne Alternativtext)');
+  await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+  await menuClick(app, 'file.save');
+  await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+  const { checkAccessibility } = await import('../../src/workers/pdfium/accessibility');
+  const report = await checkAccessibility(new Uint8Array(readFileSync(file)));
+  expect(JSON.stringify(report.tree)).toContain('Foto der Schule');
+  await close();
+});

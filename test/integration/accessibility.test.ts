@@ -1,7 +1,7 @@
 // Barrierefreiheit (Phase 7): Tags auslesen, prüfen, einfache Mängel beheben.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { AccessibilityReport } from '../../src/shared/accessibility';
+import type { AccessibilityReport, TagNode } from '../../src/shared/accessibility';
 import { checkAccessibility, fixAccessibility } from '../../src/workers/pdfium/accessibility';
 import { fixture } from '../fixtures/expectations';
 import { taggedPdf } from '../fixtures/tagged';
@@ -63,5 +63,27 @@ describe('Barrierefreiheit', () => {
   it('prüft Formularfelder auf QuickInfo', async () => {
     const report = await checkAccessibility(new Uint8Array(readFileSync(fixture('formular.pdf'))));
     expect(report.checks.find((check) => check.code === 'field-tooltip')?.status).toBeDefined();
+  });
+});
+
+describe('Alternativtexte in vorhandenen Tags', () => {
+  it('setzt, ändert und entfernt Alternativ- und Ersatztext einzelner Elemente; der Rest bleibt', async () => {
+    const original = await taggedPdf();
+    const before = await checkAccessibility(original);
+    const flat = (nodes: TagNode[]): TagNode[] => nodes.flatMap((node) => [node, ...flat(node.children)]);
+    const figures = flat(before.tree).filter((node) => node.role === 'Figure');
+    const [without, withAlt] = figures;
+    if (!without || !withAlt) throw new Error('Abbildungen fehlen');
+    expect(without.alt).toBeNull();
+
+    const edited = await fixAccessibility(original, { lang: null, title: null, elements: [{ id: without.id, alt: 'Foto der Schule' }, { id: withAlt.id, alt: '', actualText: 'Umsätze 2026' }] });
+    // Inkrementell: die alte Datei steht unverändert am Anfang
+    expect(Buffer.from(edited.subarray(0, original.length)).equals(Buffer.from(original))).toBe(true);
+    const after = flat((await checkAccessibility(edited)).tree);
+    expect(after.find((node) => node.id === without.id)?.alt).toBe('Foto der Schule');
+    expect(after.find((node) => node.id === withAlt.id)?.alt).toBeNull();
+    expect(after.find((node) => node.id === withAlt.id)?.actualText).toBe('Umsätze 2026');
+    expect(after.map((node) => node.role)).toEqual(flat(before.tree).map((node) => node.role));
+    expect((await checkAccessibility(edited)).lang).toBe(before.lang);
   });
 });

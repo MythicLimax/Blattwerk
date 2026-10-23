@@ -1304,6 +1304,10 @@
       "check": "Barrierefreiheit prüfen …",
       "truncated": "Sehr viele Tags: Die Liste ist gekürzt.",
       "noAlt": "(ohne Alternativtext)",
+      "altEdit": "Alternativtext bearbeiten",
+      "altLabel": "Alternativtext (was die Abbildung zeigt)",
+      "altPlaceholder": "z. B. Foto der Schule von außen",
+      "altSave": "Übernehmen",
       "customRole": "Eigene Rolle „{{role}}“",
       "page": "Seite {{page}}"
     }
