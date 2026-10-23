@@ -108,6 +108,12 @@ jobs:
             codesign --verify --deep --strict "$dir/Blattwerk.app"
             rm -rf "$dir"
           done
+      - name: Update einspielen (Windows)
+        # Installiert das fertige Programm in einen Testordner und spielt es als Update ein: Installation, Aufräumen
+        # und Neustart der App müssen klappen (Fehlerbericht: „Jetzt aktualisieren“ schloss die App, sonst nichts)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: node scripts/smoke-update-win.mjs "$(ls release/Blattwerk-Setup-*.exe | head -1)"
       - uses: actions/upload-artifact@v4
         with:
           name: Blattwerk-${{ matrix.name }}

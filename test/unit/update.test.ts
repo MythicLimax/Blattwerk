@@ -31,12 +31,18 @@ describe('Updates', () => {
   });
 
   it('baut den Windows-Befehl mit sicher eingesetzten Pfaden', () => {
-    const command = windowsInstallCommand(1234, "C:\\Users\\Max O'Brien\\Blattwerk-Setup-1.0.0.exe", true, false);
+    const base = { pid: 1234, installer: "C:\\Users\\Max O'Brien\\Blattwerk-Setup-1.0.0.exe", app: 'C:\\Programme\\Blattwerk\\Blattwerk.exe', log: 'C:\\Profil\\update.log' };
+    const command = windowsInstallCommand({ ...base, reopen: true, cleanup: false });
     expect(command).toContain("$installer = 'C:\\Users\\Max O''Brien\\Blattwerk-Setup-1.0.0.exe'");
-    expect(command).toContain("$appPid = 1234");
-    expect(command).toContain("'--force-run'");
+    expect(command).toContain('$appPid = 1234');
+    expect(command).toContain("$log = 'C:\\Profil\\update.log'");
+    // Still installieren, danach startet das Skript die App selbst neu
+    expect(command).toContain("-ArgumentList '/S'");
+    expect(command).toContain('Start-Process -FilePath $app');
     expect(command).not.toContain('Remove-Item');
-    expect(windowsInstallCommand(1, 'x.exe', false, true)).toContain('Remove-Item');
+    const quiet = windowsInstallCommand({ ...base, reopen: false, cleanup: true });
+    expect(quiet).toContain('Remove-Item');
+    expect(quiet).not.toContain('Start-Process -FilePath $app');
   });
 
   it('liest Werte aus der Info.plist', () => {

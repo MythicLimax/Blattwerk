@@ -216,12 +216,10 @@ async function checkUpdatesOnline(): Promise<OnlineCheck> {
   return result;
 }
 
-// Beim Start höchstens alle 12 Stunden still nachsehen; nur die installierte App, nie in Testläufen
-const AUTO_CHECK_INTERVAL = 12 * 60 * 60 * 1000;
+// Bei jedem Start still nachsehen (Wunsch des Auftraggebers, 2026-10-19); nur die installierte App, nie in Testläufen
 function scheduleAutoUpdateCheck(): void {
   if (!app.isPackaged || runHidden || isE2E) return;
-  const due = (settings.lastUpdateCheck ?? 0) + AUTO_CHECK_INTERVAL <= Date.now();
-  if (due) setTimeout(() => void checkUpdatesOnline().catch(() => undefined), 5000);
+  setTimeout(() => void checkUpdatesOnline().catch(() => undefined), 5000);
 }
 
 async function rememberRecent(filePath: string): Promise<void> {

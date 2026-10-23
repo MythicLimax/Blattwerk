@@ -5,7 +5,8 @@
 //   Windows: das Installationsprogramm „Blattwerk-Setup-<Version>.exe“
 // Die App prüft beim Start und wenn ihr Fenster nach vorn kommt. „Jetzt aktualisieren“ schließt die App über den
 // normalen Weg (Rückfrage bei ungespeicherten Änderungen); danach tauscht ein Hilfsskript die App aus (macOS) bzw.
-// läuft das Installationsprogramm still (Windows), und die App öffnet sich neu.
+// läuft das Installationsprogramm still (Windows, Protokoll in „update.log“ im Update-Ordner), und die App öffnet
+// sich neu.
 import { app } from 'electron';
 import { spawn, spawnSync } from 'node:child_process';
 import { accessSync, constants, existsSync, openSync, readSync, closeSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -159,9 +160,10 @@ export function runPendingInstall(): void {
       stdio: 'ignore',
     }).unref();
   } else if (process.platform === 'win32') {
+    // Voller Pfad: PowerShell liegt immer dort, ein veränderter Suchpfad (PATH) spielt keine Rolle
     spawn(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', windowsInstallCommand(process.pid, pending.path, reopen, cleanup)],
+      path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', windowsInstallCommand({ pid: process.pid, installer: pending.path, app: process.execPath, log: path.join(defaultUpdateFolder(), 'update.log'), reopen, cleanup })],
       { detached: true, stdio: 'ignore', windowsHide: true },
     ).unref();
   }
