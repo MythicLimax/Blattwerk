@@ -23,7 +23,7 @@ export type ReviewStatus = 'None' | 'Accepted' | 'Rejected' | 'Cancelled' | 'Com
 
 export const REVIEW_STATUSES: readonly ReviewStatus[] = ['None', 'Accepted', 'Rejected', 'Cancelled', 'Completed'];
 
-export type StampId = 'approved' | 'rejected' | 'draft' | 'confidential' | 'final' | 'reviewed' | 'forComment';
+export type StampId = 'approved' | 'rejected' | 'draft' | 'confidential' | 'final' | 'reviewed' | 'forComment' | 'custom';
 
 export const STAMP_IDS: readonly StampId[] = ['approved', 'rejected', 'reviewed', 'draft', 'final', 'confidential', 'forComment'];
 
@@ -165,7 +165,7 @@ export interface AnnotationChanges {
 }
 
 // Beschriftung der Stempel (Großbuchstaben wie bei Papierstempeln) und Farbe.
-export const STAMP_STYLES: Record<StampId, { color: Rgb }> = {
+export const STAMP_STYLES: Record<Exclude<StampId, 'custom'>, { color: Rgb }> = {
   approved: { color: { r: 0.13, g: 0.55, b: 0.13 } },
   reviewed: { color: { r: 0.13, g: 0.55, b: 0.13 } },
   final: { color: { r: 0.13, g: 0.55, b: 0.13 } },
@@ -174,6 +174,16 @@ export const STAMP_STYLES: Record<StampId, { color: Rgb }> = {
   draft: { color: { r: 0.15, g: 0.3, b: 0.75 } },
   forComment: { color: { r: 0.15, g: 0.3, b: 0.75 } },
 };
+
+// Farbe eines Stempels: vorgegebene Stempel haben ihre feste Farbe, eigene die gewählte (color)
+export function stampColor(a: StampAnnotation): Rgb {
+  return a.stamp === 'custom' ? a.color : STAMP_STYLES[a.stamp].color;
+}
+
+// Eigene Stempel haben bis zu zwei Zeilen: Text und darunter Datum/Name (getrennt durch einen Zeilenumbruch)
+export function stampLines(label: string): string[] {
+  return label.split('\n').filter((line) => line.trim() !== '').slice(0, 2);
+}
 
 export function rgbEquals(a: Rgb | null, b: Rgb | null): boolean {
   if (!a || !b) return a === b;

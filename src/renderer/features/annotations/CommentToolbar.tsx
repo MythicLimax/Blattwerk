@@ -18,6 +18,7 @@ import {
   type LucideIcon,
   MessageSquare as MessageSquareIcon,
 } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Annotation, Rgb, StampId } from '../../../shared/annotations';
 import { STAMP_IDS } from '../../../shared/annotations';
@@ -32,6 +33,9 @@ import { canRedoState, canUndoState, useTabHistory } from '../../state/dirty';
 import type { TabState } from '../../state/documents-store';
 import { cachedGeometry, markupSelection } from './AnnotationLayer';
 import { updateAnnotation } from './controller';
+import { CustomStampDialog } from './CustomStampDialog';
+import { imageToPng, toBase64 } from '../signatures/signature-image';
+import { pickSources } from '../pages/actions';
 import styles from './CommentToolbar.module.css';
 
 const TOOLS: Array<{ tool: Tool; icon: LucideIcon }> = [
@@ -64,6 +68,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const width = useAnnotations((s) => s.width);
   const fontSize = useAnnotations((s) => s.fontSize);
   const stamp = useAnnotations((s) => s.stamp);
+  const customText = useAnnotations((s) => s.customStamp.text);
   const selected: Annotation | undefined = annotations?.items.find((a) => a.id === annotations.selectedId);
   const readOnly = !tab.canAnnotate;
 
@@ -123,6 +128,22 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const chooseFontSize = (value: number) => {
     useAnnotations.getState().setFontSize(value);
     if (selected?.kind === 'freetext') restyle({ fontSize: value });
+  };
+
+  // Stempelliste: vorgegebene Stempel, eigener Stempel (Dialog) und Bild als Stempel (Datei wählen, dann setzen)
+  const [customOpen, setCustomOpen] = useState(false);
+  const chooseStamp = (value: string) => {
+    if (value === 'custom') setCustomOpen(true);
+    else if (value === 'image') void stampFromImage();
+    else useAnnotations.getState().setStamp(value as StampId);
+  };
+  const stampFromImage = async () => {
+    const picked = await pickSources('images');
+    const bytes = picked?.[0]?.bytes;
+    const png = bytes ? await imageToPng(bytes, false) : null;
+    if (!png) return;
+    // Wie eine Unterschrift: als Bild an die nächste Klickstelle setzen (schaltet das Werkzeug ein)
+    useAnnotations.getState().setPendingSignature({ image: toBase64(png.png), width: png.width, height: png.height });
   };
 
   const glassRef = useLiquidGlass<HTMLDivElement>(GLASS.control);
@@ -240,7 +261,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
           aria-label={t('comments.stamp')}
           data-tooltip={t('comments.stamp')}
           value={stamp}
-          onChange={(event) => useAnnotations.getState().setStamp(event.target.value as StampId)}
+          onChange={(event) => chooseStamp(event.target.value)}
           data-testid="stamp-select"
         >
           {STAMP_IDS.map((id) => (
@@ -248,7 +269,21 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
               {t(`stamps.${id}`)}
             </option>
           ))}
+          <option disabled>──────</option>
+          <option value="custom">{stamp === 'custom' && customText ? customText : t('comments.customStamp.choose')}</option>
+          <option value="image">{t('comments.imageStamp')}</option>
         </select>
+      )}
+      {customOpen && (
+        <CustomStampDialog
+          onClose={() => setCustomOpen(false)}
+          onDone={(custom) => {
+            const store = useAnnotations.getState();
+            store.setCustomStamp(custom);
+            store.setStamp('custom');
+            setCustomOpen(false);
+          }}
+        />
       )}
 
       {readOnly && (

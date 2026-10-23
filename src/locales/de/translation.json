@@ -490,6 +490,18 @@
     "color": "Farbe",
     "width": "Linienstärke",
     "widthValue": "{{value}} pt",
+    "customStamp": {
+      "choose": "Eigener Stempel …",
+      "title": "Eigener Stempel",
+      "text": "Text",
+      "date": "Datum und Uhrzeit darunter",
+      "name": "Meinen Namen darunter",
+      "color": "Farbe",
+      "colors": { "green": "Grün", "red": "Rot", "blue": "Blau" },
+      "cancel": "Abbrechen",
+      "ok": "Stempel wählen"
+    },
+    "imageStamp": "Bild als Stempel …",
     "fill": "Füllfarbe",
     "noFill": "Keine Füllung",
     "opacity": "Deckkraft",

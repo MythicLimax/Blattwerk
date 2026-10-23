@@ -20,7 +20,7 @@ import {
 import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Annotation, AnnotationKind, ReviewStatus } from '../../../shared/annotations';
-import { currentStatus, parsePdfDate, REVIEW_STATUSES, STAMP_STYLES } from '../../../shared/annotations';
+import { currentStatus, parsePdfDate, REVIEW_STATUSES, stampColor } from '../../../shared/annotations';
 import { IconButton } from '../../components/IconButton';
 import { getRuntime } from '../../engine/runtime';
 import { useAnnotations, useTabAnnotations } from '../../state/annotations-store';
@@ -61,7 +61,7 @@ interface PageRow {
 
 // Sehr dunkle Farben (z. B. schwarzer Text) wären im Dunkelmodus unsichtbar: dann die Textfarbe nehmen.
 function iconColor(a: Annotation): string {
-  const color = a.kind === 'stamp' && a.label ? STAMP_STYLES[a.stamp].color : a.color;
+  const color = a.kind === 'stamp' && a.label ? stampColor(a) : a.color;
   const luminance = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
   return luminance < 0.2 ? 'var(--color-text)' : css(color);
 }

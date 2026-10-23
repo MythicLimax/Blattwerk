@@ -21,6 +21,20 @@ export type Tool =
   | 'redactText';
 
 // Unterschrift, die beim nächsten Klick auf die Seite gesetzt wird (PNG als Base64)
+// Eigener Stempel (Werkzeug „Stempel“ mit stamp = 'custom'): Text, auf Wunsch Datum und Name in Zeile zwei
+export interface CustomStamp {
+  text: string;
+  date: boolean;
+  name: boolean;
+  color: 'green' | 'red' | 'blue';
+}
+
+export const CUSTOM_STAMP_COLORS: Record<CustomStamp['color'], Rgb> = {
+  green: { r: 0.13, g: 0.55, b: 0.13 },
+  red: { r: 0.8, g: 0.1, b: 0.1 },
+  blue: { r: 0.15, g: 0.3, b: 0.75 },
+};
+
 export interface PendingSignature {
   image: string;
   width: number;
@@ -94,6 +108,7 @@ interface AnnotationsState {
   opacity: number;
   fill: Rgb | null;
   stamp: StampId;
+  customStamp: CustomStamp;
   pendingSignature: PendingSignature | null;
   init: (tabId: string) => void;
   // Gesicherten Zustand eines Dokumentstands wiederherstellen (Rückgängig/Wiederholen von Seitenoperationen)
@@ -115,6 +130,7 @@ interface AnnotationsState {
   setOpacity: (opacity: number) => void;
   setFill: (fill: Rgb | null) => void;
   setStamp: (stamp: StampId) => void;
+  setCustomStamp: (stamp: CustomStamp) => void;
   // Unterschrift zum Setzen wählen (schaltet das Werkzeug ein) oder verwerfen
   setPendingSignature: (signature: PendingSignature | null) => void;
 }
@@ -169,6 +185,7 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     opacity: 1,
     fill: null,
     stamp: 'approved',
+    customStamp: { text: '', date: true, name: true, color: 'blue' },
     pendingSignature: null,
     init: (tabId) => set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...EMPTY } } })),
     restore: (tabId, tab) =>
@@ -230,6 +247,7 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     setFontSize: (fontSize) => set({ fontSize }),
     setOpacity: (opacity) => set({ opacity }),
     setFill: (fill) => set({ fill }),
+    setCustomStamp: (customStamp) => set({ customStamp }),
     setStamp: (stamp) => set({ stamp }),
     setPendingSignature: (pendingSignature) =>
       set((state) => ({ pendingSignature, tool: pendingSignature ? 'signature' : state.tool === 'signature' ? 'select' : state.tool })),

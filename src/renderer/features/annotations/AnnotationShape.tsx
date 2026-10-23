@@ -1,5 +1,5 @@
 import type { Annotation, Point, Rgb } from '../../../shared/annotations';
-import { STAMP_STYLES } from '../../../shared/annotations';
+import { stampColor as colorOfStamp, stampLines } from '../../../shared/annotations';
 import type { PageGeometry } from '../../engine/coords';
 
 export const css = ({ r, g, b }: Rgb) => `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
@@ -175,9 +175,13 @@ export function AnnotationShape({ annotation: a, geometry }: { annotation: Annot
           />
         );
       }
-      const stampColor = css(STAMP_STYLES[a.stamp].color);
+      const stampColor = css(colorOfStamp(a));
       const border = Math.max(1.5, r.h * 0.06);
-      const fontSize = Math.min(r.h * 0.5, (r.w - border * 4) / Math.max(1, a.label.length * 0.68));
+      // Eine oder zwei Zeilen (eigene Stempel: Text, darunter Datum/Name); wie beim Speichern (#buildStampAppearance)
+      const [first = '', second] = stampLines(a.label);
+      const fit = (text: string, share: number, weight: number) => Math.min(r.h * share, (r.w - border * 4) / Math.max(1, text.length * weight));
+      const fontSize = fit(first, second ? 0.36 : 0.5, 0.68);
+      const smallSize = second ? fit(second, 0.22, 0.56) : 0;
       return (
         <g opacity={a.opacity}>
           <rect
@@ -191,7 +195,7 @@ export function AnnotationShape({ annotation: a, geometry }: { annotation: Annot
           />
           <text
             x={r.x + r.w / 2}
-            y={r.y + r.h / 2}
+            y={second ? r.y + r.h * 0.4 : r.y + r.h / 2}
             fill={stampColor}
             fontFamily="Helvetica, Arial, sans-serif"
             fontWeight="bold"
@@ -199,8 +203,13 @@ export function AnnotationShape({ annotation: a, geometry }: { annotation: Annot
             textAnchor="middle"
             dominantBaseline="central"
           >
-            {a.label}
+            {first}
           </text>
+          {second && (
+            <text x={r.x + r.w / 2} y={r.y + r.h * 0.74} fill={stampColor} fontFamily="Helvetica, Arial, sans-serif" fontSize={smallSize} textAnchor="middle" dominantBaseline="central">
+              {second}
+            </text>
+          )}
         </g>
       );
     }

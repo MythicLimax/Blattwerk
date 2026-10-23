@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { COMMENTS_PDF, fixture, TEXT_PDF } from '../fixtures/expectations';
+import { COMMENTS_PDF, fixture, imageFixture, TEXT_PDF } from '../fixtures/expectations';
 import { launchApp, menuClick, removeTempDir, waitForDocument, type AppHandle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 
@@ -495,5 +495,43 @@ test('Rechteck mit Füllfarbe und halber Deckkraft: Leiste, Speichern und Datei'
   const interior = square.get(PDFName.of('IC'));
   expect(opacity instanceof PDFNumber && opacity.asNumber()).toBeCloseTo(0.75, 2);
   expect(interior instanceof PDFArray && interior.size()).toBe(3);
+  await handle.close();
+});
+
+test('eigener Stempel mit Datum und Name sowie ein Bild als Stempel', async () => {
+  const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+  const { page, app } = handle;
+  const at = await pageSpace(page);
+  await page.getByTestId('tool-stamp').click();
+  await page.getByTestId('stamp-select').selectOption('custom');
+  const dialog = page.getByTestId('custom-stamp-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('custom-stamp-ok')).toBeDisabled();
+  await page.getByTestId('custom-stamp-text').fill('ERLEDIGT');
+  await page.getByTestId('custom-stamp-color-red').click();
+  await page.getByTestId('custom-stamp-ok').click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('stamp-select')).toHaveValue('custom');
+  await page.mouse.click(at(200, 300).x, at(200, 300).y);
+  // Zwei Zeilen: Text und darunter Name · Datum
+  const lines = page.getByTestId('annotation-overlay-0').locator('text');
+  await expect(lines.first()).toHaveText('ERLEDIGT');
+  await expect(lines.nth(1)).toContainText(String(new Date().getFullYear()));
+
+  // Bild als Stempel: Datei wählen, dann an die Klickstelle setzen
+  await app.evaluate(({ dialog: d }, file) => {
+    d.showOpenDialog = (async () => ({ canceled: false, filePaths: [file] })) as typeof d.showOpenDialog;
+  }, imageFixture('transparent.png'));
+  await page.getByTestId('tool-stamp').click();
+  await page.getByTestId('stamp-select').selectOption('image');
+  await expect(page.getByTestId('signature-hint')).toBeVisible();
+  await page.mouse.click(at(300, 500).x, at(300, 500).y);
+  await expect(page.getByTestId('annotation-overlay-0').locator('image')).toHaveCount(1);
+
+  await save(page, app);
+  const { PDFDocument, PDFName } = await import('@cantoo/pdf-lib');
+  const doc = await PDFDocument.load(readFileSync(handle.file));
+  const subtypes = (doc.getPage(0).node.Annots()?.asArray() ?? []).map((ref) => (doc.context.lookup(ref) as unknown as { get: (n: unknown) => unknown }).get(PDFName.of('Subtype'))?.toString());
+  expect(subtypes.filter((s) => s === '/Stamp')).toHaveLength(2);
   await handle.close();
 });

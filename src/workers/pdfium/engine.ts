@@ -13,7 +13,7 @@ import type {
   StampAnnotation,
   StatusEntry,
 } from '../../shared/annotations';
-import { STAMP_STYLES, toPdfDate } from '../../shared/annotations';
+import { stampColor, stampLines, toPdfDate } from '../../shared/annotations';
 import type { FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, TextSearchOptions } from '../../shared/redaction';
@@ -485,7 +485,7 @@ export class PdfiumEngine {
     const [left, bottom, right, top] = a.rect;
     const width = right - left;
     const height = top - bottom;
-    const color = STAMP_STYLES[a.stamp].color;
+    const color = stampColor(a);
     const border = Math.max(1.5, height * 0.06);
 
     const frame = m.FPDFPageObj_CreateNewRect(left + border / 2, bottom + border / 2, width - border, height - border);
@@ -494,27 +494,38 @@ export class PdfiumEngine {
     m.FPDFPath_SetDrawMode(frame, 0, true);
     m.FPDFAnnot_AppendObject(annot, frame);
 
-    const font = m.FPDFText_LoadStandardFont(doc, 'Helvetica-Bold');
-    let fontSize = height * 0.5;
-    const text = m.FPDFPageObj_CreateTextObj(doc, font, fontSize);
-    withWString(m, a.label, (ptr) => m.FPDFText_SetText(text, ptr));
-    // Textbreite messen und Schriftgröße so anpassen, dass die Beschriftung in den Rahmen passt.
-    const measured = withBuffer(m, 16, (ptr) => {
-      m.FPDFPageObj_GetBounds(text, ptr, ptr + 4, ptr + 8, ptr + 12);
-      const l = m.pdfium.getValue(ptr, 'float');
-      const r = m.pdfium.getValue(ptr + 8, 'float');
-      return r - l;
-    });
-    const available = width - border * 4;
-    const scale = measured > available && measured > 0 ? available / measured : 1;
-    fontSize *= scale;
-    const textWidth = measured * scale;
-    const x = left + (width - textWidth) / 2;
-    const y = bottom + (height - fontSize * 0.72) / 2;
-    m.FPDFPageObj_Transform(text, scale, 0, 0, scale, x, y);
-    m.FPDFPageObj_SetFillColor(text, byte(color.r), byte(color.g), byte(color.b), 255);
-    m.FPDFAnnot_AppendObject(annot, text);
-    m.FPDFFont_Close(font);
+    // Eine Zeile (vorgegebene Stempel) oder zwei: Text fett, darunter Datum/Name kleiner (wie AnnotationShape)
+    const [first = '', second] = stampLines(a.label);
+    const lines: Array<{ text: string; font: string; share: number; center: number }> = second
+      ? [
+          { text: first, font: 'Helvetica-Bold', share: 0.36, center: 0.6 },
+          { text: second, font: 'Helvetica', share: 0.22, center: 0.26 },
+        ]
+      : [{ text: first, font: 'Helvetica-Bold', share: 0.5, center: 0.5 }];
+    for (const line of lines) {
+      if (line.text === '') continue;
+      const font = m.FPDFText_LoadStandardFont(doc, line.font);
+      let fontSize = height * line.share;
+      const text = m.FPDFPageObj_CreateTextObj(doc, font, fontSize);
+      withWString(m, line.text, (ptr) => m.FPDFText_SetText(text, ptr));
+      // Textbreite messen und Schriftgröße so anpassen, dass die Zeile in den Rahmen passt.
+      const measured = withBuffer(m, 16, (ptr) => {
+        m.FPDFPageObj_GetBounds(text, ptr, ptr + 4, ptr + 8, ptr + 12);
+        const l = m.pdfium.getValue(ptr, 'float');
+        const r = m.pdfium.getValue(ptr + 8, 'float');
+        return r - l;
+      });
+      const available = width - border * 4;
+      const scale = measured > available && measured > 0 ? available / measured : 1;
+      fontSize *= scale;
+      const textWidth = measured * scale;
+      const x = left + (width - textWidth) / 2;
+      const y = bottom + height * line.center - (fontSize * 0.72) / 2;
+      m.FPDFPageObj_Transform(text, scale, 0, 0, scale, x, y);
+      m.FPDFPageObj_SetFillColor(text, byte(color.r), byte(color.g), byte(color.b), 255);
+      m.FPDFAnnot_AppendObject(annot, text);
+      m.FPDFFont_Close(font);
+    }
   }
 
   // Antworten sind Text-Anmerkungen mit /IRT auf den Kommentar (ISO 32000, 12.5.6.4).
