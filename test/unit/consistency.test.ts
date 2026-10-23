@@ -155,6 +155,7 @@ describe('Menü und Tastenkürzel', () => {
       setDefaultApp: () => undefined,
       chooseUpdateFolder: () => undefined,
       mergeWindows: () => undefined,
+      showAbout: () => undefined,
       windowCount: 1,
     });
     const text = JSON.stringify(template);
