@@ -103,7 +103,46 @@ statt ins Menü „Bearbeiten“. Texte über `t()`, Name über `{{appName}}`.
 
 **Test:** Oberflächentest, der den Eintrag unter Windows/Linux im Menü findet und den Dialog mit der Version zeigt.
 
-## 7. Schon geplante Erweiterungen
+## 7. Auswahlrahmen auch neben der Seite beginnen
+
+**Gemeldet vom Auftraggeber:** Um mehrere Objekte mit einem Rahmen zu markieren (Maus drücken, ziehen, loslassen), muss
+man heute auf der Seite anfangen. Es soll auch gehen, wenn man im grauen Bereich neben dem Dokument anfängt, wie in
+Acrobat, Word oder Keynote.
+
+**Ziel:** Ein Rahmen, der neben der Seite beginnt, wird gezeichnet und wählt alle Objekte aus, die er auf der Seite
+berührt bzw. einschließt (dieselbe Regel wie beim Rahmen auf der Seite). Reicht der Rahmen über mehrere Seiten, gilt
+dieselbe Regel wie heute bei mehreren Seiten (prüfen, was die App heute dabei tut). Ein einfacher Klick neben die Seite
+hebt die Auswahl weiterhin auf.
+
+**Wo prüfen:** überall, wo es einen Auswahlrahmen gibt: Inhalt bearbeiten (`ContentEditOverlay.tsx`), Kommentare
+(`AnnotationLayer.tsx`/`PageOverlay.tsx`), Formular bearbeiten (`FormEditOverlay.tsx`), Seitenraster. Die Ebenen hängen
+heute in den Seiten von pdf.js; der Rahmen muss deshalb am Viewer-Container beginnen und in Seitenkoordinaten
+umgerechnet werden (`coords.ts`).
+
+**Test:** Oberflächentest: Ziehen von links neben der Seite bis über zwei Objekte → beide ausgewählt.
+
+## 8. Fehler: Textfelder auf anderen Objekten lassen sich nicht bearbeiten
+
+**Gemeldet vom Auftraggeber:** In manchen Dokumenten kann man ein Textfeld nicht bearbeiten, wenn es auf einem anderen
+Objekt liegt (zum Beispiel auf einem Bild, einer farbigen Fläche oder einem Rahmen). Der Klick erreicht das Textfeld
+nicht.
+
+**Vermutung (noch nicht geprüft):** Beim Klick gewinnt das darunter- oder darüberliegende Objekt, etwa weil es eine
+größere Fläche hat, später in der Liste steht oder weil der Text (zum Beispiel bei PDFs aus Word oder PowerPoint) in
+einer Gruppe oder einem Formular-XObject steckt, das als ein einziges Objekt zählt.
+
+**Ziel:** Text hat beim Klicken Vorrang vor Bildern und Flächen, wenn der Klick auf dem Text liegt (wie in Acrobat).
+Ein zweiter Klick an dieselbe Stelle wählt das Objekt darunter. Text in Formular-XObjects ist bearbeitbar oder es gibt
+eine klare Meldung, warum nicht.
+
+**Vorgehen:** Den Auftraggeber um ein betroffenes Dokument bitten (oder eines aus Word/PowerPoint mit Text auf Bild
+erzeugen), prüfen, was `listObjects` dort liefert und welches Objekt der Klick trifft. Testdatei dazu in
+`test/fixtures/` anlegen.
+
+**Test:** Integrations- und Oberflächentest mit Text über Bild und Text über Fläche: Klick auf den Text → Textfeld zum
+Bearbeiten offen.
+
+## 9. Schon geplante Erweiterungen
 
 Vor Beginn kurz prüfen, ob ein Punkt inzwischen erledigt ist.
 
