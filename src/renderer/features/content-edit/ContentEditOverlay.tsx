@@ -78,15 +78,11 @@ function whiteToAlpha(canvas: HTMLCanvasElement): void {
 
 function snapshot(canvas: HTMLCanvasElement | null, geometry: PageGeometry, units: EditUnit[]): Map<number, Ghost> {
   const ghosts = new Map<number, Ghost>();
-  const context = canvas?.getContext('2d');
-  if (!canvas || !context || canvas.width === 0) return ghosts;
+  if (!canvas || canvas.width === 0) return ghosts;
   const sx = canvas.width / geometry.width;
   const sy = canvas.height / geometry.height;
-  const pixel = (x: number, y: number) => {
-    const px = Math.min(canvas.width - 1, Math.max(0, Math.round(x)));
-    const py = Math.min(canvas.height - 1, Math.max(0, Math.round(y)));
-    return context.getImageData(px, py, 1, 1).data;
-  };
+  // Rand für die Hintergrundfarbe (knapp außerhalb der Ecken)
+  const edge = 3;
   for (const unit of units) {
     const r = geometry.rectToView(unit.bounds);
     const x = Math.max(0, (r.x - GHOST_PAD) * sx);
@@ -94,10 +90,24 @@ function snapshot(canvas: HTMLCanvasElement | null, geometry: PageGeometry, unit
     const w = Math.min(canvas.width - x, (r.w + 2 * GHOST_PAD) * sx);
     const h = Math.min(canvas.height - y, (r.h + 2 * GHOST_PAD) * sy);
     if (w < 1 || h < 1) continue;
+    // Ein einziges Zurücklesen von der Grafikkarte: Ausschnitt samt Rand in eine Leinwand im Arbeitsspeicher kopieren
+    // und alles Weitere dort lesen (früher fünf Lesevorgänge je Objekt an der Seite selbst, spürbar beim Anfassen)
+    const ex = Math.max(0, x - edge);
+    const ey = Math.max(0, y - edge);
+    const ew = Math.min(canvas.width - ex, w + (x - ex) + edge);
+    const eh = Math.min(canvas.height - ey, h + (y - ey) + edge);
+    const around = document.createElement('canvas');
+    around.width = Math.ceil(ew);
+    around.height = Math.ceil(eh);
+    const read = around.getContext('2d', { willReadFrequently: true });
+    if (!read) continue;
+    read.drawImage(canvas, ex, ey, ew, eh, 0, 0, around.width, around.height);
+    const pixel = (px: number, py: number) =>
+      read.getImageData(Math.min(around.width - 1, Math.max(0, Math.round(px - ex))), Math.min(around.height - 1, Math.max(0, Math.round(py - ey))), 1, 1).data;
     const crop = document.createElement('canvas');
     crop.width = Math.ceil(w);
     crop.height = Math.ceil(h);
-    crop.getContext('2d')?.drawImage(canvas, x, y, w, h, 0, 0, crop.width, crop.height);
+    crop.getContext('2d', { willReadFrequently: true })?.drawImage(around, x - ex, y - ey, w, h, 0, 0, crop.width, crop.height);
     // Hintergrund: häufigste Farbe knapp außerhalb der vier Ecken (meist Papierweiß)
     const corners = [pixel(x - 2, y - 2), pixel(x + w + 2, y - 2), pixel(x - 2, y + h + 2), pixel(x + w + 2, y + h + 2)];
     const samples = corners.map((d) => `rgb(${d[0]} ${d[1]} ${d[2]})`);
