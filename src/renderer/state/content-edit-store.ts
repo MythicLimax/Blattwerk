@@ -49,6 +49,16 @@ export interface TextStyle {
   color: Rgb;
 }
 
+export interface MarqueeRequest {
+  tabId: string;
+  pageIndex: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  additive: boolean;
+}
+
 interface ContentEditState {
   tool: ContentTool;
   selected: Record<string, SelectedObject | null>;
@@ -63,6 +73,9 @@ interface ContentEditState {
   // Nach dem Neusetzen eines Textes: den Text an dieser Stelle wieder auswählen (Positionen ändern sich dabei)
   reselect: { tabId: string; pageIndex: number; at: Point } | null;
   setReselect: (reselect: { tabId: string; pageIndex: number; at: Point } | null) => void;
+  // Auswahlrahmen, der neben der Seite begann: Fensterkoordinaten; die Seite mit der größten Überdeckung wählt aus
+  marquee: MarqueeRequest | null;
+  setMarquee: (marquee: MarqueeRequest | null) => void;
   setTool: (tool: ContentTool) => void;
   select: (tabId: string, selected: SelectedObject | null) => void;
   setEditing: (editing: TextEditing | null) => void;
@@ -78,9 +91,11 @@ export const useContentEdit = create<ContentEditState>((set) => ({
   style: { font: 'Helvetica', size: 12, color: { r: 0, g: 0, b: 0 } },
   pending: {},
   reselect: null,
+  marquee: null,
   caret: null,
   setCaret: (caret) => set({ caret }),
   setReselect: (reselect) => set({ reselect }),
+  setMarquee: (marquee) => set({ marquee }),
   setTool: (tool) => set({ tool }),
   select: (tabId, selected) => set((state) => ({ selected: { ...state.selected, [tabId]: selected } })),
   setEditing: (editing) => set({ editing }),

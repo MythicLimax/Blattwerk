@@ -289,6 +289,30 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     });
   };
 
+  // Alle Einheiten, die das Rechteck berührt (in Ansichtskoordinaten verglichen, auch bei gedrehten Seiten)
+  const selectInView = (x0: number, x1: number, y0: number, y1: number, additive: boolean) => {
+    const hit = objects.filter((object) => {
+      if (blank(object)) return false;
+      const r = geometry.rectToView(object.bounds);
+      return r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0;
+    });
+    const base = additive ? groupUnits().filter((unit) => !hit.some((other) => other.index === unit.index)) : [];
+    selectUnits([...base, ...hit]);
+  };
+
+  // Rahmen, der neben der Seite begann (useContentEditInput): in Ansichtskoordinaten dieser Seite umrechnen
+  const marquee = useContentEdit((s) => (s.marquee?.tabId === tabId && s.marquee.pageIndex === pageIndex ? s.marquee : null));
+  useEffect(() => {
+    if (!marquee) return;
+    useContentEdit.getState().setMarquee(null);
+    const box = svgRef.current?.getBoundingClientRect();
+    if (!box || box.width === 0 || box.height === 0) return;
+    const vx = (clientX: number) => ((clientX - box.left) / box.width) * geometry.width;
+    const vy = (clientY: number) => ((clientY - box.top) / box.height) * geometry.height;
+    selectInView(vx(marquee.left), vx(marquee.right), vy(marquee.top), vy(marquee.bottom), marquee.additive);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur auf eine neue Anfrage reagieren
+  }, [marquee]);
+
   const onHandlePointerDown = (event: ReactPointerEvent, object: EditUnit, corner: number) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -324,18 +348,12 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     setGesture(null);
     if (!current) return;
     if (current.kind === 'marquee') {
-      // Alle Einheiten, die das Rechteck berührt (in Ansichtskoordinaten verglichen, auch bei gedrehten Seiten)
       const x0 = Math.min(current.start.x, current.to.x);
       const x1 = Math.max(current.start.x, current.to.x);
       const y0 = Math.min(current.start.y, current.to.y);
       const y1 = Math.max(current.start.y, current.to.y);
       if (x1 - x0 < 2 && y1 - y0 < 2) return;
-      const hit = objects.filter((object) => {
-        const r = geometry.rectToView(object.bounds);
-        return r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0;
-      });
-      const base = current.additive ? groupUnits().filter((unit) => !hit.some((other) => other.index === unit.index)) : [];
-      selectUnits([...base, ...hit]);
+      selectInView(x0, x1, y0, y1, current.additive);
       return;
     }
     const bounds = previewBounds(current.object, current);
@@ -416,6 +434,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
         onPointerCancel={() => setGesture(null)}
         data-testid={`content-edit-overlay-${pageIndex}`}
         data-content-edit-overlay=""
+        data-page-index={pageIndex}
       >
         {ghosts && (gesture?.kind === 'move' || gesture?.kind === 'scale' || pending?.pageIndex === pageIndex) && (
           <g className={styles.ghosts} data-testid="content-ghosts">
