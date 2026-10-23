@@ -79,6 +79,10 @@
       "lastPage": "Letzte Seite",
       "goToPage": "Seite …"
     },
+    "help": {
+      "title": "Hilfe",
+      "about": "Über {{appName}} …"
+    },
     "window": {
       "title": "Fenster",
       "minimize": "Im Dock ablegen",
@@ -138,6 +142,11 @@
       "detail": "{{url}}",
       "open": "Öffnen",
       "cancel": "Abbrechen"
+    },
+    "about": {
+      "title": "Über {{appName}}",
+      "detail": "Version {{version}}\n\nPDFs lesen, kommentieren, bearbeiten und unterschreiben – alles auf diesem Rechner, ohne Internet.\n\nBaut auf freien Bibliotheken auf, unter anderem pdf.js (Apache-2.0), PDFium (BSD-3-Clause), pdf-lib (MIT), Tesseract (Apache-2.0) und Electron {{electron}} (MIT).",
+      "ok": "OK"
     },
     "rendererGone": {
       "message": "Die Anzeige von {{appName}} wurde unerwartet beendet.",

@@ -86,6 +86,7 @@ describe('Menü und Tastenkürzel', () => {
         setDefaultApp: () => undefined,
         chooseUpdateFolder: () => undefined,
         mergeWindows: () => undefined,
+        showAbout: () => undefined,
         windowCount: 1,
       });
       const ids = collectIds(template);
@@ -95,7 +96,7 @@ describe('Menü und Tastenkürzel', () => {
     }
   });
 
-  it('Schließen wirkt auf jeden Tab; ohne Tabs schließt Cmd+W unter macOS das Fenster', async () => {
+  it('Schließen wirkt auf jeden Tab; ohne Tabs schließt Cmd+W unter macOS nur ein weiteres Fenster', async () => {
     const { buildMenuTemplate } = await import('../../src/main/menu');
     const base = {
       recent: [],
@@ -107,6 +108,7 @@ describe('Menü und Tastenkürzel', () => {
       setDefaultApp: () => undefined,
       chooseUpdateFolder: () => undefined,
       mergeWindows: () => undefined,
+      showAbout: () => undefined,
       windowCount: 1,
     };
     const state = { hasDocument: false, canPrint: false, viewMode: null, sidebarVisible: true, rightPanelVisible: false, dirtyCount: 0, canUndo: false, canRedo: false, activeDirty: false, commentToolsVisible: false, organizeMode: false, canAssemble: true, canExtract: true, formEditing: false, canEditForms: false, redactToolsVisible: false, hasRedactionMarks: false, contentEditing: false, markToolsVisible: false };
@@ -116,8 +118,19 @@ describe('Menü und Tastenkürzel', () => {
     const loading = flatten(buildMenuTemplate({ ...base, platform: 'darwin', state: { ...state, tabCount: 1 } }));
     expect(loading.find((i) => i.id === 'file.close')?.enabled).toBe(true);
 
+    // Letztes Fenster ohne Tabs: ⌘W ist ausgegraut, die Startseite bleibt (beendet würde sonst die App)
     const empty = flatten(buildMenuTemplate({ ...base, platform: 'darwin', state: { ...state, tabCount: 0 } }));
-    expect(empty.some((i) => i.role === 'close' && i.accelerator === 'CmdOrCtrl+W')).toBe(true);
+    expect(empty.some((i) => i.role === 'close')).toBe(false);
+    expect(empty.find((i) => i.id === 'file.close')?.enabled).toBe(false);
+    const emptyOfTwo = flatten(buildMenuTemplate({ ...base, windowCount: 2, platform: 'darwin', state: { ...state, tabCount: 0 } }));
+    expect(emptyOfTwo.some((i) => i.role === 'close' && i.accelerator === 'CmdOrCtrl+W')).toBe(true);
+
+    // Windows: „Hilfe“ mit „Über“ und den Update-Befehlen, unter macOS stehen sie im App-Menü
+    const winMenu = buildMenuTemplate({ ...base, platform: 'win32', state: { ...state, tabCount: 0 } });
+    const help = winMenu[winMenu.length - 1];
+    expect(help?.id).toBe('help');
+    expect(flatten([help as Electron.MenuItemConstructorOptions]).map((i) => i.id)).toEqual(expect.arrayContaining(['help.about', 'app.checkUpdates']));
+    expect(empty.some((i) => i.id === 'help.about')).toBe(false);
 
     const emptyWin = flatten(buildMenuTemplate({ ...base, platform: 'win32', state: { ...state, tabCount: 0 } }));
     expect(emptyWin.find((i) => i.id === 'file.close')?.enabled).toBe(false);

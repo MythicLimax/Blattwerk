@@ -491,6 +491,21 @@ async function chooseUpdateFolderFromMenu(): Promise<void> {
   sendCommand('app.checkUpdates');
 }
 
+// Windows und Linux: „Hilfe → Über Blattwerk“ (unter macOS das Fenster des Systems im App-Menü)
+async function showAboutDialog(): Promise<void> {
+  const win = frontContext()?.win;
+  const options = {
+    type: 'info' as const,
+    title: t('dialog.about.title'),
+    message: PRODUCT_NAME,
+    detail: t('dialog.about.detail', { version: app.getVersion(), electron: process.versions.electron }),
+    buttons: [t('dialog.about.ok')],
+    noLink: true,
+  };
+  if (win) await dialog.showMessageBox(win, options);
+  else await dialog.showMessageBox(options);
+}
+
 // Das Menü zeigt den Zustand des vorderen Fensters.
 function refreshMenu(): void {
   if (!recent) return;
@@ -508,6 +523,7 @@ function refreshMenu(): void {
       setDefaultApp: () => void setAsDefaultPdfApp(frontContext()?.win ?? null),
       chooseUpdateFolder: () => void chooseUpdateFolderFromMenu(),
       mergeWindows: mergeAllWindows,
+      showAbout: () => void showAboutDialog(),
     }),
   );
 }
