@@ -531,6 +531,34 @@
     "loading": "Kommentare werden geladen …",
     "count_one": "{{count}} Kommentar",
     "count_other": "{{count}} Kommentare",
+    "countFiltered": "{{shown}} von {{count}} Kommentaren",
+    "filter": {
+      "label": "Kommentare filtern",
+      "all": "Alle Kommentare",
+      "kind": "Art",
+      "status": "Status",
+      "author": "Verfasser",
+      "groups": {
+        "markup": "Markierungen",
+        "notes": "Notizen und Textfelder",
+        "drawings": "Zeichnungen und Formen",
+        "stamps": "Stempel und Unterschriften",
+        "redact": "Schwärzungen"
+      },
+      "none": "Kein Kommentar passt zum Filter."
+    },
+    "sort": {
+      "label": "Reihenfolge",
+      "page": "Nach Seite",
+      "date": "Neueste zuerst",
+      "author": "Nach Verfasser"
+    },
+    "summary": {
+      "export": "Zusammenfassung als Text sichern …",
+      "title": "Kommentare in {{name}}",
+      "reply": "Antwort von {{author}}",
+      "fileName": "{{name}} – Kommentare"
+    },
     "empty": "Dieses Dokument enthält noch keine Kommentare. Über „Kommentieren“ in der Werkzeugleiste kannst du welche hinzufügen.",
     "page": "Seite {{page}}",
     "notAllowed": "Kommentieren ist für dieses Dokument nicht erlaubt."

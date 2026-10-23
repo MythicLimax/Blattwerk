@@ -535,3 +535,37 @@ test('eigener Stempel mit Datum und Name sowie ein Bild als Stempel', async () =
   expect(subtypes.filter((s) => s === '/Stamp')).toHaveLength(2);
   await handle.close();
 });
+
+test('Kommentarliste filtern, sortieren und als Zusammenfassung sichern', async () => {
+  const handle = await openCopy(COMMENTS_PDF.file, COMMENTS_PDF.pages);
+  const { page, app } = handle;
+  await expect(cards(page)).toHaveCount(COMMENTS_PDF.comments);
+  // Nur angenommene: der Kommentar mit Prüfstatus
+  await page.getByTestId('comments-filter').selectOption('status:Accepted');
+  await expect(cards(page)).toHaveCount(1);
+  await expect(page.getByTestId('comments-panel')).toContainText(`1 von ${COMMENTS_PDF.comments} Kommentaren`);
+  // Filter ohne Treffer
+  await page.getByTestId('comments-filter').selectOption('kind:redact');
+  await expect(cards(page)).toHaveCount(0);
+  await expect(page.getByTestId('comments-panel')).toContainText('Kein Kommentar passt zum Filter.');
+  await page.getByTestId('comments-filter').selectOption('all');
+  await expect(cards(page)).toHaveCount(COMMENTS_PDF.comments);
+  // Neueste zuerst: ohne Seitenüberschriften
+  await page.getByTestId('comments-sort').selectOption('date');
+  await expect(page.getByTestId('comments-panel').locator('h3')).toHaveCount(0);
+  await page.getByTestId('comments-sort').selectOption('page');
+  await expect(page.getByTestId('comments-panel').locator('h3')).toHaveCount(COMMENTS_PDF.pages);
+
+  const target = path.join(path.dirname(handle.file), 'zusammenfassung.txt');
+  await app.evaluate(({ dialog }, filePath) => {
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath })) as typeof dialog.showSaveDialog;
+  }, target);
+  await page.getByTestId('comments-export').click();
+  await expect.poll(() => existsSync(target)).toBe(true);
+  const text = readFileSync(target, 'utf8');
+  expect(text).toContain(`Kommentare in kopie-${COMMENTS_PDF.file}`);
+  expect(text).toContain(COMMENTS_PDF.noteText);
+  expect(text).toContain(COMMENTS_PDF.replyText);
+  expect(text).toContain(COMMENTS_PDF.status);
+  await handle.close();
+});
