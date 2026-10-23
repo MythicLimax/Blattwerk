@@ -6,6 +6,7 @@ import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
 import { trackPending } from '../../engine/session';
 import { useContentEdit, type TextEditing, type TextStyle } from '../../state/content-edit-store';
+import { useUi } from '../../state/ui-store';
 import { isMixed, runsText, sameStyle, type RunStyle, type TextRun } from '../../../shared/rich-text';
 import { RichTextEditor, type RichEditorHandle } from './RichTextEditor';
 import { isSystemFontKey } from '../../../shared/fonts';
@@ -119,6 +120,12 @@ function snapshot(canvas: HTMLCanvasElement | null, geometry: PageGeometry, unit
   return ghosts;
 }
 
+function area([l, b, r, t]: Rect): number {
+  return Math.abs(r - l) * Math.abs(t - b);
+}
+
+const blank = (unit: EditUnit): boolean => unit.kind === 'text' && (unit.text ?? '').trim() === '';
+
 function corners([l, b, r, t]: Rect): Point[] {
   return [
     { x: l, y: b },
@@ -194,6 +201,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
   }, [pdf, pageIndex, runtime?.password]);
 
   const objects = useMemo(() => editUnits(listing?.objects ?? [], listing?.fonts), [listing]);
+  const stacked = useMemo(() => [...objects].sort((a, b) => area(b.bounds) - area(a.bounds)), [objects]);
 
   const setGesture = (next: Gesture | null) => {
     gestureRef.current = next;
@@ -438,7 +446,9 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
             })}
           </g>
         )}
-        {objects.map((object) => {
+        {/* Kleine Objekte oben: Text auf einem Bild oder einer Fläche bleibt anklickbar, auch wenn das größere Objekt
+            später im Seiteninhalt steht. Leere Textstücke (nur Leerzeichen) fangen keine Klicks ab. */}
+        {stacked.map((object) => {
           const moving = pending?.pageIndex === pageIndex ? pending.bounds[object.index] : undefined;
           const r = geometry.rectToView(moving ?? previewBounds(object, gesture));
           const isSelected =
@@ -448,13 +458,13 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
           return (
             <rect
               key={object.index}
-              className={[styles.object, styles[object.kind] ?? '', isSelected ? styles.selected : '', tool !== 'select' ? styles.passive : ''].join(' ')}
+              className={[styles.object, styles[object.kind] ?? '', isSelected ? styles.selected : '', tool !== 'select' || blank(object) ? styles.passive : ''].join(' ')}
               x={r.x}
               y={r.y}
               width={Math.max(r.w, 2)}
               height={Math.max(r.h, 2)}
               onPointerDown={(event) => onObjectPointerDown(event, object)}
-              onDoubleClick={() => startEdit(object)}
+              onDoubleClick={() => (object.kind === 'image' ? useUi.getState().notify(t('contentEdit.imageText')) : startEdit(object))}
               data-testid="content-object"
               data-kind={object.kind}
               data-text={object.text}

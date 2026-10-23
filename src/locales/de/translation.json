@@ -881,6 +881,7 @@
     "substitute": "Die Schrift der Zeile kennt „{{chars}}“ nicht; die Zeile erhält eine ähnliche Standardschrift.",
     "impossible": "Nicht darstellbar: {{chars}}",
     "notAllowed": "Dieses Dokument erlaubt keine Änderungen am Inhalt.",
+    "imageText": "Das ist ein Bild. Text, der darin zu sehen ist (zum Beispiel aus einem Scan), lässt sich nicht direkt bearbeiten. Verschieben, Größe ändern und Löschen gehen.",
     "failed": "Die Änderung konnte nicht ausgeführt werden. Das Dokument wurde nicht verändert.",
     "originalFont": "Schrift des Textes",
     "points": "pt",

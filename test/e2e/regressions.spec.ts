@@ -1,8 +1,10 @@
 // Oberflächentests für Fehler, die die Code-Prüfung in Phase 1 gefunden hat.
 import { expect, test, type Page } from '@playwright/test';
-import { existsSync } from 'node:fs';
-import { fixture, LARGE_PDF, TEXT_PDF } from '../fixtures/expectations';
-import { currentPage, expectWindowCount, launchApp, menuClick, menuItemState, mergeAllWindows, waitForDocument, windowWithTitle } from './app';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fixture, imageFixture, LARGE_PDF, TEXT_PDF } from '../fixtures/expectations';
+import { currentPage, expectWindowCount, launchApp, menuClick, menuItemState, mergeAllWindows, removeTempDir, waitForDocument, windowWithTitle } from './app';
 
 const activePane = (page: Page) => page.locator('[data-testid="active-pane"]');
 
@@ -375,4 +377,37 @@ test('Tab schließen, während ein neuer Text noch eingegeben wird: ein Klick au
   await page.getByTestId('prompt-discard').click();
   await expect(page.getByTestId('tab')).toHaveCount(0);
   await close();
+});
+
+test('Text unter einem später gezeichneten Bild lässt sich bearbeiten; Doppelklick aufs Bild erklärt sich', async () => {
+  // Text zuerst, darüber ein Bild mit durchsichtigen Stellen (der Text scheint durch)
+  const { PDFDocument, StandardFonts } = await import('@cantoo/pdf-lib');
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const sheet = doc.addPage([400, 400]);
+  sheet.drawText('Unter dem Bild', { x: 60, y: 250, size: 16, font });
+  const png = await doc.embedPng(readFileSync(imageFixture('transparent.png')));
+  sheet.drawImage(png, { x: 20, y: 200, width: 360, height: 120 });
+  const dir = mkdtempSync(path.join(tmpdir(), 'blattwerk-stapel-'));
+  const file = path.join(dir, 'stapel.pdf');
+  writeFileSync(file, await doc.save());
+  const { page, close } = await launchApp([file], { userData: dir });
+  await waitForDocument(page, 1);
+  await page.getByTestId('content-edit-button').click();
+  for (const text of ['Unter dem Bild']) {
+    const target = page.locator(`[data-testid="content-object"][data-text="${text}"]`);
+    const box = await target.boundingBox();
+    if (!box) throw new Error(`${text} fehlt`);
+    await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page.getByTestId('content-text-editor')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('content-text-editor')).toHaveCount(0);
+  }
+  // Doppelklick auf das Bild erklärt, warum sein Inhalt nicht als Text bearbeitbar ist
+  const image = await page.locator('[data-testid="content-object"][data-kind="image"]').boundingBox();
+  if (!image) throw new Error('Bild fehlt');
+  await page.mouse.dblclick(image.x + image.width - 10, image.y + 10);
+  await expect(page.getByText('Das ist ein Bild.', { exact: false })).toBeVisible();
+  await close();
+  removeTempDir(dir);
 });
