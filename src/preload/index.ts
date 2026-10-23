@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { isCommandId } from '../shared/commands';
-import { IPC, type MenuCommandMessage, type OpenResult, type TabDragHover, type TabReceived } from '../shared/ipc';
+import { IPC, type MenuCommandMessage, type OpenResult, type PagesProvideRequest, type TabDragHover, type TabReceived } from '../shared/ipc';
 import type { OnlineCheck, UpdateProgress } from '../shared/update';
 import type { BlattwerkApi } from './api-types';
 
@@ -110,6 +110,10 @@ const api: BlattwerkApi = {
     };
   },
   setTabDragHoverState: (state) => ipcRenderer.send(IPC.tabDragHoverState, state),
+  fetchDraggedPages: (token) => ipcRenderer.invoke(IPC.pagesFetch, token),
+  onProvidePages: (listener) =>
+    subscribe(IPC.pagesProvideRequest, (p) => (typeof p === 'object' && p !== null ? (p as PagesProvideRequest) : null), listener),
+  providePages: (requestId, bytes) => ipcRenderer.send(IPC.pagesProvided, requestId, bytes),
   onRequestClose: (listener) => subscribe(IPC.requestClose, () => true, () => listener()),
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url),
   setMenuState: (state) => ipcRenderer.send(IPC.menuState, state),

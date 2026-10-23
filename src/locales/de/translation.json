@@ -686,6 +686,7 @@
     }
   },
   "organize": {
+    "dragGone": "Die gezogenen Seiten sind nicht mehr verfügbar (das andere Dokument wurde geschlossen).",
     "label": "Seiten des Dokuments",
     "toolbar": "Seiten organisieren",
     "page": "Seite {{page}}",

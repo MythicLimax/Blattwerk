@@ -29,6 +29,7 @@ import type {
   SignatureInput,
   TabDestination,
   TabDragHover,
+  PagesProvideRequest,
   ThumbnailRequest,
   ThumbnailResult,
   TabDragHoverState,
@@ -131,6 +132,10 @@ export interface BlattwerkApi {
   // Tab über die Fenstergrenze ziehen: Vorschau am Zeiger, schwebender Tab über einem anderen Fenster
   tabDrag(message: TabDragMessage): void;
   onTabDragHover(listener: (hover: TabDragHover | null) => void): () => void;
+  // Seiten aus einem anderen Fenster ziehen: abholen (null: Quelle nicht mehr da) bzw. auf Anfrage liefern
+  fetchDraggedPages(token: string): Promise<Uint8Array | null>;
+  onProvidePages(listener: (request: PagesProvideRequest) => void): () => void;
+  providePages(requestId: number, bytes: Uint8Array | null): void;
   setTabDragHoverState(state: TabDragHoverState): void;
   // Fenster schließen, nachdem sein letzter Tab weitergegeben wurde
   closeWindow(): void;

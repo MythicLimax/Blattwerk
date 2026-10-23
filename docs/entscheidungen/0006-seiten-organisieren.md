@@ -86,3 +86,12 @@ Seite so groß wie das Bild (1 Pixel = 1 Punkt), höchstens A4 in passender Ausr
 - Neue Dokumente aus kennwortgeschützten Quellen sind selbst nicht geschützt. Kennwörter setzen kommt in Phase 6.
 - Jeder Stand im Verlauf belegt die volle Dateigröße im Arbeitsspeicher (daher die Grenze von 768 MB).
 - Nach jeder Operation werden die Miniaturen neu gezeichnet (nur die sichtbaren).
+
+## Nachtrag 2026-10-24: Ersetzen, Zuschneiden, Ziehen zwischen Dokumenten
+
+- **Seiten ersetzen:** gleich viele Seiten einer anderen PDF; von hinten je Seite Einfügen dahinter und Löschen, damit
+  die Reparaturen beim Einfügen (`imported.ts`) greifen.
+- **Seiten zuschneiden:** `crop` setzt die CropBox; Ränder in Millimetern, so wie die Seite angezeigt wird
+  (`marginsToUser` rechnet für gedrehte Seiten um). Der Inhalt bleibt in der Datei, er wird nur ausgeblendet.
+- **Seiten zwischen Dokumenten ziehen:** aus dem Seitenraster in das eines anderen Tabs oder Fensters; eingefügt wird
+  eine Kopie samt ungespeicherter Änderungen (über den Hauptprozess abgeholt, siehe CLAUDE.md „Fenster“).

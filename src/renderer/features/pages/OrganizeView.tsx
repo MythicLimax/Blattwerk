@@ -25,6 +25,7 @@ import { useUi } from '../../state/ui-store';
 import { useThumbnail } from '../thumbnails/Thumbnails';
 import { deletePages, insertSources, loadSources, movePages, rotatePages } from './actions';
 import { toggleOrganize } from './commands';
+import { draggedPages as fetchDraggedPages, offerPages, PAGE_TRANSFER_TYPE, parsePageTransfer } from './page-drag';
 import styles from './OrganizeView.module.css';
 
 const CELL_WIDTH = 168;
@@ -197,11 +198,15 @@ export function OrganizeView({ tab }: { tab: TabState }) {
     if (!selection.includes(index)) setSelection([index]);
     draggedPages.current = pages;
     event.dataTransfer.setData(PAGE_DRAG_TYPE, JSON.stringify(pages));
-    event.dataTransfer.effectAllowed = 'move';
+    // Auch in andere Dokumente (andere Tabs und Fenster): dort als Kopie
+    event.dataTransfer.setData(PAGE_TRANSFER_TYPE, JSON.stringify({ token: offerPages(tab.id, pages), count: pages.length, name: tab.name }));
+    event.dataTransfer.effectAllowed = 'copyMove';
   };
 
   const accepts = (event: DragEvent) =>
-    editable && (Array.from(event.dataTransfer.types).includes(PAGE_DRAG_TYPE) || hasFiles(event));
+    editable && (Array.from(event.dataTransfer.types).some((type) => type === PAGE_DRAG_TYPE || type === PAGE_TRANSFER_TYPE) || hasFiles(event));
+  // Seiten aus einem anderen Dokument: Kopie (aus diesem Raster: verschieben)
+  const copying = (event: DragEvent) => hasFiles(event) || draggedPages.current === null;
 
   // Einfügestelle: vor oder nach der Seite, je nachdem, über welcher Hälfte der Zeiger steht
   const onDragOverCell = (index: number, event: DragEvent) => {
@@ -210,7 +215,7 @@ export function OrganizeView({ tab }: { tab: TabState }) {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     setDropIndex(event.clientX < rect.left + rect.width / 2 ? index : index + 1);
-    event.dataTransfer.dropEffect = hasFiles(event) ? 'copy' : 'move';
+    event.dataTransfer.dropEffect = copying(event) ? 'copy' : 'move';
     if (hasFiles(event)) useUi.getState().setFileDropInsert(true);
   };
 
@@ -254,7 +259,18 @@ export function OrganizeView({ tab }: { tab: TabState }) {
     }
     const pages = draggedPages.current;
     draggedPages.current = null;
-    if (pages) void movePages(tab, pages, at);
+    if (pages) {
+      void movePages(tab, pages, at);
+      return;
+    }
+    const transfer = parsePageTransfer(event.dataTransfer.getData(PAGE_TRANSFER_TYPE));
+    if (!transfer) return;
+    void (async () => {
+      const source = await fetchDraggedPages(transfer);
+      const current = useDocuments.getState().tabs.find((x) => x.id === tab.id);
+      if (!source) useUi.getState().notify(t('organize.dragGone'));
+      else if (current) await insertSources(current, [source], at);
+    })();
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -363,6 +379,10 @@ export function OrganizeView({ tab }: { tab: TabState }) {
         onDragOver={onDragOverGrid}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
+        // Ende des Ziehens (auch in einem anderen Fenster): kein Verschieben mehr ausstehend
+        onDragEnd={() => {
+          draggedPages.current = null;
+        }}
         onMouseDown={(event) => {
           // Klick ins Leere hebt die Auswahl auf
           if (event.target === event.currentTarget) setSelection([]);
