@@ -135,8 +135,12 @@ einer Gruppe oder einem Formular-XObject steckt, das als ein einziges Objekt zä
 Ein zweiter Klick an dieselbe Stelle wählt das Objekt darunter. Text in Formular-XObjects ist bearbeitbar oder es gibt
 eine klare Meldung, warum nicht.
 
-**Vorgehen:** Den Auftraggeber um ein betroffenes Dokument bitten (oder eines aus Word/PowerPoint mit Text auf Bild
-erzeugen), prüfen, was `listObjects` dort liefert und welches Objekt der Klick trifft. Testdatei dazu in
+**Beispiel vom Auftraggeber:** `.tools/beispiele/text-auf-objekt.pdf` (Kopie von „Text 2.pdf“ aus seinen Downloads,
+2,1 MB, PDF 1.4, zuletzt von pypdf geschrieben). Liegt nur lokal und ist nicht eingecheckt (`.tools/` ist ignoriert):
+**nie ins öffentliche Repo übernehmen**, Inhalt kann privat sein. Für den Test eine eigene Testdatei mit demselben
+Aufbau erzeugen.
+
+**Vorgehen:** Am Beispiel prüfen, was `listObjects` dort liefert und welches Objekt der Klick trifft. Testdatei dazu in
 `test/fixtures/` anlegen.
 
 **Test:** Integrations- und Oberflächentest mit Text über Bild und Text über Fläche: Klick auf den Text → Textfeld zum
