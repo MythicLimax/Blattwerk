@@ -268,7 +268,14 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
           const { convertToPdfA } = await loadPdfA();
           const result = await convertToPdfA(
             full,
-            { standardFont: (name) => pdfium.standardFontProgram(name), cmykProfile: request.cmykProfile ? new Uint8Array(request.cmykProfile) : null },
+            {
+              standardFont: (name) => pdfium.standardFontProgram(name),
+              systemFont: (baseFont) => {
+                const found = request.systemFonts.find((font) => font.baseFont === baseFont);
+                return found ? new Uint8Array(found.data) : null;
+              },
+              cmykProfile: request.cmykProfile ? new Uint8Array(request.cmykProfile) : null,
+            },
             new Date(),
             request.producer,
           );

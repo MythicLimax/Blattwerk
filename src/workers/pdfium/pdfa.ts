@@ -37,6 +37,8 @@ export type StandardFontName =
 export interface PdfAResources {
   // Schriftprogramm (CFF) einer Standardschrift, aus PDFium
   standardFont: (name: StandardFontName) => Uint8Array;
+  // Schrift des Rechners (TrueType) für einen nicht eingebetteten Schriftnamen, von der Oberfläche gesucht (ADR 0024)
+  systemFont?: (baseFont: string) => Uint8Array | null;
   // CMYK-Profil für DefaultCMYK (null: CMYK-Farben lassen sich nicht umwandeln)
   cmykProfile: Uint8Array | null;
 }
@@ -150,6 +152,64 @@ function encodingOf(doc: PDFDocument, font: PDFDict, standard: StandardFontName)
   return table;
 }
 
+// Glyphenname → Unicode für die üblichen Kodierungen der einfachen Schriften
+const GLYPH_UNICODE: Map<string, number> = (() => {
+  const map = new Map<string, number>();
+  for (const encoding of [Encodings.WinAnsi, Encodings.Symbol]) {
+    for (const codePoint of encoding.supportedCodePoints) {
+      const { name } = encoding.encodeUnicodeCodePoint(codePoint);
+      if (!map.has(name)) map.set(name, codePoint);
+    }
+  }
+  return map;
+})();
+
+// Nicht eingebettete einfache Schrift durch eine Schrift des Rechners ersetzen (TrueType, als FontFile2). Breiten aus
+// dem Schriftprogramm, damit Prüfer (veraPDF) sie mit dem Programm übereinstimmend finden.
+async function embedTrueTypeFont(doc: PDFDocument, font: PDFDict, program: Uint8Array): Promise<void> {
+  const fontkit = (await import('@cantoo/fontkit')).default;
+  const parsed = fontkit.create(program) as unknown as {
+    unitsPerEm: number;
+    postscriptName: string;
+    bbox: { minX: number; minY: number; maxX: number; maxY: number };
+    italicAngle: number;
+    ascent: number;
+    descent: number;
+    capHeight: number;
+    glyphForCodePoint: (codePoint: number) => { id: number; advanceWidth: number };
+  };
+  const scale = 1000 / parsed.unitsPerEm;
+  // Kodierung wie bisher; ohne Angabe WinAnsi (nicht symbolische TrueType-Schriften brauchen eine, PDF/A 6.2.11.6)
+  if (!font.has(N('Encoding'))) font.set(N('Encoding'), N('WinAnsiEncoding'));
+  const encoding = encodingOf(doc, font, 'Helvetica');
+  const widths: number[] = [];
+  for (let code = 0; code <= 255; code++) {
+    const unicode = GLYPH_UNICODE.get(encoding[code] ?? '');
+    const glyph = unicode !== undefined ? parsed.glyphForCodePoint(unicode) : null;
+    widths.push(Math.round((glyph && glyph.id !== 0 ? glyph.advanceWidth : 0) * scale));
+  }
+  const name = parsed.postscriptName.replace(/[^\x21-\x7e]/g, '') || 'Font';
+  const italic = parsed.italicAngle !== 0;
+  const descriptor = doc.context.obj({
+    Type: 'FontDescriptor',
+    FontName: N(name),
+    Flags: 32 + (italic ? 64 : 0),
+    FontBBox: [parsed.bbox.minX, parsed.bbox.minY, parsed.bbox.maxX, parsed.bbox.maxY].map((v) => Math.round(v * scale)),
+    ItalicAngle: parsed.italicAngle,
+    Ascent: Math.round(parsed.ascent * scale),
+    Descent: Math.round(parsed.descent * scale),
+    CapHeight: Math.round((parsed.capHeight || parsed.ascent) * scale),
+    StemV: 80,
+    FontFile2: doc.context.register(doc.context.flateStream(program, { Length1: program.length })),
+  });
+  font.set(N('Subtype'), N('TrueType'));
+  font.set(N('BaseFont'), N(name));
+  font.set(N('FirstChar'), PDFNumber.of(0));
+  font.set(N('LastChar'), PDFNumber.of(255));
+  font.set(N('Widths'), doc.context.obj(widths));
+  font.set(N('FontDescriptor'), doc.context.register(descriptor));
+}
+
 function embedStandardFont(doc: PDFDocument, font: PDFDict, standard: StandardFontName, program: Uint8Array): void {
   const widths = cffWidths(program);
   const encoding = encodingOf(doc, font, standard);
@@ -186,6 +246,8 @@ interface FontProblem {
   dict: PDFDict;
   baseFont: string;
   standard: StandardFontName | null;
+  // einfache Schrift (nicht Type0): lässt sich durch eine Schrift des Rechners ersetzen
+  simple: boolean;
 }
 
 function fontsWithoutProgram(doc: PDFDocument): FontProblem[] {
@@ -198,10 +260,10 @@ function fontsWithoutProgram(doc: PDFDocument): FontProblem[] {
     if (subtype === 'Type0') {
       const descendants = dict.lookup(N('DescendantFonts'));
       const descendant = descendants instanceof PDFArray ? doc.context.lookup(descendants.get(0)) : null;
-      if (descendant instanceof PDFDict && !fontFile(doc, descendant)) problems.push({ dict, baseFont, standard: null });
+      if (descendant instanceof PDFDict && !fontFile(doc, descendant)) problems.push({ dict, baseFont, standard: null, simple: false });
       continue;
     }
-    if (!fontFile(doc, dict)) problems.push({ dict, baseFont, standard: standardFor(baseFont) });
+    if (!fontFile(doc, dict)) problems.push({ dict, baseFont, standard: standardFor(baseFont), simple: true });
   }
   return problems;
 }
@@ -425,14 +487,26 @@ export interface PdfAResult {
 export async function convertToPdfA(bytes: Uint8Array, resources: PdfAResources, now: Date, producer: string): Promise<PdfAResult> {
   const doc = await PDFDocument.load(bytes, { updateMetadata: false, throwOnInvalidObject: false });
   const fonts = fontsWithoutProgram(doc);
-  const unfixable = [...new Set(fonts.filter((font) => !font.standard).map((font) => font.baseFont || '?'))];
+  // Erst eine Schrift des Rechners (gleiche Familie, sieht aus wie gedacht), sonst die ähnliche Standardschrift
+  const system = new Map<string, Uint8Array | null>();
+  const systemProgram = (font: FontProblem) => {
+    if (!font.simple || !resources.systemFont) return null;
+    if (!system.has(font.baseFont)) system.set(font.baseFont, resources.systemFont(font.baseFont));
+    return system.get(font.baseFont) ?? null;
+  };
+  const unfixable = [...new Set(fonts.filter((font) => !font.standard && !systemProgram(font)).map((font) => font.baseFont || '?'))];
   if (unfixable.length > 0) throw new PdfAError('pdfa-fonts', unfixable.join(', '));
   const embedded = new Set<string>();
   const programs = new Map<StandardFontName, Uint8Array>();
   for (const font of fonts) {
-    const standard = font.standard as StandardFontName;
-    if (!programs.has(standard)) programs.set(standard, resources.standardFont(standard));
-    embedStandardFont(doc, font.dict, standard, programs.get(standard) as Uint8Array);
+    const own = systemProgram(font);
+    if (own) {
+      await embedTrueTypeFont(doc, font.dict, own);
+    } else {
+      const standard = font.standard as StandardFontName;
+      if (!programs.has(standard)) programs.set(standard, resources.standardFont(standard));
+      embedStandardFont(doc, font.dict, standard, programs.get(standard) as Uint8Array);
+    }
     embedded.add(font.baseFont);
   }
   if (usesCmyk(doc)) {

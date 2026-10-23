@@ -314,7 +314,7 @@ export async function createIdentity(input: { name: string; organization: string
 export function convertToPdfA(
   bytes: Uint8Array,
   password: string | null,
-  input: { changes: AnnotationChanges; formValues: FormFieldValue[]; cmykProfile: ArrayBuffer | null; producer: string },
+  input: { changes: AnnotationChanges; formValues: FormFieldValue[]; cmykProfile: ArrayBuffer | null; producer: string; systemFonts: Array<{ baseFont: string; data: ArrayBuffer }> },
 ): Promise<Uint8Array> {
   const buffer = ownBuffer(bytes);
   return bytesOf(send({ type: 'pdfa', bytes: buffer, password, ...input }, input.cmykProfile ? [buffer, input.cmykProfile] : [buffer]));

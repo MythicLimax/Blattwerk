@@ -159,9 +159,10 @@ export interface PdfARequest {
   // CMYK-Profil für DefaultCMYK (aus den Ressourcen von pdf.js)
   cmykProfile: ArrayBuffer | null;
   producer: string;
+  // Schriften des Rechners für nicht eingebettete Schriften (Schriftname aus der PDF → TrueType-Daten)
+  systemFonts: Array<{ baseFont: string; data: ArrayBuffer }>;
 }
 
-// Auf PDF/A prüfen
 // Dokument bereinigen: Kommentare und Formularwerte übernehmen, dann Gewähltes entfernen und vollständig neu schreiben
 export interface CleanRequest {
   id: number;
@@ -180,6 +181,7 @@ export interface FindCleanableRequest {
   bytes: ArrayBuffer;
 }
 
+// Auf PDF/A prüfen
 export interface CheckPdfARequest {
   id: number;
   type: 'checkPdfA';

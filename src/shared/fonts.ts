@@ -45,3 +45,23 @@ export function embeddingAllowed(bytes: Uint8Array): boolean {
   return true;
 }
 
+
+// Passende Schrift des Rechners für einen Schriftnamen aus einer PDF („Calibri,Bold“, „TimesNewRomanPS-BoldMT“,
+// „ABCDEF+Arial-ItalicMT“) oder null. Schnitt aus dem Namen; fehlt er, der nächstliegende vorhandene.
+export function systemFontFor(baseFont: string, fonts: readonly SystemFont[]): SystemFontKey | null {
+  const name = baseFont.replace(/^[A-Z]{6}\+/, '');
+  const compact = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const familyPart = compact(name.split(/[,-]/)[0] ?? '').replace(/(psmt|mt|ps)$/, '');
+  const whole = compact(name);
+  const family =
+    fonts.find((font) => compact(font.name) === familyPart) ??
+    // Ohne Trennzeichen („CalibriBold“): längster passender Familienname am Anfang
+    [...fonts].sort((a, b) => b.name.length - a.name.length).find((font) => whole.startsWith(compact(font.name)));
+  if (!family) return null;
+  const bold = /bold|black|heavy|semibold|demi/i.test(name);
+  const italic = /italic|oblique|kursiv/i.test(name);
+  const wanted: SystemFontStyle = bold && italic ? 'boldItalic' : bold ? 'bold' : italic ? 'italic' : 'regular';
+  const order: SystemFontStyle[] = [wanted, ...(wanted === 'boldItalic' ? (['bold', 'italic'] as const) : []), 'regular'];
+  const style = order.find((candidate) => family.styles.includes(candidate));
+  return style ? systemFontKey(family.id, style) : null;
+}

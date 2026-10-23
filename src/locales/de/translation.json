@@ -1215,7 +1215,7 @@
     "busy": "PDF/A wird erstellt …",
     "fileName": "{{name}} (PDF-A)",
     "failed": "Das Dokument ließ sich nicht in PDF/A umwandeln.",
-    "fontsFailed": "Diese Schriften sind nicht eingebettet und lassen sich nicht ersetzen, deshalb ist kein PDF/A möglich:",
+    "fontsFailed": "Diese Schriften sind nicht eingebettet und auch auf diesem Rechner nicht vorhanden (oder dürfen nicht eingebettet werden), deshalb ist kein PDF/A möglich:",
     "cmykFailed": "Für die Druckfarben (CMYK) fehlt ein Farbprofil, deshalb ist kein PDF/A möglich.",
     "checkFailed": "Das Dokument ließ sich nicht prüfen."
   },
