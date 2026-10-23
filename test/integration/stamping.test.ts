@@ -1,7 +1,7 @@
 // Wasserzeichen, Kopf- und Fußzeilen, Seitenzahlen (Phase 5) mit pdf-lib; Darstellung geprüft mit pdf.js und PDFium.
 import { init, type WrappedPdfiumModule } from '@embedpdf/pdfium';
 import { degrees, PDFArray, PDFDocument, PDFName } from '@cantoo/pdf-lib';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -105,6 +105,20 @@ async function contentRefs(bytes: Uint8Array, pageIndex: number): Promise<string
 }
 
 describe('Wasserzeichen', () => {
+  const arial = '/System/Library/Fonts/Supplemental/Arial.ttf';
+  it.skipIf(!existsSync(arial))('in einer Schrift des Rechners: Kyrillisch und Griechisch, als Teilschrift eingebettet', async () => {
+    const data = readFileSync(arial);
+    const fontData = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+    const output = await applyStampOperations(textPdf(), [{ type: 'addWatermark', spec: watermark({ text: 'ЧЕРНОВИК Σχέδιο', font: 'sys:arial:regular', fontData }), replace: true }]);
+    expect(engine.canOpen(output, null)).toBe(true);
+    const [first] = await pages(output);
+    expect(text(first?.items ?? [])).toContain('ЧЕРНОВИК');
+    expect(text(first?.items ?? [])).toContain('Σχέδιο');
+    // Ohne Schriftdaten oder mit Standardschrift: klare Fehler statt Fragezeichen
+    await expect(applyStampOperations(textPdf(), [{ type: 'addWatermark', spec: watermark({ text: 'ЧЕРНОВИК', font: 'sys:arial:regular' }), replace: true }])).rejects.toMatchObject({ code: 'stamp-font' });
+    await expect(applyStampOperations(textPdf(), [{ type: 'addWatermark', spec: watermark({ text: 'ЧЕРНОВИК' }), replace: true }])).rejects.toMatchObject({ code: 'stamp-characters' });
+  });
+
   it('Text auf allen Seiten, schräg und halbdurchsichtig; der vorhandene Inhalt bleibt unverändert', async () => {
     const original = textPdf();
     const output = await applyStampOperations(original, [{ type: 'addWatermark', spec: watermark(), replace: true }]);

@@ -2,6 +2,7 @@
 // Alle Maße in Punkt, bezogen auf die Seite, wie sie angezeigt wird (gedrehte Seiten aufrecht).
 import type { Rgb } from './annotations';
 import type { ImageSource } from './pages';
+import type { TextFont } from './fonts';
 
 // Standardschriften (ohne Einbetten; Zeichensatz Westeuropa)
 export const STAMP_FONTS = ['Helvetica', 'HelveticaBold', 'TimesRoman', 'TimesRomanBold', 'Courier'] as const;
@@ -27,7 +28,10 @@ export type WatermarkSpec =
   | (WatermarkCommon & {
       kind: 'text';
       text: string;
-      font: StampFont;
+      // Standardschrift oder Schrift des Rechners (sys:…, für Zeichen außerhalb Westeuropas; ADR 0024)
+      font: TextFont;
+      // Daten der Schrift des Rechners (hängt die Oberfläche an, der Worker bettet sie als Teilschrift ein)
+      fontData?: ArrayBuffer;
       // Schriftgröße in Punkt; 0 = passend zur Seite
       size: number;
       color: Rgb;
@@ -51,7 +55,8 @@ export interface HeaderFooterTexts {
 
 export interface HeaderFooterSpec {
   texts: HeaderFooterTexts;
-  font: StampFont;
+  font: TextFont;
+  fontData?: ArrayBuffer;
   size: number;
   color: Rgb;
   // Abstand vom Seitenrand in Punkt

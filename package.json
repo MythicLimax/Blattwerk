@@ -26,6 +26,7 @@
     "dist:win": "npm run build && electron-builder --win --x64 --publish never"
   },
   "dependencies": {
+    "@cantoo/fontkit": "2.0.12",
     "@cantoo/pdf-lib": "2.11.1",
     "@embedpdf/pdfium": "2.15.1",
     "@libpdf/core": "0.5.2",
@@ -44,7 +45,6 @@
     "zustand": "5.0.15"
   },
   "devDependencies": {
-    "@cantoo/fontkit": "2.0.12",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.64.0",
     "@types/emscripten": "1.41.6",

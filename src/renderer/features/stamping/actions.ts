@@ -1,5 +1,7 @@
 // Wasserzeichen, Kopf- und Fußzeilen, Seitenzahlen (Phase 5): Dialoge öffnen, Operationen ausführen.
+import { isSystemFontKey } from '../../../shared/fonts';
 import type { StampOperation } from '../../../shared/stamping';
+import { systemFontData } from '../content-edit/system-fonts';
 import { applyStampOperations, commitPendingEdits } from '../../engine/session';
 import { t } from '../../i18n';
 import type { TabState } from '../../state/documents-store';
@@ -31,7 +33,21 @@ export function removeArtifacts(tab: TabState, kind: 'watermark' | 'headerFooter
 
 export async function runStamp(tab: TabState, operation: StampOperation): Promise<boolean> {
   useUi.getState().setStampDialog(null);
-  return applyStampOperations(tab.id, [operation], { keepScroll: true });
+  return applyStampOperations(tab.id, [await withStampFont(operation)], { keepScroll: true });
+}
+
+// Schrift des Rechners: Daten anhängen, der Worker bettet sie ein
+async function withStampFont(operation: StampOperation): Promise<StampOperation> {
+  const data = async (font: string) => (isSystemFontKey(font) ? ((await systemFontData(font))?.slice().buffer as ArrayBuffer | undefined) : undefined);
+  if (operation.type === 'addWatermark' && operation.spec.kind === 'text') {
+    const fontData = await data(operation.spec.font);
+    return fontData ? { ...operation, spec: { ...operation.spec, fontData } } : operation;
+  }
+  if (operation.type === 'addHeaderFooter') {
+    const fontData = await data(operation.spec.font);
+    return fontData ? { ...operation, spec: { ...operation.spec, fontData } } : operation;
+  }
+  return operation;
 }
 
 // Heutiges Datum für den Platzhalter {Datum}

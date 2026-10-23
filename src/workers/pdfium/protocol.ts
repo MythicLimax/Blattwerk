@@ -286,6 +286,7 @@ export type WorkerErrorCode =
   | 'redact-encrypted'
   | 'stamp-encrypted'
   | 'stamp-characters'
+  | 'stamp-font'
   | 'stamp-nothing'
   | 'stamp-image'
   | 'content-missing'
