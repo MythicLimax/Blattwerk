@@ -126,6 +126,7 @@
       "title": "Werkzeuge",
       "security": "Kennwortschutz …",
       "compress": "Komprimieren …",
+      "clean": "Dokument bereinigen …",
       "compare": "Mit Datei vergleichen …",
       "ocr": "Text erkennen (OCR) …",
       "certify": "Mit Zertifikat unterschreiben …",
@@ -212,6 +213,7 @@
       "invalid": "Eine der Dateien ist beschädigt oder kein gültiges PDF.",
       "range": "Die angegebenen Seiten gibt es in diesem Dokument nicht.",
       "all-pages": "Ein Dokument braucht mindestens eine Seite. Es können nicht alle Seiten gelöscht werden.",
+      "clean-encrypted": "Bereinigen geht nur ohne Kennwortschutz. Bitte den Schutz zuerst entfernen (Werkzeuge → Kennwortschutz).",
       "crop-too-small": "Mit diesen Rändern bliebe von der Seite zu wenig übrig (mindestens 1,3 cm in jeder Richtung).",
       "image": "Das Bild konnte nicht eingefügt werden.",
       "import": "Die Seiten konnten nicht übernommen werden.",
@@ -1032,6 +1034,26 @@
     "noText": "Das Dokument enthält keinen auslesbaren Text, vermutlich gescannte Seiten.",
     "notAllowed": "Die Berechtigungen dieses Dokuments verbieten das Kopieren von Inhalten und damit auch den Export.",
     "failed": "Der Export ist fehlgeschlagen."
+  },
+  "clean": {
+    "title": "Dokument bereinigen",
+    "message": "Entfernt versteckte Informationen, bevor das Dokument weitergegeben wird. Der sichtbare Inhalt bleibt.",
+    "checking": "Dokument wird durchsucht …",
+    "options": {
+      "metadata": "Metadaten (Titel, Autor, Programm, Datum)",
+      "attachments": "Dateianhänge",
+      "scripts": "JavaScript und automatische Aktionen",
+      "bookmarks": "Lesezeichen"
+    },
+    "absent": "nicht vorhanden",
+    "nothing": "Das Dokument enthält nichts davon.",
+    "signedWarning": "Das Dokument ist digital unterschrieben. Nach dem Bereinigen sind die Signaturen ungültig.",
+    "hint": "Die Datei wird dabei vollständig neu geschrieben; ältere Fassungen in der Datei verschwinden. Gespeichert wird erst mit „Sichern“.",
+    "cancel": "Abbrechen",
+    "apply": "Bereinigen",
+    "busy": "Dokument wird bereinigt …",
+    "done": "Dokument bereinigt. Zum Übernehmen sichern.",
+    "failed": "Das Dokument konnte nicht bereinigt werden."
   },
   "compress": {
     "title": "PDF komprimieren",

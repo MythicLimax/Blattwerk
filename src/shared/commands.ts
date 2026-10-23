@@ -53,6 +53,7 @@ export const COMMANDS = [
   'stamp.pageNumbers',
   'tools.security',
   'tools.compress',
+  'tools.clean',
   'tools.compare',
   'tools.ocr',
   'tools.certify',

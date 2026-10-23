@@ -270,3 +270,38 @@ test.describe('Texterkennung', () => {
     await handle.close();
   });
 });
+
+test('Dokument bereinigen: Metadaten und Skripte weg, Lesezeichen nur auf Wunsch', async () => {
+  const { PDFDocument, PDFName, StandardFonts } = await import('@cantoo/pdf-lib');
+  const doc = await PDFDocument.create();
+  doc.setTitle('Interner Titel');
+  doc.setAuthor('Interne Person');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  doc.addPage([300, 300]).drawText('Sichtbar', { x: 20, y: 250, size: 14, font });
+  doc.addJavaScript('start', 'app.alert("Hallo")');
+  doc.catalog.set(PDFName.of('Outlines'), doc.context.register(doc.context.obj({ Type: 'Outlines', Count: 0 })));
+  const dir = mkdtempSync(path.join(tmpdir(), 'blattwerk-bereinigen-'));
+  tempDirs.push(dir);
+  const file = path.join(dir, 'bereinigen.pdf');
+  writeFileSync(file, await doc.save());
+
+  const { page, app, close } = await launchApp([file], { userData: dir });
+  await waitForDocument(page, 1);
+  await menuClick(app, 'tools.clean');
+  const dialog = page.getByTestId('clean-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('clean-metadata')).toBeChecked();
+  await expect(page.getByTestId('clean-scripts')).toBeChecked();
+  await expect(page.getByTestId('clean-bookmarks')).not.toBeChecked();
+  await expect(page.getByTestId('clean-attachments')).toBeDisabled();
+  await page.getByTestId('clean-confirm').click();
+  await expect(dialog).toHaveCount(0);
+  await waitForDocument(page, 1);
+  await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+  await menuClick(app, 'file.save');
+  await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+  const raw = readFileSync(file, 'latin1');
+  for (const secret of ['Interner Titel', 'Interne Person', 'app.alert']) expect(raw).not.toContain(secret);
+  expect(raw).toContain('/Outlines');
+  await close();
+});
