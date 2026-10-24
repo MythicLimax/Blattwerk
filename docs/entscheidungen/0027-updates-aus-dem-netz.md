@@ -19,8 +19,14 @@ gehen. Ergänzt [0025](0025-updates.md), das neue Versionen nur aus einem Ordner
   `GET https://api.github.com/repos/<Projekt>/releases/latest`. Ist die Version neuer, lädt der Hauptprozess die passende
   Datei (`updateAssetName`) mit Fortschritt in den eigenen Update-Ordner, entpackt unter macOS mit `ditto` und prüft
   App-ID und Version. Danach übernimmt der Updater aus 0025 (Signatur prüfen, Leiste „Jetzt aktualisieren“, Austausch
-  beim Beenden). Beim Start sucht die installierte App höchstens alle 12 Stunden still (`lastUpdateCheck` in den
-  Einstellungen); Testläufe nie.
+  beim Beenden). Beim Start sucht die installierte App jedes Mal still (bis 2026-10-19 höchstens alle 12 Stunden;
+  auf Wunsch des Auftraggebers geändert, eine Anfrage je Start ist für GitHub unbedenklich); Testläufe nie.
+- **Windows:** Beim Beenden startet die App das Installationsprogramm direkt und losgelöst (`/S --updated --force-run`,
+  wie electron-updater). Es wartet selbst auf das Ende der App, installiert still an den bisherigen Ort und startet sie
+  neu. Bis 0.15.0 lief das über ein PowerShell-Hilfsskript, das unter Windows gar nicht erst startete: Die App ging zu,
+  sonst geschah nichts (vom Auftraggeber gemeldet, in CI nachgestellt). Eingespielte Installationsprogramme löscht die
+  App beim nächsten Start. Jeder Schritt steht in `update.log` im Update-Ordner. CI spielt das fertige
+  Installationsprogramm als Update ein (`scripts/smoke-update-win.mjs`).
 - **Netz nur hier:** Nur der Hauptprozess spricht mit dem Netz (Node `fetch`, nicht die Sitzung des Renderers), nur über
   HTTPS, nur mit `api.github.com`, `github.com` und den Speichern für Release-Dateien. Weiterleitungen folgt die App selbst
   und prüft jede Station (`fetchChecked`, `isAllowedUpdateUrl`). Höchstens 800 MB, Größe muss zur Angabe von GitHub

@@ -153,6 +153,10 @@
   background: var(--color-text-muted);
 }
 
+.clean {
+  visibility: hidden;
+}
+
 :global([data-native-glass='on']) .bar {
   background: transparent;
 }

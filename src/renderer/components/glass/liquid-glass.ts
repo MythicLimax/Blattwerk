@@ -176,6 +176,9 @@ export function trackPointerLight(): () => void {
     document.documentElement.style.setProperty('--pointer-y', `${Math.round(y)}px`);
   };
   const move = (event: PointerEvent) => {
+    // Nicht beim Ziehen: Eine Variable am Wurzelelement lässt den Browser die Darstellung des ganzen Fensters neu
+    // berechnen (auch Tausende Textstücke der PDF-Seiten). Bei jeder Bewegung bremste das verschobene Objekte aus.
+    if (event.buttons !== 0) return;
     x = event.clientX;
     y = event.clientY;
     if (!frame) frame = requestAnimationFrame(apply);

@@ -393,8 +393,12 @@ export function TabBar() {
           >
             <TabIcon tab={tab} />
             <span className={styles.name}>{tab.name}</span>
-            {isDirtyState(annotationTabs[tab.id], historyTabs[tab.id], formTabs[tab.id]) && (
+            {/* Der Platz für den Punkt bleibt immer frei: Erscheint er während eines Klicks auf ✕ (offene Eingabe wird
+                übernommen), würde ✕ sonst unter dem Zeiger wegrutschen und der Klick ginge an den Tab. */}
+            {isDirtyState(annotationTabs[tab.id], historyTabs[tab.id], formTabs[tab.id]) ? (
               <span className={styles.dirty} data-tooltip={t('tabs.unsaved')} aria-label={t('tabs.unsaved')} data-testid="tab-dirty" />
+            ) : (
+              <span className={[styles.dirty, styles.clean].join(' ')} aria-hidden="true" />
             )}
             <button
               type="button"

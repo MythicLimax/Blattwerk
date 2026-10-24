@@ -18,6 +18,8 @@ export interface MenuContext {
   setDefaultApp: () => void;
   chooseUpdateFolder: () => void;
   mergeWindows: () => void;
+  // Windows: eigener Dialog „Über Blattwerk“ (macOS nutzt das Fenster des Systems im App-Menü)
+  showAbout: () => void;
 }
 
 const VIEW_MODE_COMMANDS: Record<ViewMode, CommandId> = {
@@ -87,8 +89,10 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       cmd('file.saveAsTemplate', t('menu.file.saveAsTemplate'), { enabled: doc }),
       { type: 'separator' },
       // Schließen wirkt auf jeden Tab, auch während des Ladens, bei Kennwortabfrage oder Fehler.
-      // Ohne Tabs schließt dasselbe Kürzel unter macOS das Fenster, wie in anderen Mac-Apps.
-      ...(isMac && state.tabCount === 0
+      // Ohne Tabs schließt dasselbe Kürzel unter macOS ein weiteres leeres Fenster. Das letzte Fenster bleibt mit der
+      // Startseite offen (Wunsch des Auftraggebers, 2026-10-19: Tabs nacheinander mit ⌘W schließen beendete sonst die
+      // App); beendet wird über den roten Knopf oder ⌘Q.
+      ...(isMac && state.tabCount === 0 && ctx.windowCount > 1
         ? [{ role: 'close' as const, label: t('menu.file.closeWindow'), accelerator: SHORTCUTS['file.close']?.accelerator }]
         : [cmd('file.close', t('menu.file.close'), { enabled: state.tabCount > 0 })]),
       { type: 'separator' },
@@ -125,14 +129,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       cmd('edit.find', t('menu.edit.find'), { enabled: viewing }),
       cmd('edit.findNext', t('menu.edit.findNext'), { enabled: viewing }),
       cmd('edit.findPrevious', t('menu.edit.findPrevious'), { enabled: viewing }),
-      ...(isMac
-        ? []
-        : [
-            { type: 'separator' as const },
-            cmd('app.settings', t('menu.app.settings')),
-            cmd('app.checkUpdates', t('menu.app.checkUpdates')),
-            { label: t('menu.app.updateFolder'), click: () => ctx.chooseUpdateFolder() },
-          ]),
+      ...(isMac ? [] : [{ type: 'separator' as const }, cmd('app.settings', t('menu.app.settings'))]),
     ],
   };
 
@@ -318,7 +315,23 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       ]
     : [];
 
-  return [...appMenu, fileMenu, editMenu, viewMenu, documentMenu, toolsMenu, navMenu, windowMenu];
+  // Windows: „Hilfe“ am Ende, wie in Windows-Programmen üblich (macOS hat diese Einträge im App-Menü)
+  const helpMenu: MenuItemConstructorOptions[] = isMac
+    ? []
+    : [
+        {
+          id: 'help',
+          label: t('menu.help.title'),
+          submenu: [
+            cmd('app.checkUpdates', t('menu.app.checkUpdates')),
+            { label: t('menu.app.updateFolder'), click: () => ctx.chooseUpdateFolder() },
+            { type: 'separator' },
+            { id: 'help.about', label: t('menu.help.about'), click: () => ctx.showAbout() },
+          ],
+        },
+      ];
+
+  return [...appMenu, fileMenu, editMenu, viewMenu, documentMenu, toolsMenu, navMenu, windowMenu, ...helpMenu];
 }
 
 export function applyMenu(ctx: MenuContext): void {

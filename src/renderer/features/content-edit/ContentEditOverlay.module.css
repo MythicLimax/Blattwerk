@@ -188,3 +188,12 @@
   cursor: text;
   overflow-wrap: break-word;
 }
+
+/* Auswahlrahmen, der neben der Seite beginnt (liegt über dem Fenster) */
+.outsideMarquee {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--tone-edit) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone-edit) 75%, transparent);
+}

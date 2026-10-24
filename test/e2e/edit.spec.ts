@@ -805,3 +805,30 @@ test.describe('Farbauswahl', () => {
     await second.close();
   });
 });
+
+test('Auswahlrahmen beginnt neben der Seite und wählt die berührten Objekte', async () => {
+  const { page, app, close } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, TEXT_PDF.pages);
+  await page.getByTestId('content-edit-button').click();
+  await menuClick(app, 'view.fitPage');
+  const overlay = page.getByTestId('content-edit-overlay-0');
+  await expect(overlay).toBeVisible();
+  const heading = page.locator('[data-testid="content-edit-overlay-0"] [data-testid="content-object"][data-text="Inhaltsverzeichnis"]').first();
+  const box = await heading.boundingBox();
+  const sheet = await overlay.boundingBox();
+  if (!box || !sheet) throw new Error('Zeile fehlt');
+  // Start links neben der Seite, auf Höhe knapp über der Zeile, bis über ihre Mitte
+  const start = { x: sheet.x - 15, y: box.y - 4 };
+  expect(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('.page')), start)).toBe(false);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height + 4, { steps: 6 });
+  await expect(page.getByTestId('content-marquee-outside')).toBeVisible();
+  await page.mouse.up();
+  await expect(page.getByTestId('content-marquee-outside')).toHaveCount(0);
+  await expect(heading).toHaveAttribute('data-selected', 'true');
+  // Ein einfacher Klick neben die Seite hebt die Auswahl wieder auf
+  await page.mouse.click(start.x, start.y);
+  await expect(heading).not.toHaveAttribute('data-selected', 'true');
+  await close();
+});

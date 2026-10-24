@@ -22,19 +22,3 @@ rm -rf "$old"
 [ "$reopen" = "open" ] && /usr/bin/open "$cur"
 exit 0
 `;
-
-// Windows: wartet, bis die App beendet ist, startet das Installationsprogramm still (/S) und lässt es die App danach
-// starten (--force-run). Werte werden als PowerShell-Zeichenketten eingesetzt (einfache Anführungszeichen verdoppelt).
-export function windowsInstallCommand(pid: number, installer: string, reopen: boolean, cleanup: boolean): string {
-  const quote = (value: string) => `'${value.replace(/'/g, "''")}'`;
-  return [
-    `$appPid = ${Math.trunc(pid)}`,
-    `$installer = ${quote(installer)}`,
-    'try { Wait-Process -Id $appPid -Timeout 600 -ErrorAction SilentlyContinue } catch {}',
-    `$arguments = @('/S'${reopen ? ", '--force-run'" : ''})`,
-    '$process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru',
-    cleanup ? 'if ($process.ExitCode -eq 0) { Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue }' : '',
-  ]
-    .filter(Boolean)
-    .join('; ');
-}

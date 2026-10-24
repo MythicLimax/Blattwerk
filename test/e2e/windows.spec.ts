@@ -4,7 +4,7 @@ import { copyFileSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fixture, TEXT_PDF } from '../fixtures/expectations';
-import { expectWindowCount, launchApp, menuClick, mergeAllWindows, removeTempDir, waitForDocument, windowWithTitle } from './app';
+import { expectWindowCount, launchApp, menuClick, menuItemState, mergeAllWindows, removeTempDir, waitForDocument, windowWithTitle } from './app';
 
 const FORM_PAGES = 1;
 const tempDirs: string[] = [];
@@ -236,4 +236,15 @@ test('ein Dokument öffnet wieder dort, wo sein Fenster zuletzt lag', async () =
   expect(await bounds('text.pdf')).toEqual(textBounds);
   expect(await bounds('formular.pdf')).toEqual(formBounds);
   await second.close();
+});
+
+test('letzten Tab schließen zeigt die Startseite; ⌘W schließt danach nicht das letzte Fenster', async () => {
+  const { app, page, close } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, TEXT_PDF.pages);
+  await page.getByTestId('tab').getByRole('button', { name: 'Tab schließen' }).click();
+  await expect(page.getByTestId('start-screen')).toBeVisible();
+  await expectWindowCount(app, 1);
+  // Ohne Tabs ist „Schließen“ (⌘W) im letzten Fenster ausgegraut statt „Fenster schließen“
+  await expect.poll(() => menuItemState(app, 'file.close')).toMatchObject({ enabled: false });
+  await close();
 });

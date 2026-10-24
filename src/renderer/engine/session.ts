@@ -330,6 +330,7 @@ function closeTabNow(tabId: string): void {
 export async function closeTab(tabId: string): Promise<boolean> {
   commitPendingEdits();
   await syncFormChanges(tabId);
+  await settled(tabId);
   const tab = findTab(tabId);
   if (!tab) return true;
   if (isTabDirty(tabId)) {
@@ -346,6 +347,7 @@ export async function closeTab(tabId: string): Promise<boolean> {
 export async function handleCloseRequest(): Promise<void> {
   commitPendingEdits();
   await Promise.all(useDocuments.getState().tabs.map((tab) => syncFormChanges(tab.id)));
+  await Promise.all(useDocuments.getState().tabs.map((tab) => settled(tab.id)));
   const dirtyTabs = useDocuments.getState().tabs.filter((tab) => isTabDirty(tab.id));
   for (const tab of dirtyTabs) {
     useDocuments.getState().setActive(tab.id);
@@ -491,8 +493,29 @@ function enqueue<T>(tabId: string, task: () => Promise<T>): Promise<T> {
 }
 
 // Wartet, bis laufende Seitenoperationen eines Tabs fertig sind (z. B. vor dem Speichern).
+// Arbeit, die erst nach einer Vorbereitung in die Warteschlange kommt (z. B. übernommener Text: Schriftdaten laden).
+// Schließen und Übergeben warten auch darauf, sonst gilt der Tab noch als unverändert und der Text ginge verloren.
+const pendingWork = new Map<string, Set<Promise<unknown>>>();
+
+export function trackPending<T>(tabId: string, work: Promise<T>): Promise<T> {
+  const set = pendingWork.get(tabId) ?? new Set<Promise<unknown>>();
+  pendingWork.set(tabId, set);
+  set.add(work);
+  const forget = () => {
+    set.delete(work);
+    if (set.size === 0 && pendingWork.get(tabId) === set) pendingWork.delete(tabId);
+  };
+  work.then(forget, forget);
+  return work;
+}
+
 async function settled(tabId: string): Promise<void> {
-  for (let queue = tabQueues.get(tabId); queue; queue = tabQueues.get(tabId)) await queue.catch(() => undefined);
+  for (;;) {
+    const queue = tabQueues.get(tabId);
+    const pending = pendingWork.get(tabId);
+    if (!queue && !pending) return;
+    await Promise.allSettled([queue ?? Promise.resolve(), ...(pending ?? [])]);
+  }
 }
 
 // Führt Seitenoperationen aus. Ungespeicherte Kommentare werden dabei ins Dokument übernommen.
@@ -857,7 +880,7 @@ export function startSigning(): void {
 export function commitPendingEdits(): void {
   const element = document.activeElement;
   // Textfelder der Kommentare und alle Eingaben in Formularfeldern (pdf.js übernimmt manche Werte erst beim Verlassen)
-  if (element instanceof HTMLTextAreaElement || (element instanceof HTMLElement && element.closest('.annotationLayer'))) {
+  if (element instanceof HTMLTextAreaElement || (element instanceof HTMLElement && (element.isContentEditable || element.closest('.annotationLayer')))) {
     element.blur();
   }
 }

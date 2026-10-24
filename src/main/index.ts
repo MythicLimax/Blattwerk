@@ -37,7 +37,7 @@ import { UserTemplates } from './templates/user-templates';
 import { boundsAtPoint, cascadeFrom, dropTarget, type Point } from './window-layout';
 import { TabGhost } from './tab-ghost';
 import { isBlankDocumentPath, removeBlankDocuments } from './files/blank-document';
-import { defaultUpdateFolder, runPendingInstall, setCustomUpdateFolder } from './update/updater';
+import { cleanupInstalledUpdates, defaultUpdateFolder, runPendingInstall, setCustomUpdateFolder } from './update/updater';
 import { checkOnline } from './update/online';
 import { attachNativeGlass, describeNativeGlass, nativeGlassAvailable } from './native-glass';
 
@@ -216,12 +216,10 @@ async function checkUpdatesOnline(): Promise<OnlineCheck> {
   return result;
 }
 
-// Beim Start höchstens alle 12 Stunden still nachsehen; nur die installierte App, nie in Testläufen
-const AUTO_CHECK_INTERVAL = 12 * 60 * 60 * 1000;
+// Bei jedem Start still nachsehen (Wunsch des Auftraggebers, 2026-10-19); nur die installierte App, nie in Testläufen
 function scheduleAutoUpdateCheck(): void {
   if (!app.isPackaged || runHidden || isE2E) return;
-  const due = (settings.lastUpdateCheck ?? 0) + AUTO_CHECK_INTERVAL <= Date.now();
-  if (due) setTimeout(() => void checkUpdatesOnline().catch(() => undefined), 5000);
+  setTimeout(() => void checkUpdatesOnline().catch(() => undefined), 5000);
 }
 
 async function rememberRecent(filePath: string): Promise<void> {
@@ -493,6 +491,21 @@ async function chooseUpdateFolderFromMenu(): Promise<void> {
   sendCommand('app.checkUpdates');
 }
 
+// Windows und Linux: „Hilfe → Über Blattwerk“ (unter macOS das Fenster des Systems im App-Menü)
+async function showAboutDialog(): Promise<void> {
+  const win = frontContext()?.win;
+  const options = {
+    type: 'info' as const,
+    title: t('dialog.about.title'),
+    message: PRODUCT_NAME,
+    detail: t('dialog.about.detail', { version: app.getVersion(), electron: process.versions.electron }),
+    buttons: [t('dialog.about.ok')],
+    noLink: true,
+  };
+  if (win) await dialog.showMessageBox(win, options);
+  else await dialog.showMessageBox(options);
+}
+
 // Das Menü zeigt den Zustand des vorderen Fensters.
 function refreshMenu(): void {
   if (!recent) return;
@@ -510,6 +523,7 @@ function refreshMenu(): void {
       setDefaultApp: () => void setAsDefaultPdfApp(frontContext()?.win ?? null),
       chooseUpdateFolder: () => void chooseUpdateFolderFromMenu(),
       mergeWindows: mergeAllWindows,
+      showAbout: () => void showAboutDialog(),
     }),
   );
 }
@@ -689,6 +703,7 @@ void app.whenReady().then(async () => {
     settings.authorName ?? (process.platform === 'darwin' ? defaultAuthor() : ''),
   );
   setCustomUpdateFolder(() => settings.updateFolder);
+  cleanupInstalledUpdates();
   windowState = settings.window;
   if (process.platform === 'darwin') {
     app.setAboutPanelOptions({ applicationName: PRODUCT_NAME, applicationVersion: app.getVersion() });

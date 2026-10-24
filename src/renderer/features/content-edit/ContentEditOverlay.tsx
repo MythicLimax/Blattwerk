@@ -4,7 +4,9 @@ import { normalizeRect, type Point, type Rect } from '../../../shared/annotation
 import { editUnits, LINE_HEIGHT, missingChars, scalingAbout, translation, type EditUnit, type PageObjectInfo, type PageObjects } from '../../../shared/content';
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
+import { trackPending } from '../../engine/session';
 import { useContentEdit, type TextEditing, type TextStyle } from '../../state/content-edit-store';
+import { useUi } from '../../state/ui-store';
 import { isMixed, runsText, sameStyle, type RunStyle, type TextRun } from '../../../shared/rich-text';
 import { RichTextEditor, type RichEditorHandle } from './RichTextEditor';
 import { isSystemFontKey } from '../../../shared/fonts';
@@ -77,15 +79,11 @@ function whiteToAlpha(canvas: HTMLCanvasElement): void {
 
 function snapshot(canvas: HTMLCanvasElement | null, geometry: PageGeometry, units: EditUnit[]): Map<number, Ghost> {
   const ghosts = new Map<number, Ghost>();
-  const context = canvas?.getContext('2d');
-  if (!canvas || !context || canvas.width === 0) return ghosts;
+  if (!canvas || canvas.width === 0) return ghosts;
   const sx = canvas.width / geometry.width;
   const sy = canvas.height / geometry.height;
-  const pixel = (x: number, y: number) => {
-    const px = Math.min(canvas.width - 1, Math.max(0, Math.round(x)));
-    const py = Math.min(canvas.height - 1, Math.max(0, Math.round(y)));
-    return context.getImageData(px, py, 1, 1).data;
-  };
+  // Rand für die Hintergrundfarbe (knapp außerhalb der Ecken)
+  const edge = 3;
   for (const unit of units) {
     const r = geometry.rectToView(unit.bounds);
     const x = Math.max(0, (r.x - GHOST_PAD) * sx);
@@ -93,10 +91,24 @@ function snapshot(canvas: HTMLCanvasElement | null, geometry: PageGeometry, unit
     const w = Math.min(canvas.width - x, (r.w + 2 * GHOST_PAD) * sx);
     const h = Math.min(canvas.height - y, (r.h + 2 * GHOST_PAD) * sy);
     if (w < 1 || h < 1) continue;
+    // Ein einziges Zurücklesen von der Grafikkarte: Ausschnitt samt Rand in eine Leinwand im Arbeitsspeicher kopieren
+    // und alles Weitere dort lesen (früher fünf Lesevorgänge je Objekt an der Seite selbst, spürbar beim Anfassen)
+    const ex = Math.max(0, x - edge);
+    const ey = Math.max(0, y - edge);
+    const ew = Math.min(canvas.width - ex, w + (x - ex) + edge);
+    const eh = Math.min(canvas.height - ey, h + (y - ey) + edge);
+    const around = document.createElement('canvas');
+    around.width = Math.ceil(ew);
+    around.height = Math.ceil(eh);
+    const read = around.getContext('2d', { willReadFrequently: true });
+    if (!read) continue;
+    read.drawImage(canvas, ex, ey, ew, eh, 0, 0, around.width, around.height);
+    const pixel = (px: number, py: number) =>
+      read.getImageData(Math.min(around.width - 1, Math.max(0, Math.round(px - ex))), Math.min(around.height - 1, Math.max(0, Math.round(py - ey))), 1, 1).data;
     const crop = document.createElement('canvas');
     crop.width = Math.ceil(w);
     crop.height = Math.ceil(h);
-    crop.getContext('2d')?.drawImage(canvas, x, y, w, h, 0, 0, crop.width, crop.height);
+    crop.getContext('2d', { willReadFrequently: true })?.drawImage(around, x - ex, y - ey, w, h, 0, 0, crop.width, crop.height);
     // Hintergrund: häufigste Farbe knapp außerhalb der vier Ecken (meist Papierweiß)
     const corners = [pixel(x - 2, y - 2), pixel(x + w + 2, y - 2), pixel(x - 2, y + h + 2), pixel(x + w + 2, y + h + 2)];
     const samples = corners.map((d) => `rgb(${d[0]} ${d[1]} ${d[2]})`);
@@ -107,6 +119,12 @@ function snapshot(canvas: HTMLCanvasElement | null, geometry: PageGeometry, unit
   }
   return ghosts;
 }
+
+function area([l, b, r, t]: Rect): number {
+  return Math.abs(r - l) * Math.abs(t - b);
+}
+
+const blank = (unit: EditUnit): boolean => unit.kind === 'text' && (unit.text ?? '').trim() === '';
 
 function corners([l, b, r, t]: Rect): Point[] {
   return [
@@ -183,6 +201,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
   }, [pdf, pageIndex, runtime?.password]);
 
   const objects = useMemo(() => editUnits(listing?.objects ?? [], listing?.fonts), [listing]);
+  const stacked = useMemo(() => [...objects].sort((a, b) => area(b.bounds) - area(a.bounds)), [objects]);
 
   const setGesture = (next: Gesture | null) => {
     gestureRef.current = next;
@@ -270,6 +289,30 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     });
   };
 
+  // Alle Einheiten, die das Rechteck berührt (in Ansichtskoordinaten verglichen, auch bei gedrehten Seiten)
+  const selectInView = (x0: number, x1: number, y0: number, y1: number, additive: boolean) => {
+    const hit = objects.filter((object) => {
+      if (blank(object)) return false;
+      const r = geometry.rectToView(object.bounds);
+      return r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0;
+    });
+    const base = additive ? groupUnits().filter((unit) => !hit.some((other) => other.index === unit.index)) : [];
+    selectUnits([...base, ...hit]);
+  };
+
+  // Rahmen, der neben der Seite begann (useContentEditInput): in Ansichtskoordinaten dieser Seite umrechnen
+  const marquee = useContentEdit((s) => (s.marquee?.tabId === tabId && s.marquee.pageIndex === pageIndex ? s.marquee : null));
+  useEffect(() => {
+    if (!marquee) return;
+    useContentEdit.getState().setMarquee(null);
+    const box = svgRef.current?.getBoundingClientRect();
+    if (!box || box.width === 0 || box.height === 0) return;
+    const vx = (clientX: number) => ((clientX - box.left) / box.width) * geometry.width;
+    const vy = (clientY: number) => ((clientY - box.top) / box.height) * geometry.height;
+    selectInView(vx(marquee.left), vx(marquee.right), vy(marquee.top), vy(marquee.bottom), marquee.additive);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur auf eine neue Anfrage reagieren
+  }, [marquee]);
+
   const onHandlePointerDown = (event: ReactPointerEvent, object: EditUnit, corner: number) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -305,18 +348,12 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     setGesture(null);
     if (!current) return;
     if (current.kind === 'marquee') {
-      // Alle Einheiten, die das Rechteck berührt (in Ansichtskoordinaten verglichen, auch bei gedrehten Seiten)
       const x0 = Math.min(current.start.x, current.to.x);
       const x1 = Math.max(current.start.x, current.to.x);
       const y0 = Math.min(current.start.y, current.to.y);
       const y1 = Math.max(current.start.y, current.to.y);
       if (x1 - x0 < 2 && y1 - y0 < 2) return;
-      const hit = objects.filter((object) => {
-        const r = geometry.rectToView(object.bounds);
-        return r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0;
-      });
-      const base = current.additive ? groupUnits().filter((unit) => !hit.some((other) => other.index === unit.index)) : [];
-      selectUnits([...base, ...hit]);
+      selectInView(x0, x1, y0, y1, current.additive);
       return;
     }
     const bounds = previewBounds(current.object, current);
@@ -397,6 +434,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
         onPointerCancel={() => setGesture(null)}
         data-testid={`content-edit-overlay-${pageIndex}`}
         data-content-edit-overlay=""
+        data-page-index={pageIndex}
       >
         {ghosts && (gesture?.kind === 'move' || gesture?.kind === 'scale' || pending?.pageIndex === pageIndex) && (
           <g className={styles.ghosts} data-testid="content-ghosts">
@@ -427,7 +465,9 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
             })}
           </g>
         )}
-        {objects.map((object) => {
+        {/* Kleine Objekte oben: Text auf einem Bild oder einer Fläche bleibt anklickbar, auch wenn das größere Objekt
+            später im Seiteninhalt steht. Leere Textstücke (nur Leerzeichen) fangen keine Klicks ab. */}
+        {stacked.map((object) => {
           const moving = pending?.pageIndex === pageIndex ? pending.bounds[object.index] : undefined;
           const r = geometry.rectToView(moving ?? previewBounds(object, gesture));
           const isSelected =
@@ -437,13 +477,13 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
           return (
             <rect
               key={object.index}
-              className={[styles.object, styles[object.kind] ?? '', isSelected ? styles.selected : '', tool !== 'select' ? styles.passive : ''].join(' ')}
+              className={[styles.object, styles[object.kind] ?? '', isSelected ? styles.selected : '', tool !== 'select' || blank(object) ? styles.passive : ''].join(' ')}
               x={r.x}
               y={r.y}
               width={Math.max(r.w, 2)}
               height={Math.max(r.h, 2)}
               onPointerDown={(event) => onObjectPointerDown(event, object)}
-              onDoubleClick={() => startEdit(object)}
+              onDoubleClick={() => (object.kind === 'image' ? useUi.getState().notify(t('contentEdit.imageText')) : startEdit(object))}
               data-testid="content-object"
               data-kind={object.kind}
               data-text={object.text}
@@ -651,7 +691,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
       const width = frame ? frame.width - (2 * EDITOR_INSET_PX) / viewScale : undefined;
       // Fließtext: unterhalb des unteren Rands geht es auf einer neuen Seite oben am Rand weiter
       const flowLimits = flow ? { top: geometry.toPdf(margins.left, margins.top).y, bottom: geometry.toPdf(margins.left, geometry.height - margins.bottom).y } : undefined;
-      void addRichText(editing.tabId, editing.pageIndex, origin, current, { ...(width ? { width } : {}), ...(flowLimits ? { flow: flowLimits } : {}) });
+      void trackPending(editing.tabId, addRichText(editing.tabId, editing.pageIndex, origin, current, { ...(width ? { width } : {}), ...(flowLimits ? { flow: flowLimits } : {}) }));
       return;
     }
     const text = runsText(current);
@@ -665,16 +705,16 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
       const changed = before && after && !sameStyle(before, after);
       if (sides || changed) {
         const restyled = changed && after ? { size: after.size, color: after.color, ...(after.font !== undefined ? { font: after.font } : {}) } : undefined;
-        void reflowText(editing.tabId, editing.pageIndex, unit, text, { ...(sides ? { box: sides } : {}), ...(restyled ? { style: restyled } : {}) });
-      } else if (editing.lines) void editParagraph(editing.tabId, editing.pageIndex, editing.lines, text, initial);
-      else void editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, text, initial);
+        void trackPending(editing.tabId, reflowText(editing.tabId, editing.pageIndex, unit, text, { ...(sides ? { box: sides } : {}), ...(restyled ? { style: restyled } : {}) }));
+      } else if (editing.lines) void trackPending(editing.tabId, editParagraph(editing.tabId, editing.pageIndex, editing.lines, text, initial));
+      else void trackPending(editing.tabId, editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, text, initial));
       return;
     }
     // Gemischt: an derselben Stelle neu setzen (gezogene Ränder verschieben den Anfang und ändern die Breite)
     const origin = editing.origin ?? { x: editing.bounds[0], y: editing.bounds[3] };
     const x = origin.x + (sides ? sides.left - editing.bounds[0] : 0);
     const width = sides ? sides.right - x : editing.width;
-    void addRichText(editing.tabId, editing.pageIndex, { x, y: origin.y }, current, { ...(width ? { width } : {}), replace: members });
+    void trackPending(editing.tabId, addRichText(editing.tabId, editing.pageIndex, { x, y: origin.y }, current, { ...(width ? { width } : {}), replace: members }));
   };
 
   const commit = () => {
@@ -694,11 +734,11 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
         ...(restyle ? { style: restyle } : {}),
       };
       const unit = { index: editing.index, members: [editing.index, ...editing.merge], bounds: editing.bounds, ...(editing.lines ? { lines: editing.lines } : {}) };
-      void reflowText(editing.tabId, editing.pageIndex, unit, value, change);
+      void trackPending(editing.tabId, reflowText(editing.tabId, editing.pageIndex, unit, value, change));
     } else if (editing.mode === 'edit' && editing.lines) {
-      void editParagraph(editing.tabId, editing.pageIndex, editing.lines, value, initial);
+      void trackPending(editing.tabId, editParagraph(editing.tabId, editing.pageIndex, editing.lines, value, initial));
     } else if (editing.mode === 'edit') {
-      void editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, value, initial);
+      void trackPending(editing.tabId, editText(editing.tabId, editing.pageIndex, editing.index, editing.merge, value, initial));
     }
   };
 
