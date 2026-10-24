@@ -24,3 +24,13 @@ OCR für gescannte PDFs mit durchsuchbarer Textebene, Sprachen Deutsch und Engli
 
 - `test/integration/ocr.test.ts`: echte Erkennung der Scan-Testdatei in Node, Textebene mit pdf.js geprüft (Wörter, Lage auf 2 Punkt genau), nicht bearbeitbar.
 - `test/e2e/tools.spec.ts`: ganzer Weg in der App, Speichern, Überspringen beim zweiten Mal.
+
+## Nachtrag 2026-10-24: Text im Bild bearbeitbar machen
+
+Beim Bearbeiten von Text und Bildern hat ein ausgewähltes Bild den Knopf „Text im Bild bearbeitbar machen“ (wie
+„Scans bearbeiten“ in Acrobat; Anlass: Beispiel des Auftraggebers, Fließtext als Bild). Der Bildbereich wird mit 300 dpi
+gezeichnet und erkannt (`linesFromBlocks`); jede Zeile bekommt eine Abdeckfläche in der Hintergrundfarbe (gemessen
+knapp außerhalb der Zeile) und darüber echten Text in Helvetica, Größe aus Höhe und Breite, Farbe aus den dunkelsten
+Bildpunkten, fett bei deutlich dickeren Strichen als die übrigen Zeilen (`boldLines`). Die Bildpunkte darunter bleiben
+im Bild erhalten (vertrauliches: Schwärzen). Nur ungedrehte Seiten; Erkennungsfehler sind möglich, die Meldung sagt das.
+Beim Anklicken liegt Text immer über Bildern (`ContentEditOverlay`, Stapelung).

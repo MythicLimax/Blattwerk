@@ -201,7 +201,8 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
   }, [pdf, pageIndex, runtime?.password]);
 
   const objects = useMemo(() => editUnits(listing?.objects ?? [], listing?.fonts), [listing]);
-  const stacked = useMemo(() => [...objects].sort((a, b) => area(b.bounds) - area(a.bounds)), [objects]);
+  // Zum Anklicken: Text über Bildern und Grafiken, innerhalb einer Art die kleineren oben
+  const stacked = useMemo(() => [...objects].sort((a, b) => Number(a.kind === 'text') - Number(b.kind === 'text') || area(b.bounds) - area(a.bounds)), [objects]);
 
   const setGesture = (next: Gesture | null) => {
     gestureRef.current = next;
@@ -465,8 +466,8 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
             })}
           </g>
         )}
-        {/* Kleine Objekte oben: Text auf einem Bild oder einer Fläche bleibt anklickbar, auch wenn das größere Objekt
-            später im Seiteninhalt steht. Leere Textstücke (nur Leerzeichen) fangen keine Klicks ab. */}
+        {/* Text oben, sonst kleine Objekte oben: Text auf einem Bild oder einer Fläche bleibt anklickbar, auch wenn das
+            Bild später im Seiteninhalt steht. Leere Textstücke (nur Leerzeichen) fangen keine Klicks ab. */}
         {stacked.map((object) => {
           const moving = pending?.pageIndex === pageIndex ? pending.bounds[object.index] : undefined;
           const r = geometry.rectToView(moving ?? previewBounds(object, gesture));

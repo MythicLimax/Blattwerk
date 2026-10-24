@@ -5,6 +5,7 @@ import {
   MousePointer2,
   Pilcrow,
   Redo2,
+  ScanText,
   Trash,
   Type,
   Undo2,
@@ -29,6 +30,7 @@ import { canRedoState, canUndoState, useTabHistory } from '../../state/dirty';
 import { useDocuments, type TabState } from '../../state/documents-store';
 import styles from '../annotations/CommentToolbar.module.css';
 import { addImage, reflowText, toggleContentEditing } from './actions';
+import { makeImageTextEditable } from './scan-text';
 import { applyToRichEditor } from './RichTextEditor';
 import type { ParagraphStyle } from '../../../shared/content';
 
@@ -226,6 +228,15 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
         favoriteSet="text"
       />
       <span className={styles.separator} />
+      {selected && !selected.group && selected.unit?.kind === 'image' && (
+        <IconButton
+          icon={ScanText}
+          label={t('contentEdit.scanText')}
+          disabled={tab.working || !tab.canModify}
+          onClick={() => selected.unit && void makeImageTextEditable(tab, selected.pageIndex, selected.unit)}
+          data-testid="content-scan-text"
+        />
+      )}
       <IconButton
         icon={Trash}
         label={t('contentEdit.delete')}

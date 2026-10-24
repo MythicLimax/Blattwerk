@@ -305,3 +305,31 @@ test('Dokument bereinigen: Metadaten und Skripte weg, Lesezeichen nur auf Wunsch
   expect(raw).toContain('/Outlines');
   await close();
 });
+
+test('Text im Bild bearbeitbar machen: Scan wird zu echtem, bearbeitbarem Text', async () => {
+  const { dir, file } = copyOf('scan.pdf');
+  const { page, close } = await launchApp([file], { userData: dir });
+  await waitForDocument(page, 1);
+  await page.getByTestId('content-edit-button').click();
+  const image = page.locator('[data-testid="content-object"][data-kind="image"]').first();
+  await expect(image).toBeVisible();
+  await expect(page.locator('[data-testid="content-object"][data-kind="text"]')).toHaveCount(0);
+  const box = await image.boundingBox();
+  if (!box) throw new Error('kein Bild');
+  await page.mouse.click(box.x + 10, box.y + 10);
+  await page.getByTestId('content-scan-text').click();
+  await expect(page.getByTestId('notices')).toContainText('bearbeitbarer Text', { timeout: 90_000 });
+  // Erkannter Text steht als Textobjekt auf der Seite und lässt sich bearbeiten
+  await waitForDocument(page, 1);
+  const words = page.locator('[data-testid="content-object"][data-kind="text"]');
+  await expect.poll(() => words.count()).toBeGreaterThan(0);
+  const texts = (await words.evaluateAll((elements) => elements.map((element) => element.getAttribute('data-text') ?? ''))).join(' ');
+  expect(texts).toContain('Testdokument');
+  const heading = page.locator('[data-testid="content-object"][data-kind="text"][data-text*="Testdokument"]').first();
+  await expect(heading).toBeVisible();
+  const first = await heading.boundingBox();
+  if (!first) throw new Error('kein Text');
+  await page.mouse.dblclick(first.x + Math.min(20, first.width / 2), first.y + first.height / 2);
+  await expect(page.getByTestId('content-text-editor')).toBeVisible();
+  await close();
+});
