@@ -5,13 +5,14 @@
 // Läuft in CI auf Windows (dort sind Fenster ohnehin sichtbar). Aufruf: node scripts/smoke-update-win.mjs <Setup.exe>
 import { chromium } from '@playwright/test';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const setup = process.argv[2] && path.resolve(process.argv[2]);
 if (!setup || process.platform !== 'win32') throw new Error('Aufruf unter Windows mit Pfad zum Installationsprogramm');
-const dir = mkdtempSync(path.join(tmpdir(), 'blattwerk-update-'));
+// Langer Pfad (der temporäre Ordner kann als Kurzname wie RUNNER~1 kommen; Prozesse melden den langen)
+const dir = realpathSync.native(mkdtempSync(path.join(tmpdir(), 'blattwerk-update-')));
 const target = path.join(dir, 'Programme', 'Blattwerk');
 const exe = path.join(target, 'Blattwerk.exe');
 const profile = path.join(dir, 'Profil');
