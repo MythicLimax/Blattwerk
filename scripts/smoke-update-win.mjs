@@ -19,6 +19,13 @@ const updates = path.join(profile, 'Updates');
 const update = path.join(updates, 'Blattwerk-Setup-99.0.0.exe');
 const log = path.join(updates, 'update.log');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Pfade der laufenden Blattwerk.exe (Hauptprozess und Hilfsprozesse)
+const runningPaths = () =>
+  spawnSync('powershell.exe', ['-NoProfile', '-Command', "Get-Process Blattwerk -ErrorAction SilentlyContinue | ForEach-Object { $_.Id.ToString() + '|' + $_.Path }"], { encoding: 'utf8' })
+    .stdout.split(/\r?\n/)
+    .filter((line) => line.includes('|'))
+    .map((line) => ({ pid: Number(line.split('|')[0]), path: line.split('|').slice(1).join('|') }));
+
 // Prozessnummern aller laufenden Blattwerk.exe
 const runningPids = () =>
   spawnSync('tasklist', ['/FI', 'IMAGENAME eq Blattwerk.exe', '/FO', 'CSV', '/NH'], { encoding: 'utf8' })
@@ -64,12 +71,18 @@ try {
   // Die App beendet sich, das Installationsprogramm installiert still und startet sie neu
   await Promise.race([exited, sleep(30000)]);
   const reinstalled = () => existsSync(uninstaller) && statSync(uninstaller).mtimeMs > installedAt;
-  // Neu gestartet heißt: eine andere Blattwerk-Instanz als die beendete
-  const restarted = () => runningPids().some((pid) => pid !== child.pid);
-  for (let i = 0; i < 360 && !(reinstalled() && restarted()); i++) await sleep(500);
+  // Neu gestartet heißt: eine andere Blattwerk-Instanz als die beendete, und zwar am installierten Ort
+  const restarted = () => runningPaths().some((entry) => entry.pid !== child.pid && entry.path.toLowerCase() === exe.toLowerCase());
+  for (let i = 0; i < 360 && !restarted(); i++) await sleep(500);
+  // Das Installationsprogramm ist durch, wenn es nicht mehr läuft (danach erst Dateien vergleichen)
+  for (let i = 0; i < 120 && spawnSync('tasklist', ['/FI', 'IMAGENAME eq Blattwerk-Setup-99.0.0.exe', '/NH'], { encoding: 'utf8' }).stdout.includes('Blattwerk-Setup'); i++) await sleep(500);
+  console.log(`Laufend: ${JSON.stringify(runningPaths())}`);
+  console.log(`Deinstallationsprogramm: vorher ${new Date(installedAt).toISOString()}, jetzt ${existsSync(uninstaller) ? new Date(statSync(uninstaller).mtimeMs).toISOString() : 'fehlt'}`);
   const protocol = existsSync(log) ? readFileSync(log, 'utf8') : '(kein Protokoll)';
   console.log(`Protokoll:\n${protocol}`);
-  const ok = protocol.includes('Starte Blattwerk-Setup-99.0.0.exe') && reinstalled() && restarted();
+  // Gewertet wird der Neustart am installierten Ort nach dem Start des Installationsprogramms; das Datum des
+  // Deinstallationsprogramms ist nur ein Hinweis (bei Updates schreibt es das Installationsprogramm nicht immer neu)
+  const ok = protocol.includes('Starte Blattwerk-Setup-99.0.0.exe') && restarted();
   console.log(`Update eingespielt: ${ok ? 'ok' : 'FEHLER'} (neu installiert: ${reinstalled()}, neu gestartet: ${restarted()}, Prozesse: ${runningPids().join(', ') || 'keine'}, alt: ${child.pid})`);
   if (!ok) failed = true;
 } finally {
