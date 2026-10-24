@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { COMMENTS_PDF, fixture, TEXT_PDF } from '../fixtures/expectations';
+import { COMMENTS_PDF, fixture, imageFixture, TEXT_PDF } from '../fixtures/expectations';
 import { launchApp, menuClick, removeTempDir, waitForDocument, type AppHandle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 
@@ -462,4 +462,110 @@ test('Markieren: eigener Modus, Markierung auswählen, Farbe ändern, kürzen un
   expect((saved.match(/\/Subtype\s*\/Highlight/g) ?? []).length).toBe(0);
   expect((saved.match(/\/Subtype\s*\/Underline/g) ?? []).length).toBe(1);
   await close();
+});
+
+test('Rechteck mit Füllfarbe und halber Deckkraft: Leiste, Speichern und Datei', async () => {
+  const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+  const { page, app } = handle;
+  const at = await pageSpace(page);
+  await page.getByTestId('tool-square').click();
+  // Füllfarbe und Deckkraft gelten für das nächste Rechteck
+  await page.getByTestId('fill-more').click();
+  await page.getByTestId('fill-palette').nth(12 * 4 + 2).click();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('opacity-select').selectOption('0.5');
+  await drag(page, at(80, 600), at(220, 690));
+  const hit = page.locator('[data-annotation-hit]').first();
+  await hit.click({ position: { x: 3, y: 10 } });
+  await expect(page.getByTestId('opacity-select')).toHaveValue('0.5');
+  await expect(page.getByTestId('fill-none')).toHaveAttribute('aria-pressed', 'false');
+  // Am ausgewählten Rechteck: Deckkraft ändern
+  await page.getByTestId('opacity-select').selectOption('0.75');
+  await save(page, app);
+  const { PDFDocument, PDFName, PDFArray, PDFNumber } = await import('@cantoo/pdf-lib');
+  type Dict = { get: (name: unknown) => unknown };
+  const doc = await PDFDocument.load(readFileSync(handle.file));
+  const annots = doc.getPage(0).node.Annots();
+  const square = annots
+    ?.asArray()
+    .map((ref) => doc.context.lookup(ref))
+    .find((a) => (a as Partial<Dict>).get?.(PDFName.of('Subtype'))?.toString() === '/Square') as Dict | undefined;
+  if (!square) throw new Error('Rechteck nicht gespeichert');
+  const opacity = square.get(PDFName.of('CA'));
+  const interior = square.get(PDFName.of('IC'));
+  expect(opacity instanceof PDFNumber && opacity.asNumber()).toBeCloseTo(0.75, 2);
+  expect(interior instanceof PDFArray && interior.size()).toBe(3);
+  await handle.close();
+});
+
+test('eigener Stempel mit Datum und Name sowie ein Bild als Stempel', async () => {
+  const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+  const { page, app } = handle;
+  const at = await pageSpace(page);
+  await page.getByTestId('tool-stamp').click();
+  await page.getByTestId('stamp-select').selectOption('custom');
+  const dialog = page.getByTestId('custom-stamp-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('custom-stamp-ok')).toBeDisabled();
+  await page.getByTestId('custom-stamp-text').fill('ERLEDIGT');
+  await page.getByTestId('custom-stamp-color-red').click();
+  await page.getByTestId('custom-stamp-ok').click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId('stamp-select')).toHaveValue('custom');
+  await page.mouse.click(at(200, 300).x, at(200, 300).y);
+  // Zwei Zeilen: Text und darunter Name · Datum
+  const lines = page.getByTestId('annotation-overlay-0').locator('text');
+  await expect(lines.first()).toHaveText('ERLEDIGT');
+  await expect(lines.nth(1)).toContainText(String(new Date().getFullYear()));
+
+  // Bild als Stempel: Datei wählen, dann an die Klickstelle setzen
+  await app.evaluate(({ dialog: d }, file) => {
+    d.showOpenDialog = (async () => ({ canceled: false, filePaths: [file] })) as typeof d.showOpenDialog;
+  }, imageFixture('transparent.png'));
+  await page.getByTestId('tool-stamp').click();
+  await page.getByTestId('stamp-select').selectOption('image');
+  await expect(page.getByTestId('signature-hint')).toBeVisible();
+  await page.mouse.click(at(300, 500).x, at(300, 500).y);
+  await expect(page.getByTestId('annotation-overlay-0').locator('image')).toHaveCount(1);
+
+  await save(page, app);
+  const { PDFDocument, PDFName } = await import('@cantoo/pdf-lib');
+  const doc = await PDFDocument.load(readFileSync(handle.file));
+  const subtypes = (doc.getPage(0).node.Annots()?.asArray() ?? []).map((ref) => (doc.context.lookup(ref) as unknown as { get: (n: unknown) => unknown }).get(PDFName.of('Subtype'))?.toString());
+  expect(subtypes.filter((s) => s === '/Stamp')).toHaveLength(2);
+  await handle.close();
+});
+
+test('Kommentarliste filtern, sortieren und als Zusammenfassung sichern', async () => {
+  const handle = await openCopy(COMMENTS_PDF.file, COMMENTS_PDF.pages);
+  const { page, app } = handle;
+  await expect(cards(page)).toHaveCount(COMMENTS_PDF.comments);
+  // Nur angenommene: der Kommentar mit Prüfstatus
+  await page.getByTestId('comments-filter').selectOption('status:Accepted');
+  await expect(cards(page)).toHaveCount(1);
+  await expect(page.getByTestId('comments-panel')).toContainText(`1 von ${COMMENTS_PDF.comments} Kommentaren`);
+  // Filter ohne Treffer
+  await page.getByTestId('comments-filter').selectOption('kind:redact');
+  await expect(cards(page)).toHaveCount(0);
+  await expect(page.getByTestId('comments-panel')).toContainText('Kein Kommentar passt zum Filter.');
+  await page.getByTestId('comments-filter').selectOption('all');
+  await expect(cards(page)).toHaveCount(COMMENTS_PDF.comments);
+  // Neueste zuerst: ohne Seitenüberschriften
+  await page.getByTestId('comments-sort').selectOption('date');
+  await expect(page.getByTestId('comments-panel').locator('h3')).toHaveCount(0);
+  await page.getByTestId('comments-sort').selectOption('page');
+  await expect(page.getByTestId('comments-panel').locator('h3')).toHaveCount(COMMENTS_PDF.pages);
+
+  const target = path.join(path.dirname(handle.file), 'zusammenfassung.txt');
+  await app.evaluate(({ dialog }, filePath) => {
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath })) as typeof dialog.showSaveDialog;
+  }, target);
+  await page.getByTestId('comments-export').click();
+  await expect.poll(() => existsSync(target)).toBe(true);
+  const text = readFileSync(target, 'utf8');
+  expect(text).toContain(`Kommentare in kopie-${COMMENTS_PDF.file}`);
+  expect(text).toContain(COMMENTS_PDF.noteText);
+  expect(text).toContain(COMMENTS_PDF.replyText);
+  expect(text).toContain(COMMENTS_PDF.status);
+  await handle.close();
 });

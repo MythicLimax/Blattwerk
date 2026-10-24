@@ -1,6 +1,8 @@
 // Barrierefreiheit (Phase 7, ADR 0018): Tag-Struktur und Prüfergebnis. Gemeinsam für Oberfläche und Worker.
 
 export interface TagNode {
+  // Nummer in der Lesereihenfolge des Baums (gilt für einen Dokumentstand; zum Ändern einzelner Elemente)
+  id: number;
   // Standardrolle nach /RoleMap (z. B. P, H1, Figure); bei eigenen Rollen ohne Zuordnung die eigene
   role: string;
   // Rolle im Dokument, wenn sie von der Standardrolle abweicht
@@ -54,4 +56,13 @@ export interface AccessibilityReport {
 export interface AccessibilityFix {
   lang: string | null;
   title: string | null;
+  // Nur einzelne Elemente ändern (Seitenleiste „Tags“): Alternativtext bzw. Ersatztext setzen, leer = entfernen.
+  // Dann bleiben Sprache, Titel und Tab-Reihenfolge unberührt.
+  elements?: TagEdit[];
+}
+
+export interface TagEdit {
+  id: number;
+  alt?: string;
+  actualText?: string;
 }

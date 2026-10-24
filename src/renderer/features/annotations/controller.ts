@@ -190,7 +190,7 @@ export function baseFields(pageIndex: number) {
     created: stamp,
     modified: stamp,
     contents: '',
-    opacity: 1,
+    opacity: useAnnotations.getState().opacity,
     replies: [],
     statuses: [],
   };

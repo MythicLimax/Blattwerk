@@ -1,7 +1,7 @@
 // Abläufe für „Seiten organisieren“ (Phase 3): Quelldateien laden, Seiten drehen, löschen, verschieben, einfügen,
 // extrahieren, teilen, Dateien zusammenführen und Bilder in PDF umwandeln.
 import type { FileInfo, SaveNewResult, SaveToFolderResult } from '../../../shared/ipc';
-import type { ComposePart, ImageSource, PageOperation } from '../../../shared/pages';
+import type { ComposePart, ImageSource, Margins, PageOperation } from '../../../shared/pages';
 import { formatPageRanges, moveTarget } from '../../../shared/pages';
 import { readImageInfo } from '../../../shared/image-info';
 import { api } from '../../api';
@@ -185,6 +185,24 @@ export function insertSources(tab: TabState, sources: SourceFile[], at: number):
   flushImages();
   const selection = Array.from({ length: position - at }, (_, i) => at + i);
   return applyPageOperations(tab.id, operations, { page: at + 1, selection });
+}
+
+// Ersetzt die Seiten targets (0-basiert) der Reihe nach durch die Seiten sourcePages der Quelle (gleich viele).
+// Von hinten: jede neue Seite kommt hinter ihre alte, dann wird die alte gelöscht (Nummern davor bleiben gleich).
+export function replacePages(tab: TabState, targets: number[], source: SourceFile, sourcePages: number[]): Promise<boolean> {
+  const operations: PageOperation[] = [];
+  for (let k = targets.length - 1; k >= 0; k--) {
+    const target = targets[k] as number;
+    operations.push(
+      { type: 'insertPdf', at: target + 1, source: { data: source.bytes.slice().buffer as ArrayBuffer, password: source.password, pages: [sourcePages[k] as number] } },
+      { type: 'delete', pages: [target] },
+    );
+  }
+  return applyPageOperations(tab.id, operations, { page: (targets[0] ?? 0) + 1, selection: targets });
+}
+
+export function cropPages(tab: TabState, pages: number[], margins: Margins): Promise<boolean> {
+  return applyPageOperations(tab.id, [{ type: 'crop', pages, margins }], { page: (pages[0] ?? 0) + 1, selection: pages });
 }
 
 // Aktueller Stand des Dokuments als Bytes, inklusive ungespeicherter Kommentare.

@@ -18,7 +18,9 @@ export type PageDialog =
   | { kind: 'insertBlank'; tabId: string; after: number }
   | { kind: 'insertFiles'; tabId: string; after: number; sources: SourceFile[] }
   | { kind: 'extract'; tabId: string; pages: number[] }
-  | { kind: 'split'; tabId: string };
+  | { kind: 'split'; tabId: string }
+  | { kind: 'replace'; tabId: string; pages: number[]; source: SourceFile }
+  | { kind: 'crop'; tabId: string; pages: number[] };
 
 export interface PasswordRequest {
   name: string;
@@ -69,6 +71,7 @@ interface UiState {
   exportImagesOpen: boolean;
   // Komprimieren (Phase 6)
   compressOpen: boolean;
+  cleanOpen: boolean;
   // Texterkennung (Phase 6)
   ocrOpen: boolean;
   settingsOpen: boolean;
@@ -112,6 +115,7 @@ interface UiState {
   setSecurityDialogOpen: (open: boolean) => void;
   setExportImagesOpen: (open: boolean) => void;
   setCompressOpen: (open: boolean) => void;
+  setCleanOpen: (open: boolean) => void;
   setOcrOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setPrompt: (prompt: Prompt | null) => void;
@@ -156,6 +160,7 @@ export const useUi = create<UiState>((set) => ({
   securityDialogOpen: false,
   exportImagesOpen: false,
   compressOpen: false,
+  cleanOpen: false,
   ocrOpen: false,
   settingsOpen: false,
   prompt: null,
@@ -196,6 +201,7 @@ export const useUi = create<UiState>((set) => ({
   setSecurityDialogOpen: (securityDialogOpen) => set({ securityDialogOpen }),
   setExportImagesOpen: (exportImagesOpen) => set({ exportImagesOpen }),
   setCompressOpen: (compressOpen) => set({ compressOpen }),
+  setCleanOpen: (cleanOpen) => set({ cleanOpen }),
   setOcrOpen: (ocrOpen) => set({ ocrOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setPrompt: (prompt) => set({ prompt }),

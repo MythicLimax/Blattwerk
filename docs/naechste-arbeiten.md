@@ -17,22 +17,23 @@ Stand: 2026-10-24. Reihenfolge = Vorrang. Erledigte Punkte hier streichen und im
   (`.tools/beispiele/text-auf-objekt.pdf`, nie einchecken) ist der Fließtext auf Seite 1 ein Bild (Scan); ein
   Doppelklick auf ein Bild sagt das jetzt. Echtes Bearbeiten siehe unten.
 
-## Geplante Erweiterungen
+## Erledigt in 0.16.0 (Zweig `erweiterungen`)
 
-Vor Beginn kurz prüfen, ob ein Punkt inzwischen erledigt ist.
+- **Text in Bildern bearbeitbar machen** (Inhalt bearbeiten → Bild wählen → „Text im Bild bearbeitbar machen“).
+- **Barrierefreiheit:** Alternativtexte von Abbildungen in der Seitenleiste „Tags“ (automatisches Taggen bewusst
+  nicht, ADR 0018).
+- **PDF/A:** nicht eingebettete Schriften mit der Schrift des Rechners einbetten.
+- **Kommentare:** eigene Stempel (Text, Datum, Name, Bild), Deckkraft und Füllfarbe, Liste filtern, sortieren, als
+  Zusammenfassung sichern.
+- **Seiten:** ersetzen, zuschneiden, zwischen Dokumenten und Fenstern ziehen.
+- **Anzeige:** Zoom-Prozentwert eintippen.
+- **Wasserzeichen, Kopf-/Fußzeilen:** Schriften des Rechners für alle Schriftsysteme.
+- **Werkzeuge:** „Dokument bereinigen“ (Metadaten, Anhänge, Skripte, Lesezeichen).
 
-- **Text in Bildern bearbeitbar machen** (wie „Scans bearbeiten“ in Acrobat): Texterkennung im Bildbereich, Text als
-  echte Textobjekte in ähnlicher Schrift setzen, Bildpunkte darunter mit der Hintergrundfarbe füllen. Anlass: Beispiel
-  des Auftraggebers.
-- **Barrierefreiheit:** Tags anlegen und bearbeiten, Alternativtexte für Bilder setzen (bisher nur anzeigen und prüfen,
-  ADR 0018). Größte Lücke zu Acrobat.
-- **PDF/A:** Dokumente mit nicht eingebetteten Schriften wie Calibri umwandeln (Schrift des Rechners einbetten, ADR 0024).
-- **Kommentare** (Phase 2): eigene Stempel (Bild, Datum, eigener Text), Deckkraft und Füllfarbe, Kommentare filtern,
-  sortieren und als Zusammenfassung exportieren.
-- **Seiten** (Phase 3): Seiten ersetzen, Seiten zuschneiden, Seiten zwischen Tabs ziehen.
-- **Anzeige** (Phase 1): Zoom-Prozentwert frei eintippen.
-- **Wasserzeichen:** Schriften für andere Schriftsysteme (Kyrillisch, Griechisch, Asiatisch).
-- **Schwärzen:** „Dokument bereinigen“ (Lesezeichen, Anhänge, Dokument-JavaScript).
+## Offen
+
 - **Windows:** von Hand ausprobieren (Auftraggeber), gefundene Fehler hier eintragen.
+- **Text im Bild:** Erkennungsqualität hängt an der Texterkennung (Umlaute in unscharfen Scans); Schriftarten außer
+  Helvetica werden nicht nachgebildet.
 
 Für jede Auslieferung die Version erhöhen.

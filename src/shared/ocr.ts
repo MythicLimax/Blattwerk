@@ -81,3 +81,43 @@ export function rgbaToPgm(rgba: Uint8Array, width: number, height: number): Uint
   }
   return out;
 }
+
+// Zeilen für „Text im Bild bearbeitbar machen“: Text, umgebendes Rechteck, Grundlinie und Schriftgröße (Bildpunkte,
+// Ursprung oben links). Unsichere Wörter fallen weg; Zeilen ohne verwertbares Wort ebenso.
+export interface OcrTextLine {
+  text: string;
+  box: [number, number, number, number];
+  baseline: number;
+  size: number;
+}
+
+export function linesFromBlocks(blocks: OcrBlock[] | null): OcrTextLine[] {
+  const lines: OcrTextLine[] = [];
+  for (const block of blocks ?? []) {
+    for (const paragraph of block.paragraphs) {
+      for (const line of paragraph.lines) {
+        const words = line.words.filter((word) => word.confidence >= MIN_CONFIDENCE && ocrText(word.text) !== '' && word.bbox.x1 > word.bbox.x0);
+        if (words.length === 0) continue;
+        const text = words.map((word) => ocrText(word.text)).join(' ');
+        const x0 = Math.min(...words.map((word) => word.bbox.x0));
+        const x1 = Math.max(...words.map((word) => word.bbox.x1));
+        const y0 = Math.min(...words.map((word) => word.bbox.y0));
+        const y1 = Math.max(...words.map((word) => word.bbox.y1));
+        const { baseline } = line;
+        const slope = baseline.x1 !== baseline.x0 ? (baseline.y1 - baseline.y0) / (baseline.x1 - baseline.x0) : 0;
+        const base = Math.min(Math.max(baseline.y0 + slope * ((x0 + x1) / 2 - baseline.x0), y0 + 1), y1 + (y1 - y0));
+        // Oberlänge etwa 0,75 em (wie bei der unsichtbaren Textebene)
+        lines.push({ text, box: [x0, y0, x1, y1], baseline: base, size: Math.max(4, (base - y0) / 0.75) });
+      }
+    }
+  }
+  return lines;
+}
+
+// Fett sind Zeilen, deren Striche deutlich dicker sind als üblich in diesem Bild (unscharfe Scans machen alle Striche
+// breiter, deshalb kein fester Wert); mit weniger als drei Zeilen nur sehr dicke
+export function boldLines(strokes: number[]): boolean[] {
+  const sorted = [...strokes].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  return strokes.map((stroke) => (strokes.length >= 3 ? stroke > median * 1.3 : stroke > 0.16));
+}

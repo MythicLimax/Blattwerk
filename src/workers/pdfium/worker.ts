@@ -85,6 +85,7 @@ const loadSigning = () => import('./signing');
 const loadSignatures = () => import('./signatures');
 const loadIdentity = () => import('./identity');
 const loadPdfA = () => import('./pdfa');
+const loadClean = () => import('./clean');
 const loadAccessibility = () => import('./accessibility');
 
 const NO_CHANGES = { upserts: [], deletions: [] };
@@ -131,6 +132,7 @@ function errorCode(error: unknown): WorkerErrorCode {
   if (isFieldError(error)) return error.code;
   if (error instanceof Error && error.name === 'SanitizeError') return 'redact-encrypted';
   if (error instanceof Error && error.name === 'CompressError') return 'compress-encrypted';
+  if (error instanceof Error && error.name === 'CleanError') return 'clean-encrypted';
   if (error instanceof Error && error.name === 'PdfAError') return (error as Error & { code: WorkerErrorCode }).code;
   if (error instanceof Error && error.name === 'SignError') return (error as Error & { code: WorkerErrorCode }).code;
   if (error instanceof Error && (error.name === 'StampError' || error.name === 'ContentError')) return (error as Error & { code: WorkerErrorCode }).code;
@@ -266,11 +268,29 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
           const { convertToPdfA } = await loadPdfA();
           const result = await convertToPdfA(
             full,
-            { standardFont: (name) => pdfium.standardFontProgram(name), cmykProfile: request.cmykProfile ? new Uint8Array(request.cmykProfile) : null },
+            {
+              standardFont: (name) => pdfium.standardFontProgram(name),
+              systemFont: (baseFont) => {
+                const found = request.systemFonts.find((font) => font.baseFont === baseFont);
+                return found ? new Uint8Array(found.data) : null;
+              },
+              cmykProfile: request.cmykProfile ? new Uint8Array(request.cmykProfile) : null,
+            },
             new Date(),
             request.producer,
           );
           replyBytes(request.id, result.bytes, pdfium, null);
+          return;
+        }
+        case 'clean': {
+          const full = pdfium.process(new Uint8Array(request.bytes), request.password, request.changes, [], { incremental: false }, request.formValues);
+          const { cleanDocument } = await loadClean();
+          replyBytes(request.id, await cleanDocument(full, request.options), pdfium, request.password);
+          return;
+        }
+        case 'findCleanable': {
+          const { findCleanable } = await loadClean();
+          reply({ id: request.id, ok: true, kind: 'cleanable', findings: await findCleanable(new Uint8Array(request.bytes)) });
           return;
         }
         case 'checkPdfA': {

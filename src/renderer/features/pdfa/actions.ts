@@ -3,6 +3,8 @@ import { PRODUCT_NAME } from '../../../shared/product';
 import { api } from '../../api';
 import { PDFJS_ASSETS } from '../../engine/pdfjs';
 import { checkPdfA, convertToPdfA, PdfiumClientError } from '../../engine/pdfium-client';
+import { systemFontFor } from '../../../shared/fonts';
+import { systemFontData } from '../content-edit/system-fonts';
 import { getRuntime } from '../../engine/runtime';
 import { pendingChanges } from '../../engine/session';
 import { t } from '../../i18n';
@@ -34,6 +36,24 @@ async function cmykProfile(): Promise<ArrayBuffer | null> {
   }
 }
 
+// Nicht eingebettete Schriften, für die es eine passende Schrift des Rechners gibt (z. B. Calibri aus Office)
+async function systemFontsFor(bytes: Uint8Array): Promise<Array<{ baseFont: string; data: ArrayBuffer }>> {
+  const report = await checkPdfA(bytes).catch(() => null);
+  const names = (report?.issues.find((issue) => issue.code === 'fonts')?.detail ?? '')
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name !== '' && name !== '?');
+  if (names.length === 0) return [];
+  const fonts = await api.fonts.list().catch(() => []);
+  const result: Array<{ baseFont: string; data: ArrayBuffer }> = [];
+  for (const baseFont of names) {
+    const key = systemFontFor(baseFont, fonts);
+    const font = key ? await systemFontData(key) : null;
+    if (font) result.push({ baseFont, data: font.slice().buffer as ArrayBuffer });
+  }
+  return result;
+}
+
 // Umwandeln (mit ungespeicherten Kommentaren und Formularwerten) und als neue Datei speichern
 export async function saveAsPdfA(tab: TabState): Promise<boolean> {
   const runtime = getRuntime(tab.id);
@@ -41,10 +61,12 @@ export async function saveAsPdfA(tab: TabState): Promise<boolean> {
   try {
     return await busy('pdfa.busy', async () => {
       const pending = await pendingChanges(tab.id);
-      const bytes = await convertToPdfA(await runtime.pdf!.getData(), runtime.password, {
+      const data = await runtime.pdf!.getData();
+      const bytes = await convertToPdfA(data, runtime.password, {
         ...pending,
         cmykProfile: await cmykProfile(),
         producer: PRODUCT_NAME,
+        systemFonts: await systemFontsFor(data),
       });
       const name = t('pdfa.fileName', { name: tab.name.replace(/\.pdf$/i, '') });
       return reportSaveNew(await api.saveNewFile(bytes, name, tab.fileId, true));

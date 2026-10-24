@@ -270,3 +270,66 @@ test.describe('Texterkennung', () => {
     await handle.close();
   });
 });
+
+test('Dokument bereinigen: Metadaten und Skripte weg, Lesezeichen nur auf Wunsch', async () => {
+  const { PDFDocument, PDFName, StandardFonts } = await import('@cantoo/pdf-lib');
+  const doc = await PDFDocument.create();
+  doc.setTitle('Interner Titel');
+  doc.setAuthor('Interne Person');
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  doc.addPage([300, 300]).drawText('Sichtbar', { x: 20, y: 250, size: 14, font });
+  doc.addJavaScript('start', 'app.alert("Hallo")');
+  doc.catalog.set(PDFName.of('Outlines'), doc.context.register(doc.context.obj({ Type: 'Outlines', Count: 0 })));
+  const dir = mkdtempSync(path.join(tmpdir(), 'blattwerk-bereinigen-'));
+  tempDirs.push(dir);
+  const file = path.join(dir, 'bereinigen.pdf');
+  writeFileSync(file, await doc.save());
+
+  const { page, app, close } = await launchApp([file], { userData: dir });
+  await waitForDocument(page, 1);
+  await menuClick(app, 'tools.clean');
+  const dialog = page.getByTestId('clean-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('clean-metadata')).toBeChecked();
+  await expect(page.getByTestId('clean-scripts')).toBeChecked();
+  await expect(page.getByTestId('clean-bookmarks')).not.toBeChecked();
+  await expect(page.getByTestId('clean-attachments')).toBeDisabled();
+  await page.getByTestId('clean-confirm').click();
+  await expect(dialog).toHaveCount(0);
+  await waitForDocument(page, 1);
+  await expect(page.getByTestId('tab-dirty')).toHaveCount(1);
+  await menuClick(app, 'file.save');
+  await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+  const raw = readFileSync(file, 'latin1');
+  for (const secret of ['Interner Titel', 'Interne Person', 'app.alert']) expect(raw).not.toContain(secret);
+  expect(raw).toContain('/Outlines');
+  await close();
+});
+
+test('Text im Bild bearbeitbar machen: Scan wird zu echtem, bearbeitbarem Text', async () => {
+  const { dir, file } = copyOf('scan.pdf');
+  const { page, close } = await launchApp([file], { userData: dir });
+  await waitForDocument(page, 1);
+  await page.getByTestId('content-edit-button').click();
+  const image = page.locator('[data-testid="content-object"][data-kind="image"]').first();
+  await expect(image).toBeVisible();
+  await expect(page.locator('[data-testid="content-object"][data-kind="text"]')).toHaveCount(0);
+  const box = await image.boundingBox();
+  if (!box) throw new Error('kein Bild');
+  await page.mouse.click(box.x + 10, box.y + 10);
+  await page.getByTestId('content-scan-text').click();
+  await expect(page.getByTestId('notices')).toContainText('bearbeitbarer Text', { timeout: 90_000 });
+  // Erkannter Text steht als Textobjekt auf der Seite und lässt sich bearbeiten
+  await waitForDocument(page, 1);
+  const words = page.locator('[data-testid="content-object"][data-kind="text"]');
+  await expect.poll(() => words.count()).toBeGreaterThan(0);
+  const texts = (await words.evaluateAll((elements) => elements.map((element) => element.getAttribute('data-text') ?? ''))).join(' ');
+  expect(texts).toContain('Testdokument');
+  const heading = page.locator('[data-testid="content-object"][data-kind="text"][data-text*="Testdokument"]').first();
+  await expect(heading).toBeVisible();
+  const first = await heading.boundingBox();
+  if (!first) throw new Error('kein Text');
+  await page.mouse.dblclick(first.x + Math.min(20, first.width / 2), first.y + first.height / 2);
+  await expect(page.getByTestId('content-text-editor')).toBeVisible();
+  await close();
+});

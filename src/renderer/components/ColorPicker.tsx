@@ -1,4 +1,4 @@
-import { Palette, Plus, X } from 'lucide-react';
+import { PaintBucket, Palette, Plus, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -50,10 +50,12 @@ interface ColorPickerProps {
   testId: string;
   // Welche Favoriten (Text oder Kommentare)
   favoriteSet: FavoriteSet;
+  // Nur ein Farbknopf mit der aktuellen Farbe (öffnet die Auswahl), ohne die Reihe der Favoriten
+  compact?: boolean;
 }
 
 // Lieblingsfarben als Knöpfe in der Leiste, dazu ein Knopf für die große Farbauswahl (Palette, eigene Farbe, Favoriten)
-export function ColorPicker({ value, onChange, nameOf, label, testId, favoriteSet }: ColorPickerProps) {
+export function ColorPicker({ value, onChange, nameOf, label, testId, favoriteSet, compact = false }: ColorPickerProps) {
   const { t } = useTranslation();
   const favorites = useColorFavorites((s) => s.favorites[favoriteSet]);
   const [open, setOpen] = useState<{ left: number; top: number } | null>(null);
@@ -70,7 +72,7 @@ export function ColorPicker({ value, onChange, nameOf, label, testId, favoriteSe
 
   return (
     <div className={styles.row} role="radiogroup" aria-label={label}>
-      {favorites.map((favorite, i) => {
+      {!compact && favorites.map((favorite, i) => {
         const name = favorite.id ? nameOf(favorite.id) : toHex(favorite.color).toUpperCase();
         return (
           <button
@@ -91,16 +93,18 @@ export function ColorPicker({ value, onChange, nameOf, label, testId, favoriteSe
       <button
         ref={buttonRef}
         type="button"
-        className={styles.more}
-        aria-label={t('colors.more')}
+        className={compact ? styles.swatch : styles.more}
+        style={compact && value ? { background: toCss(value) } : undefined}
+        aria-label={compact ? label : t('colors.more')}
         aria-expanded={open !== null}
-        data-tooltip={t('colors.more')}
+        data-tooltip={compact ? label : t('colors.more')}
         onMouseDown={(event) => event.preventDefault()}
         onClick={toggle}
         data-color-panel=""
         data-testid={`${testId}-more`}
       >
-        <Palette size={16} strokeWidth={1.75} aria-hidden="true" />
+        {!compact && <Palette size={16} strokeWidth={1.75} aria-hidden="true" />}
+        {compact && !value && <PaintBucket size={16} strokeWidth={1.75} aria-hidden="true" />}
       </button>
       {open && createPortal(<ColorPanel at={open} value={value} onChange={onChange} onClose={() => setOpen(null)} anchor={buttonRef} testId={testId} favoriteSet={favoriteSet} />, document.body)}
     </div>

@@ -2,7 +2,7 @@
 import { init } from '@embedpdf/pdfium';
 import { type PDFArray, PDFDict, PDFDocument, PDFName, type PDFNumber, PDFRawStream, decodePDFRawStream } from '@cantoo/pdf-lib';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -117,6 +117,31 @@ describe('PDF/A', () => {
     page.node.setFontDictionary(PDFName.of('F9'), doc.context.register(font));
     const bytes = await doc.save();
     await expect(convertToPdfA(bytes, resources, NOW, 'Blattwerk')).rejects.toBeInstanceOf(PdfAError);
+  });
+
+  const arial = '/System/Library/Fonts/Supplemental/Arial.ttf';
+  it.skipIf(!existsSync(arial))('bettet eine Schrift des Rechners für eine nicht eingebettete Schrift ein (Breiten aus dem Programm)', async () => {
+    const program = new Uint8Array(readFileSync(arial));
+    const doc = await PDFDocument.create();
+    const page = doc.addPage();
+    const font = doc.context.obj({ Type: 'Font', Subtype: 'TrueType', BaseFont: 'Calibri', Encoding: 'WinAnsiEncoding' });
+    page.node.setFontDictionary(PDFName.of('F9'), doc.context.register(font));
+    const bytes = await doc.save();
+    const asked: string[] = [];
+    const result = await convertToPdfA(bytes, { ...resources, systemFont: (name) => (asked.push(name), program) }, NOW, 'Blattwerk');
+    expect(asked).toEqual(['Calibri']);
+    expect(result.embeddedFonts).toEqual(['Calibri']);
+    expect((await checkPdfA(result.bytes)).issues).toEqual([]);
+    const converted = await PDFDocument.load(result.bytes);
+    const embedded = [...converted.context.enumerateIndirectObjects()]
+      .map(([, object]) => object)
+      .find((object) => object instanceof PDFDict && object.get(PDFName.of('Type')) === PDFName.of('Font')) as PDFDict;
+    const descriptor = embedded.lookup(PDFName.of('FontDescriptor')) as PDFDict;
+    expect(descriptor.has(PDFName.of('FontFile2'))).toBe(true);
+    // „A“ (Code 65) in Arial: 1366/2048 Einheiten = 667
+    expect(((embedded.lookup(PDFName.of('Widths')) as PDFArray).get(65) as PDFNumber).asNumber()).toBe(667);
+    expect(engine.canOpen(result.bytes, null)).toBe(true);
+    qpdfCheck(result.bytes);
   });
 });
 

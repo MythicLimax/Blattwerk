@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { chunkPages, formatPageRanges, parsePageRanges, splitAtPages } from '../../../shared/pages';
+import { chunkPages, formatPageRanges, parsePageRanges, splitAtPages, type Margins } from '../../../shared/pages';
 import { Dialog, DialogButton } from '../../components/Dialog';
 import { IconButton } from '../../components/IconButton';
 import { getRuntime } from '../../engine/runtime';
@@ -10,11 +10,13 @@ import { useUi, type PageDialog, type SourceFile } from '../../state/ui-store';
 import fieldStyles from '../password/PasswordDialog.module.css';
 import {
   combineSources,
+  cropPages,
   deletePages,
   extractPages,
   insertBlankPages,
   insertSources,
   pickSources,
+  replacePages,
   splitDocument,
 } from './actions';
 import { topLevelBookmarkPages } from './bookmarks';
@@ -88,6 +90,118 @@ function DeleteDialog({ tab, pages }: { tab: TabState; pages: number[] }) {
       }
     >
       <PageRangeField value={value} onChange={(v) => (setValue(v), setInvalid(null))} invalid={invalid} pageCount={tab.pageCount} testId="delete-pages-input" />
+    </Dialog>
+  );
+}
+
+// Seiten ersetzen: welche Seiten dieses Dokuments durch welche der gewählten Datei (gleich viele)
+function ReplaceDialog({ tab, pages, source }: { tab: TabState; pages: number[]; source: SourceFile }) {
+  const { t } = useTranslation();
+  const count = source.pageCount;
+  const [targets, setTargets] = useState(formatPageRanges(pages));
+  const [sources, setSources] = useState(formatPageRanges(Array.from({ length: Math.min(pages.length, count) }, (_, i) => i)));
+  const [invalid, setInvalid] = useState<string | null>(null);
+  const submit = () => {
+    const parsedTargets = parsePageRanges(targets, tab.pageCount);
+    if (!parsedTargets) return setInvalid(t('pages.dialog.invalidPages', { count: tab.pageCount }));
+    // Beide Angaben aufsteigend: die erste genannte Seite ersetzt die erste genannte usw.
+    const parsedSources = parsePageRanges(sources, count);
+    if (!parsedSources) return setInvalid(t('pages.dialog.invalidPages', { count }));
+    if (parsedSources.length !== parsedTargets.length) return setInvalid(t('pages.dialog.replaceMismatch', { targets: parsedTargets.length, sources: parsedSources.length }));
+    close();
+    void replacePages(tab, parsedTargets, source, parsedSources);
+  };
+  return (
+    <Dialog
+      title={t('pages.dialog.replaceTitle')}
+      onClose={close}
+      onSubmit={submit}
+      width={420}
+      testId="replace-pages-dialog"
+      actions={
+        <>
+          <DialogButton onClick={close}>{t('pages.dialog.cancel')}</DialogButton>
+          <DialogButton type="submit" primary testId="replace-pages-ok">
+            {t('pages.dialog.replace')}
+          </DialogButton>
+        </>
+      }
+    >
+      <label className={fieldStyles.field}>
+        <span>{t('pages.dialog.replaceTargets', { count: tab.pageCount })}</span>
+        <input className={fieldStyles.input} value={targets} autoFocus onChange={(event) => (setTargets(event.target.value), setInvalid(null))} data-testid="replace-targets" />
+      </label>
+      <label className={fieldStyles.field}>
+        <span>{t('pages.dialog.replaceSources', { name: source.name, count })}</span>
+        <input className={fieldStyles.input} value={sources} onChange={(event) => (setSources(event.target.value), setInvalid(null))} data-testid="replace-sources" />
+      </label>
+      <p className={fieldStyles.hint}>{t('pages.dialog.pagesHint')}</p>
+      {invalid && (
+        <p className={fieldStyles.error} role="alert">
+          {invalid}
+        </p>
+      )}
+    </Dialog>
+  );
+}
+
+const MM = 72 / 25.4;
+
+// Seiten zuschneiden: vier Ränder in Millimetern für die gewählten Seiten
+function CropDialog({ tab, pages }: { tab: TabState; pages: number[] }) {
+  const { t } = useTranslation();
+  const [range, setRange] = useState(formatPageRanges(pages));
+  const [values, setValues] = useState<Record<keyof Margins, string>>({ top: '10', right: '10', bottom: '10', left: '10' });
+  const [invalid, setInvalid] = useState<string | null>(null);
+  const submit = () => {
+    const parsed = parsePageRanges(range, tab.pageCount);
+    if (!parsed) return setInvalid(t('pages.dialog.invalidPages', { count: tab.pageCount }));
+    const numbers = Object.fromEntries(Object.entries(values).map(([side, text]) => [side, Number(text.replace(',', '.').trim())])) as Record<keyof Margins, number>;
+    if (Object.values(numbers).some((value) => !Number.isFinite(value) || value < 0)) return setInvalid(t('pages.dialog.invalidMargins'));
+    close();
+    void cropPages(tab, parsed, { top: numbers.top * MM, right: numbers.right * MM, bottom: numbers.bottom * MM, left: numbers.left * MM });
+  };
+  const sides: Array<keyof Margins> = ['top', 'right', 'bottom', 'left'];
+  const label = { top: 'cropTop', right: 'cropRight', bottom: 'cropBottom', left: 'cropLeft' } as const;
+  return (
+    <Dialog
+      title={t('pages.dialog.cropTitle')}
+      onClose={close}
+      onSubmit={submit}
+      width={400}
+      testId="crop-pages-dialog"
+      actions={
+        <>
+          <DialogButton onClick={close}>{t('pages.dialog.cancel')}</DialogButton>
+          <DialogButton type="submit" primary testId="crop-pages-ok">
+            {t('pages.dialog.crop')}
+          </DialogButton>
+        </>
+      }
+    >
+      <PageRangeField value={range} onChange={(v) => (setRange(v), setInvalid(null))} invalid={null} pageCount={tab.pageCount} testId="crop-pages-input" />
+      <div className={styles.margins}>
+        {sides.map((side) => (
+          <label key={side} className={fieldStyles.field}>
+            <span>
+              {t(`pages.dialog.${label[side]}`)} ({t('pages.dialog.cropUnit')})
+            </span>
+            <input
+              className={fieldStyles.input}
+              inputMode="decimal"
+              value={values[side]}
+              onChange={(event) => (setValues({ ...values, [side]: event.target.value }), setInvalid(null))}
+              data-testid={`crop-${side}`}
+            />
+          </label>
+        ))}
+      </div>
+      <p className={fieldStyles.hint}>{t('pages.dialog.cropHint')}</p>
+      {invalid && (
+        <p className={fieldStyles.error} role="alert">
+          {invalid}
+        </p>
+      )}
     </Dialog>
   );
 }
@@ -506,5 +620,9 @@ export function PageDialogs({ dialog }: { dialog: PageDialog }) {
       return <ExtractDialog tab={tab} pages={dialog.pages} />;
     case 'split':
       return <SplitDialog tab={tab} />;
+    case 'replace':
+      return <ReplaceDialog tab={tab} pages={dialog.pages} source={dialog.source} />;
+    case 'crop':
+      return <CropDialog tab={tab} pages={dialog.pages} />;
   }
 }

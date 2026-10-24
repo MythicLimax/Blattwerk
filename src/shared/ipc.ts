@@ -62,7 +62,10 @@ export const IPC = {
   thumbnailsGet: 'thumbnails:get',
   thumbnailsSetFile: 'thumbnails:set-file',
   thumbnailsSetTemplate: 'thumbnails:set-template',
+  // Seiten aus einem anderen Fenster ziehen: das Zielfenster holt sie über den Hauptprozess beim Quellfenster ab
+  pagesFetch: 'pages:fetch',
   // Renderer → Hauptprozess (send)
+  pagesProvided: 'pages:provided',
   // Glasflächen für Apples Liquid Glass unter macOS 26+ (ADR 0023)
   glassRegions: 'glass:regions',
   menuState: 'app:menu-state',
@@ -89,6 +92,8 @@ export const IPC = {
   updateResult: 'update:result',
   // Eigene Vorlagen wurden in einem Fenster gesichert oder entfernt
   templatesChanged: 'templates:changed',
+  // Ein anderes Fenster will gezogene Seiten (Kennung des Ziehens); der Besitzer antwortet mit pagesProvided
+  pagesProvideRequest: 'pages:provide-request',
 } as const;
 
 // Vorschaubilder der Startseite: zuletzt geöffnete Dateien (nach Pfad) und Vorlagen (nach Kennung), als data:-Adresse
@@ -327,3 +332,10 @@ export type ExportTextResult = { ok: true; name: string } | { ok: false; error: 
 // Phase 7: digitale ID (PKCS#12)
 export type IdFileResult = { ok: true; name: string; bytes: Uint8Array } | { ok: false; error: 'cancelled' | 'unreadable' | 'invalid' };
 export type SaveIdResult = { ok: true; name: string } | { ok: false; error: SaveNewErrorCode; detail?: string };
+
+// Gezogene Seiten zwischen Fenstern: Kennung des Ziehens (zufällig, nur im Quellfenster bekannt)
+export const PAGE_DRAG_TOKEN = /^[a-z0-9]{16,64}$/;
+export interface PagesProvideRequest {
+  requestId: number;
+  token: string;
+}

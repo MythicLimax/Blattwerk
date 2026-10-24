@@ -16,6 +16,8 @@ import { TooltipHost } from '../components/Tooltip';
 import { SecurityDialog } from '../features/security/SecurityDialog';
 import { ExportImagesDialog } from '../features/export/ExportImagesDialog';
 import { CompressDialog } from '../features/compress/CompressDialog';
+import { CleanDialog } from '../features/clean/CleanDialog';
+import { startPageProvider } from '../features/pages/page-drag';
 import { OcrDialog } from '../features/ocr/OcrDialog';
 import { CertifyDialog, CreateIdDialog } from '../features/certify/CertifyDialogs';
 import { useCertify } from '../features/certify/certify-store';
@@ -71,6 +73,7 @@ export function App() {
   const securityDialogOpen = useUi((s) => s.securityDialogOpen);
   const exportImagesOpen = useUi((s) => s.exportImagesOpen);
   const compressOpen = useUi((s) => s.compressOpen);
+  const cleanOpen = useUi((s) => s.cleanOpen);
   const ocrOpen = useUi((s) => s.ocrOpen);
   const certifyOpen = useCertify((s) => s.dialogOpen);
   const createIdOpen = useCertify((s) => s.createOpen);
@@ -84,6 +87,8 @@ export function App() {
 
   // Lichtquelle der Glanzkanten folgt der Maus
   useEffect(() => trackPointerLight(), []);
+  // Seiten, die aus diesem Fenster in ein anderes gezogen werden, auf Anfrage liefern
+  useEffect(() => startPageProvider(), []);
   // macOS 26+: Apples Liquid Glass unter den durchsichtigen Bereichen
   useNativeGlass();
 
@@ -170,6 +175,7 @@ export function App() {
       {securityDialogOpen && active?.status === 'ready' && <SecurityDialog tab={active} />}
       {exportImagesOpen && active?.status === 'ready' && <ExportImagesDialog tab={active} />}
       {compressOpen && active?.status === 'ready' && <CompressDialog tab={active} />}
+      {cleanOpen && active?.status === 'ready' && <CleanDialog tab={active} />}
       {ocrOpen && active?.status === 'ready' && <OcrDialog tab={active} />}
       {certifyOpen && active?.status === 'ready' && <CertifyDialog tab={active} />}
       {createIdOpen && <CreateIdDialog />}

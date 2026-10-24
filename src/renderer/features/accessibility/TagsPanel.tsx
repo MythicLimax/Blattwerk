@@ -1,19 +1,64 @@
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pencil } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AccessibilityReport, TagNode } from '../../../shared/accessibility';
 import { DialogButton } from '../../components/Dialog';
-import { goToPage } from '../../engine/session';
+import { IconButton } from '../../components/IconButton';
+import { applyAccessibilityFix, goToPage } from '../../engine/session';
 import type { TabState } from '../../state/documents-store';
 import outline from '../outline/Outline.module.css';
 import { useAccessibility } from './accessibility-store';
 import { accessibilityReport } from './report';
 import styles from './Accessibility.module.css';
 
+// Rollen, die einen Alternativtext brauchen (PDF/UA): Abbildungen und Formeln
+const ALT_ROLES = new Set(['Figure', 'Formula']);
+
+// Alternativtext eines Elements eintragen (Enter übernimmt, Esc verwirft); leer entfernt ihn
+function AltEditor({ tab, node, onDone }: { tab: TabState; node: TagNode; onDone: () => void }) {
+  const { t } = useTranslation();
+  const [value, setValue] = useState(node.alt ?? '');
+  const save = () => {
+    onDone();
+    if (value.trim() !== (node.alt ?? '')) void applyAccessibilityFix(tab.id, { lang: null, title: null, elements: [{ id: node.id, alt: value }] });
+  };
+  return (
+    <form
+      className={styles.altEditor}
+      onSubmit={(event) => {
+        event.preventDefault();
+        save();
+      }}
+    >
+      <input
+        className={styles.altInput}
+        value={value}
+        autoFocus
+        maxLength={1000}
+        placeholder={t('accessibility.tags.altPlaceholder')}
+        aria-label={t('accessibility.tags.altLabel')}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onDone();
+          }
+        }}
+        data-testid="tag-alt-input"
+      />
+      <DialogButton type="submit" primary testId="tag-alt-save">
+        {t('accessibility.tags.altSave')}
+      </DialogButton>
+    </form>
+  );
+}
+
 // Ein Element der Tag-Struktur: Rolle, Zusatzangaben (Alternativtext, Sprache), Klick springt zur Seite
 function TagItem({ tab, node, depth }: { tab: TabState; node: TagNode; depth: number }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(depth < 2);
+  const [editing, setEditing] = useState(false);
+  const editable = ALT_ROLES.has(node.role) && tab.canModify && !tab.encrypted;
   const hasChildren = node.children.length > 0;
   const Chevron = open ? ChevronDown : ChevronRight;
   const detail = node.alt ?? node.actualText ?? node.title;
@@ -41,7 +86,9 @@ function TagItem({ tab, node, depth }: { tab: TabState; node: TagNode; depth: nu
           {missingAlt && <span className={styles.missing}> {t('accessibility.tags.noAlt')}</span>}
           {node.lang && <span className={styles.detail}> [{node.lang}]</span>}
         </button>
+        {editable && <IconButton icon={Pencil} size={14} label={t('accessibility.tags.altEdit')} onClick={() => setEditing(!editing)} data-testid="tag-alt-edit" />}
       </div>
+      {editing && <AltEditor tab={tab} node={node} onDone={() => setEditing(false)} />}
       {hasChildren && open && (
         <ul role="group" className={outline.list}>
           {node.children.map((child, index) => (

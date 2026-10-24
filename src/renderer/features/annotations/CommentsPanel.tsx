@@ -2,6 +2,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Circle,
   EyeOff,
+  FileDown,
   Highlighter,
   Minus,
   MoveUpRight,
@@ -20,13 +21,16 @@ import {
 import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Annotation, AnnotationKind, ReviewStatus } from '../../../shared/annotations';
-import { currentStatus, parsePdfDate, REVIEW_STATUSES, STAMP_STYLES } from '../../../shared/annotations';
+import { currentStatus, parsePdfDate, REVIEW_STATUSES, stampColor } from '../../../shared/annotations';
 import { IconButton } from '../../components/IconButton';
 import { getRuntime } from '../../engine/runtime';
 import { useAnnotations, useTabAnnotations } from '../../state/annotations-store';
 import type { TabState } from '../../state/documents-store';
 import { css } from './AnnotationShape';
 import { addReply, deleteAnnotation, deleteReply, editReply, setContents, setStatus } from './controller';
+import { authorsOf, commentSummary, filterKey, KIND_GROUPS, matches, parseFilterKey, sortComments, type CommentFilter, type CommentSort, type KindGroup } from './comment-list';
+import { api } from '../../api';
+import { useUi } from '../../state/ui-store';
 import styles from './CommentsPanel.module.css';
 
 const KIND_ICONS: Record<AnnotationKind, LucideIcon> = {
@@ -61,7 +65,7 @@ interface PageRow {
 
 // Sehr dunkle Farben (z. B. schwarzer Text) wären im Dunkelmodus unsichtbar: dann die Textfarbe nehmen.
 function iconColor(a: Annotation): string {
-  const color = a.kind === 'stamp' && a.label ? STAMP_STYLES[a.stamp].color : a.color;
+  const color = a.kind === 'stamp' && a.label ? stampColor(a) : a.color;
   const luminance = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
   return luminance < 0.2 ? 'var(--color-text)' : css(color);
 }
@@ -329,23 +333,39 @@ export function CommentsPanel({ tab }: { tab: TabState }) {
   const selectedId = annotations?.selectedId ?? null;
   const editingId = annotations?.editingId ?? null;
 
-  // Nach Seite und Position (von oben nach unten) sortiert, mit Seitenüberschriften
+  // Filter und Reihenfolge (je Liste; nach Seite mit Seitenüberschriften, sonst ohne)
+  const [filter, setFilter] = useState<CommentFilter>({ type: 'all' });
+  const [sort, setSort] = useState<CommentSort>('page');
+  const shownItems = useMemo(() => (items ?? []).filter((a) => matches(a, filter)), [items, filter]);
+  const authors = useMemo(() => authorsOf(items ?? []), [items]);
   const rows = useMemo<Row[]>(() => {
-    const sorted = [...(items ?? [])].sort(
-      (a, b) => a.pageIndex - b.pageIndex || b.rect[3] - a.rect[3] || a.rect[0] - b.rect[0],
-    );
+    const sorted = sortComments(shownItems, sort);
     const result: Row[] = [];
     let header: PageRow | undefined;
     for (const annotation of sorted) {
-      if (!header || header.pageIndex !== annotation.pageIndex) {
+      if (sort === 'page' && (!header || header.pageIndex !== annotation.pageIndex)) {
         header = { type: 'page', pageIndex: annotation.pageIndex, count: 0 };
         result.push(header);
       }
-      header.count++;
+      if (header) header.count++;
       result.push({ type: 'comment', annotation });
     }
     return result;
-  }, [items]);
+  }, [shownItems, sort]);
+
+  const exportSummary = async () => {
+    const text = commentSummary(shownItems, sort, {
+      title: t('comments.summary.title', { name: tab.name }),
+      page: (page) => t('comments.page', { page }),
+      kind: (a) => t(`tools.${a.kind === 'squiggly' ? 'underline' : a.kind}`),
+      status: (status) => t(`comments.status.${status}`),
+      reply: (author) => t('comments.summary.reply', { author }),
+      date: formatDate,
+    });
+    const result = await api.exportText(text, t('comments.summary.fileName', { name: tab.name.replace(/\.pdf$/i, '') }), tab.fileId);
+    if (result.ok) useUi.getState().confirm(t('export.textDone', { name: result.name }));
+    else if (result.error !== 'cancelled') useUi.getState().notify(t('export.failed'), result.detail ?? result.error);
+  };
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -370,10 +390,65 @@ export function CommentsPanel({ tab }: { tab: TabState }) {
   return (
     <div className={styles.panel} data-testid="comments-panel">
       <div className={styles.summary}>
-        {annotations?.loaded === false ? t('comments.loading') : t('comments.count', { count })}
+        {annotations?.loaded === false
+          ? t('comments.loading')
+          : filter.type === 'all'
+            ? t('comments.count', { count })
+            : t('comments.countFiltered', { shown: shownItems.length, count })}
       </div>
+      {count > 0 && (
+        <div className={styles.listTools}>
+          <select
+            className={styles.listSelect}
+            aria-label={t('comments.filter.label')}
+            data-tooltip={t('comments.filter.label')}
+            value={filterKey(filter)}
+            onChange={(event) => setFilter(parseFilterKey(event.target.value))}
+            data-testid="comments-filter"
+          >
+            <option value="all">{t('comments.filter.all')}</option>
+            <optgroup label={t('comments.filter.kind')}>
+              {(Object.keys(KIND_GROUPS) as KindGroup[]).map((group) => (
+                <option key={group} value={filterKey({ type: 'kind', group })}>
+                  {t(`comments.filter.groups.${group}`)}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label={t('comments.filter.status')}>
+              {REVIEW_STATUSES.map((status) => (
+                <option key={status} value={filterKey({ type: 'status', status })}>
+                  {t(`comments.status.${status}`)}
+                </option>
+              ))}
+            </optgroup>
+            {authors.length > 0 && (
+              <optgroup label={t('comments.filter.author')}>
+                {authors.map((author) => (
+                  <option key={author} value={filterKey({ type: 'author', author })}>
+                    {author}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          <select
+            className={styles.listSelect}
+            aria-label={t('comments.sort.label')}
+            data-tooltip={t('comments.sort.label')}
+            value={sort}
+            onChange={(event) => setSort(event.target.value as CommentSort)}
+            data-testid="comments-sort"
+          >
+            <option value="page">{t('comments.sort.page')}</option>
+            <option value="date">{t('comments.sort.date')}</option>
+            <option value="author">{t('comments.sort.author')}</option>
+          </select>
+          <IconButton icon={FileDown} label={t('comments.summary.export')} size={16} onClick={() => void exportSummary()} disabled={shownItems.length === 0} data-testid="comments-export" />
+        </div>
+      )}
       <div ref={scrollRef} className={styles.scroller}>
         {count === 0 && annotations?.loaded !== false && <p className={styles.empty}>{t('comments.empty')}</p>}
+        {count > 0 && shownItems.length === 0 && <p className={styles.empty}>{t('comments.filter.none')}</p>}
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {virtualizer.getVirtualItems().map((item) => {
             const row = rows[item.index];

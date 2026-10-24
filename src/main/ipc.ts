@@ -27,6 +27,7 @@ import {
   type TabDragMessage,
   type TabTransfer,
   type TabTransferResult,
+  PAGE_DRAG_TOKEN,
 } from '../shared/ipc';
 import { PRODUCT_NAME } from '../shared/product';
 import {
@@ -680,6 +681,37 @@ export function registerIpc(ctx: IpcContext): void {
     const win = windowOf(event);
     const valid = validateTabDragHoverState(state);
     if (win && valid) ctx.onTabDragHoverState(win, valid);
+  });
+
+  // Seiten aus einem anderen Fenster: alle Fenster fragen, der Besitzer der Kennung antwortet (sonst nach 30 s nichts)
+  const pageRequests = new Map<number, (bytes: Uint8Array | null) => void>();
+  let nextPageRequest = 1;
+  handle(IPC.pagesFetch, (event, token: unknown): Promise<Uint8Array | null> => {
+    if (typeof token !== 'string' || !PAGE_DRAG_TOKEN.test(token)) return Promise.resolve(null);
+    const requestId = nextPageRequest++;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pageRequests.delete(requestId);
+        resolve(null);
+      }, 30_000);
+      pageRequests.set(requestId, (bytes) => {
+        clearTimeout(timer);
+        pageRequests.delete(requestId);
+        resolve(bytes);
+      });
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed() && win.webContents !== event.sender) win.webContents.send(IPC.pagesProvideRequest, { requestId, token });
+      }
+    });
+  });
+
+  ipcMain.on(IPC.pagesProvided, (event, requestId: unknown, bytes: unknown) => {
+    if (!ctx.isTrustedSender(event) || typeof requestId !== 'number') return;
+    const done = pageRequests.get(requestId);
+    if (!done) return;
+    // Nur ein PDF bis 1 GB; sonst gilt die Quelle als nicht verfügbar
+    const valid = bytes instanceof Uint8Array && bytes.length <= 1024 * 1024 * 1024 && isPdfBytes(bytes) ? bytes : null;
+    done(valid);
   });
 
   ipcMain.on(IPC.closeWindow, (event) => {

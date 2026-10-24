@@ -23,6 +23,7 @@ import type { SecuritySettings } from '../../shared/security';
 import type { SignRequestInput } from '../../shared/signing';
 import type { AccessibilityFix } from '../../shared/accessibility';
 import type { CompressionLevel } from '../../shared/compress';
+import type { CleanFindings, CleanOptions } from '../../shared/clean';
 import { historyDirty, tabHistory, useHistory, type DocState, type Leaving } from '../state/history-store';
 import type { AnnotationChanges } from '../../shared/annotations';
 import { exportText } from '../features/export/actions';
@@ -42,7 +43,7 @@ import type { PageOperation } from '../../shared/pages';
 import { EMPTY_SEARCH, getActiveTab, useDocuments, type TabState } from '../state/documents-store';
 import { useUi, type PromptAnswer } from '../state/ui-store';
 import { openTemporary, startLoading } from './document-loader';
-import { checkSignatures, compressDocument, fixAccessibility, PdfiumClientError, processDocument, protectDocument, readSecurity, redactDocument, signWithCertificate } from './pdfium-client';
+import { checkSignatures, cleanDocument, compressDocument, findCleanable, fixAccessibility, PdfiumClientError, processDocument, protectDocument, readSecurity, redactDocument, signWithCertificate } from './pdfium-client';
 import { pdfjs } from './pdfjs';
 import { createRuntime, destroyRuntime, dispatchFind, getRuntime, rememberScroll, setRuntimeDocument } from './runtime';
 
@@ -657,6 +658,47 @@ export function applyProtection(tabId: string, settings: SecuritySettings | null
 }
 
 // PDF verkleinern (Phase 6, ADR 0013): neuer, vollständig neu geschriebener Stand, nur wenn er kleiner ist
+// Dokument bereinigen: neuer Stand ohne die gewählten Inhalte, vollständig neu geschrieben
+export function applyCleaning(tabId: string, options: CleanOptions): Promise<boolean> {
+  commitPendingEdits();
+  if (findTab(tabId)?.working) return Promise.resolve(false);
+  return enqueue(tabId, async () => {
+    const tab = findTab(tabId);
+    const runtime = getRuntime(tabId);
+    if (!tab || tab.status !== 'ready' || tab.saving || !runtime?.pdf) return false;
+    const pdf = runtime.pdf;
+    const ui = useUi.getState();
+    ui.setBusy('clean.busy');
+    try {
+      const pending = await pendingChanges(tabId);
+      const bytes = await cleanDocument(await pdf.getData(), runtime.password, { ...pending, options });
+      if (getRuntime(tabId)?.pdf !== pdf) return false;
+      const next = { bytes, annotations: null, page: tab.currentPage, selection: [], password: runtime.password };
+      useHistory.getState().push(tabId, leavingState(tabId, tab, false), next);
+      rememberScroll(tabId);
+      await showState(tabId, next);
+      ui.confirm(t('clean.done'));
+      return true;
+    } catch (error) {
+      ui.notify(operationErrorMessage(error, 'clean.failed'), errorMessage(error));
+      return false;
+    } finally {
+      ui.setBusy(null);
+    }
+  });
+}
+
+// Was das Dokument an Bereinigbarem enthält (Dialog)
+export async function cleanableOf(tabId: string): Promise<CleanFindings | null> {
+  const pdf = getRuntime(tabId)?.pdf;
+  if (!pdf) return null;
+  try {
+    return await findCleanable(await pdf.getData());
+  } catch {
+    return null;
+  }
+}
+
 export function applyCompression(tabId: string, level: CompressionLevel): Promise<boolean> {
   commitPendingEdits();
   if (findTab(tabId)?.working) return Promise.resolve(false);
@@ -1048,6 +1090,14 @@ export function executeCommand(command: CommandId): void {
   if (command === 'tools.compare') {
     const active = getActiveTab();
     if (active?.status === 'ready' && !active.working) void compareWithFile(active);
+    return;
+  }
+  if (command === 'tools.clean') {
+    const active = getActiveTab();
+    if (active?.status !== 'ready' || active.working) return;
+    if (active.encrypted) ui.notify(t('errors.pages.clean-encrypted'));
+    else if (!active.canModify) ui.notify(t('contentEdit.notAllowed'));
+    else ui.setCleanOpen(true);
     return;
   }
   if (command === 'tools.compress') {

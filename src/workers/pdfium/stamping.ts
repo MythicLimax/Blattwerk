@@ -4,7 +4,9 @@
 // (PDFium würde beim Hinzufügen den ganzen Seiteninhalt neu schreiben). Die Ströme tragen im Wörterbuch die Kennung
 // /BlattwerkArtifact, damit „Entfernen“ genau sie findet, und im Inhalt /Artifact-Marken (Pagination), wie Acrobat sie
 // für Wasserzeichen und Kopfzeilen schreibt. Gespeichert wird inkrementell.
+import fontkit from '@cantoo/fontkit';
 import { PDFArray, PDFDocument, PDFName, PDFRawStream, PDFRef, StandardFonts, type PDFFont, type PDFPage } from '@cantoo/pdf-lib';
+import { embeddingAllowed, isSystemFontKey, type TextFont } from '../../shared/fonts';
 import {
   expandTokens,
   visualToUser,
@@ -16,7 +18,7 @@ import {
   type WatermarkSpec,
 } from '../../shared/stamping';
 
-export type StampErrorCode = 'stamp-encrypted' | 'stamp-characters' | 'stamp-nothing' | 'stamp-image';
+export type StampErrorCode = 'stamp-encrypted' | 'stamp-characters' | 'stamp-nothing' | 'stamp-image' | 'stamp-font';
 
 export class StampError extends Error {
   constructor(
@@ -68,17 +70,26 @@ function visual(page: PDFPage) {
 
 class Stamper {
   readonly #doc: PDFDocument;
-  readonly #fonts = new Map<StampFont, PDFFont>();
+  readonly #fonts = new Map<TextFont, PDFFont>();
   #wrap: { start: PDFRef; end: PDFRef } | null = null;
 
   constructor(doc: PDFDocument) {
     this.#doc = doc;
   }
 
-  async #font(font: StampFont): Promise<PDFFont> {
+  // Standardschrift (nicht eingebettet) oder Schrift des Rechners (als Teilschrift eingebettet, ADR 0024)
+  async #font(font: TextFont, data?: ArrayBuffer): Promise<PDFFont> {
     let embedded = this.#fonts.get(font);
     if (!embedded) {
-      embedded = await this.#doc.embedFont(FONTS[font]);
+      if (isSystemFontKey(font)) {
+        const bytes = data ? new Uint8Array(data) : null;
+        if (!bytes) throw new StampError('stamp-font', `Schriftdaten fehlen: ${font}`);
+        if (!embeddingAllowed(bytes)) throw new StampError('stamp-font', `Einbetten nicht erlaubt: ${font}`);
+        this.#doc.registerFontkit(fontkit);
+        embedded = await this.#doc.embedFont(bytes, { subset: true });
+      } else {
+        embedded = await this.#doc.embedFont(FONTS[font]);
+      }
       this.#fonts.set(font, embedded);
     }
     return embedded;
@@ -124,7 +135,7 @@ class Stamper {
     if (spec.kind === 'text') {
       const text = spec.text.trim();
       if (!text) return;
-      const font = await this.#font(spec.font);
+      const font = await this.#font(spec.font, spec.fontData);
       const hex = this.#encode(font, text);
       const widthAt1 = font.widthOfTextAtSize(text, 1);
       for (const index of pages) {
@@ -224,7 +235,7 @@ class Stamper {
   async headerFooter(spec: HeaderFooterSpec): Promise<void> {
     const pages = targetPages(this.#doc, spec.pages);
     if (pages.length === 0) return;
-    const font = await this.#font(spec.font);
+    const font = await this.#font(spec.font, spec.fontData);
     const first = pages[0] as number;
     const last = pages.at(-1) as number;
     const total = spec.startNumber + (last - first);

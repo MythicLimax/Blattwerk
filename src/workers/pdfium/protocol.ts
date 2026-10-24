@@ -7,6 +7,7 @@ import type { StampOperation } from '../../shared/stamping';
 import type { ContentOperation, PageObjects } from '../../shared/content';
 import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
 import type { CompressionLevel } from '../../shared/compress';
+import type { CleanFindings, CleanOptions } from '../../shared/clean';
 import type { CompareLabels } from '../../shared/compare';
 import type { SignatureCheck, SignRequestInput } from '../../shared/signing';
 import type { PdfAReport } from '../../shared/pdfa';
@@ -158,6 +159,26 @@ export interface PdfARequest {
   // CMYK-Profil für DefaultCMYK (aus den Ressourcen von pdf.js)
   cmykProfile: ArrayBuffer | null;
   producer: string;
+  // Schriften des Rechners für nicht eingebettete Schriften (Schriftname aus der PDF → TrueType-Daten)
+  systemFonts: Array<{ baseFont: string; data: ArrayBuffer }>;
+}
+
+// Dokument bereinigen: Kommentare und Formularwerte übernehmen, dann Gewähltes entfernen und vollständig neu schreiben
+export interface CleanRequest {
+  id: number;
+  type: 'clean';
+  bytes: ArrayBuffer;
+  password: string | null;
+  changes: AnnotationChanges;
+  formValues: FormFieldValue[];
+  options: CleanOptions;
+}
+
+// Was sich bereinigen lässt (für den Dialog)
+export interface FindCleanableRequest {
+  id: number;
+  type: 'findCleanable';
+  bytes: ArrayBuffer;
 }
 
 // Auf PDF/A prüfen
@@ -238,6 +259,8 @@ export type WorkerRequest =
   | PageTextRequest
   | CloseSessionRequest
   | CompressRequest
+  | CleanRequest
+  | FindCleanableRequest
   | CompareRequest
   | SignRequest
   | VerifySignaturesRequest
@@ -255,6 +278,7 @@ export type WorkerErrorCode =
   | 'invalid'
   | 'range'
   | 'all-pages'
+  | 'crop-too-small'
   | 'image'
   | 'import'
   | 'form'
@@ -264,11 +288,13 @@ export type WorkerErrorCode =
   | 'redact-encrypted'
   | 'stamp-encrypted'
   | 'stamp-characters'
+  | 'stamp-font'
   | 'stamp-nothing'
   | 'stamp-image'
   | 'content-missing'
   | 'content-characters'
   | 'compress-encrypted'
+  | 'clean-encrypted'
   | 'sign-password'
   | 'sign-certificate'
   | 'sign-encrypted'
@@ -289,6 +315,7 @@ export type WorkerResponse =
   | { id: number; ok: true; kind: 'done' }
   | { id: number; ok: true; kind: 'signatures'; checks: SignatureCheck[] }
   | { id: number; ok: true; kind: 'pdfa'; report: PdfAReport }
+  | { id: number; ok: true; kind: 'cleanable'; findings: CleanFindings }
   | { id: number; ok: true; kind: 'accessibility'; report: AccessibilityReport }
   // Bytes, die kein PDF sind (z. B. eine .p12-Datei)
   | { id: number; ok: true; kind: 'raw'; bytes: ArrayBuffer }

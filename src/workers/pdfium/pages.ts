@@ -1,8 +1,8 @@
 // Seitenoperationen mit PDFium (Phase 3): drehen, löschen, verschieben, einfügen, neue Dokumente zusammensetzen.
 // Wird nur von engine.ts aufgerufen; Puffer, die PDFium noch braucht, leben bis nach dem Speichern.
 import { imagePageLayout } from '../../shared/image-info';
-import type { ComposePart, ImageSource, PageOperation, PdfSource } from '../../shared/pages';
-import type { Pdfium } from './memory';
+import { marginsToUser, MIN_CROPPED_SIZE, type ComposePart, type ImageSource, type Margins, type PageOperation, type PdfSource } from '../../shared/pages';
+import { withBuffer, type Pdfium } from './memory';
 
 // Fehlercodes von FPDF_GetLastError
 const ERR_PASSWORD = 4;
@@ -10,7 +10,7 @@ const ERR_PASSWORD = 4;
 export class PageOperationError extends Error {
   constructor(
     // Schlüssel für die Fehlermeldung in der Oberfläche (errors.pages.*)
-    readonly code: 'password' | 'invalid' | 'range' | 'all-pages' | 'image' | 'import',
+    readonly code: 'password' | 'invalid' | 'range' | 'all-pages' | 'image' | 'import' | 'crop-too-small',
     message: string,
   ) {
     super(message);
@@ -104,6 +104,27 @@ function insertImage(m: Pdfium, doc: number, at: number, image: ImageSource, mem
   }
 }
 
+// Schneidet eine Seite zu: sichtbarer Bereich (CropBox) wird um die Ränder kleiner; der Inhalt bleibt erhalten
+function cropPage(m: Pdfium, doc: number, index: number, margins: Margins): void {
+  const page = m.FPDF_LoadPage(doc, index);
+  if (!page) throw new PageOperationError('range', `Seite ${index + 1} lässt sich nicht laden`);
+  try {
+    const read = (fn: 'FPDFPage_GetCropBox' | 'FPDFPage_GetMediaBox') =>
+      withBuffer(m, 16, (ptr) => (m[fn](page, ptr, ptr + 4, ptr + 8, ptr + 12) ? [0, 4, 8, 12].map((offset) => m.pdfium.getValue(ptr + offset, 'float') as number) : null));
+    const [l = 0, b = 0, r = 0, t = 0] = read('FPDFPage_GetCropBox') ?? read('FPDFPage_GetMediaBox') ?? [];
+    const rotation = ((m.FPDFPage_GetRotation(page) % 4) * 90) as 0 | 90 | 180 | 270;
+    const user = marginsToUser(margins, rotation);
+    const left = Math.min(l, r) + user.left;
+    const right = Math.max(l, r) - user.right;
+    const bottom = Math.min(b, t) + user.bottom;
+    const top = Math.max(b, t) - user.top;
+    if (right - left < MIN_CROPPED_SIZE || top - bottom < MIN_CROPPED_SIZE) throw new PageOperationError('crop-too-small', `Seite ${index + 1} wäre zu klein`);
+    m.FPDFPage_SetCropBox(page, left, bottom, right, top);
+  } finally {
+    m.FPDF_ClosePage(page);
+  }
+}
+
 // Wendet eine Operation auf ein geöffnetes Dokument an.
 export function applyPageOperation(m: Pdfium, doc: number, op: PageOperation, memory: Allocations): void {
   const pageCount = m.FPDF_GetPageCount(doc);
@@ -157,6 +178,12 @@ export function applyPageOperation(m: Pdfium, doc: number, op: PageOperation, me
     case 'insertImages': {
       const at = checkPosition(op.at, pageCount);
       op.images.forEach((image, k) => insertImage(m, doc, at + k, image, memory));
+      return;
+    }
+    case 'crop': {
+      const values = [op.margins.top, op.margins.right, op.margins.bottom, op.margins.left];
+      if (values.some((v) => !Number.isFinite(v) || v < 0)) throw new PageOperationError('range', 'Ungültige Ränder');
+      for (const index of checkPages(op.pages, pageCount)) cropPage(m, doc, index, op.margins);
       return;
     }
   }

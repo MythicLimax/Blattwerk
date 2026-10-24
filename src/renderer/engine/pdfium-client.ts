@@ -4,6 +4,7 @@
 import type { AnnotationChanges } from '../../shared/annotations';
 import type { DocumentSecurity, SecuritySettings } from '../../shared/security';
 import type { CompressionLevel } from '../../shared/compress';
+import type { CleanFindings, CleanOptions } from '../../shared/clean';
 import type { CompareLabels } from '../../shared/compare';
 import type { SignatureCheck, SignRequestInput } from '../../shared/signing';
 import type { PdfAReport } from '../../shared/pdfa';
@@ -252,6 +253,24 @@ export function compressDocument(
   return bytesOf(send({ type: 'compress', bytes: buffer, password, ...input }, [buffer]));
 }
 
+// Bereinigen: liefert das vollständig neu geschriebene Dokument. Die Bytes gehen an den Worker.
+export function cleanDocument(
+  bytes: Uint8Array,
+  password: string | null,
+  input: { changes: AnnotationChanges; formValues: FormFieldValue[]; options: CleanOptions },
+): Promise<Uint8Array> {
+  const buffer = ownBuffer(bytes);
+  return bytesOf(send({ type: 'clean', bytes: buffer, password, ...input }, [buffer]));
+}
+
+// Was sich bereinigen lässt. Die Bytes bleiben beim Aufrufer nutzbar.
+export async function findCleanable(bytes: Uint8Array): Promise<CleanFindings> {
+  const buffer = bytes.slice().buffer as ArrayBuffer;
+  const response = await send({ type: 'findCleanable', bytes: buffer }, [buffer]);
+  if (response.kind !== 'cleanable') throw new PdfiumClientError('failed', 'unerwartete Antwort');
+  return response.findings;
+}
+
 // Zwei Dokumente vergleichen: liefert den Vergleichsbericht als neues PDF. Die Bytes gehen an den Worker.
 export function compareDocuments(
   oldDoc: { bytes: Uint8Array; password: string | null },
@@ -295,7 +314,7 @@ export async function createIdentity(input: { name: string; organization: string
 export function convertToPdfA(
   bytes: Uint8Array,
   password: string | null,
-  input: { changes: AnnotationChanges; formValues: FormFieldValue[]; cmykProfile: ArrayBuffer | null; producer: string },
+  input: { changes: AnnotationChanges; formValues: FormFieldValue[]; cmykProfile: ArrayBuffer | null; producer: string; systemFonts: Array<{ baseFont: string; data: ArrayBuffer }> },
 ): Promise<Uint8Array> {
   const buffer = ownBuffer(bytes);
   return bytesOf(send({ type: 'pdfa', bytes: buffer, password, ...input }, input.cmykProfile ? [buffer, input.cmykProfile] : [buffer]));

@@ -85,3 +85,13 @@ Die Oberflächentests (`test/e2e/edit.spec.ts`) prüfen den ganzen Weg von der M
 - **Verschlüsselte Dokumente:** Markieren geht, Anwenden erst nach dem Entfernen des Kennwortschutzes (Phase 6). pdf-lib würde neue Zeichenketten unverschlüsselt schreiben.
 - **Vektorgrafik, die den Bereich nur teilweise berührt**, bleibt vollständig erhalten und ist an der Stelle schwarz überdeckt. Das gilt auch für Pfade in Formular-XObjects. Umrisse einzelner Buchstaben liegen fast immer ganz im Bereich und werden entfernt.
 - **Lesezeichen, Dateianhänge und Dokument-JavaScript** werden nicht automatisch durchsucht. Acrobat bietet dafür „Dokument bereinigen“; das ist ein möglicher späterer Schritt.
+
+## Nachtrag 2026-10-24: Dokument bereinigen
+
+„Werkzeuge → Dokument bereinigen …“ entfernt versteckte Informationen, wie „Ausgeblendete Informationen entfernen“
+in Acrobat: Metadaten (Dokumentinformationen und XMP), Dateianhänge (eingebettete Dateien, Anhänge als Kommentar,
+`/AF`), JavaScript und ausführende Aktionen (Dokument-JavaScript, `/OpenAction`, `/AA` an Dokument, Seiten,
+Kommentaren und Feldern; auch als Folgeaktion `/Next`) sowie auf Wunsch die Lesezeichen. Sprünge zu Seiten und Weblinks
+bleiben. Danach werden unerreichbare Objekte verworfen und die Datei vollständig neu geschrieben, wie beim Schwärzen
+(`clean.ts`, pdf-lib). Der Dialog bietet nur an, was das Dokument enthält. Verschlüsselte Dokumente erst nach dem
+Entfernen des Kennwortschutzes.

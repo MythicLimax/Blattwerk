@@ -7,7 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { COMMENTS_PDF, fixture, imageFixture, PASSWORDS, TEXT_PDF } from '../fixtures/expectations';
-import { expectWindowCount, launchApp, menuClick, removeTempDir, waitForDocument, windowWithTitle, type AppHandle } from './app';
+import { expectWindowCount, launchApp, menuClick, menuItemState, removeTempDir, waitForDocument, windowWithTitle, type AppHandle } from './app';
 import { inspectWithPdfKit } from './pdfkit';
 
 const require = createRequire(import.meta.url);
@@ -336,4 +336,89 @@ test.describe('Seiten organisieren', () => {
     await expect(page.getByTestId('organize-extract')).toBeEnabled();
     await close();
   });
+});
+
+test('Seiten ersetzen und zuschneiden', async () => {
+  const { page, app, file, close } = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+  // Seiten 2 und 3 durch die Seiten 4 und 5 einer zweiten Kopie ersetzen
+  await stubDialogs(app, [[fixture(TEXT_PDF.file)]]);
+  await menuClick(app, 'pages.replace');
+  await expect(page.getByTestId('replace-pages-dialog')).toBeVisible();
+  await page.getByTestId('replace-targets').fill('2-3');
+  await page.getByTestId('replace-sources').fill('4');
+  await page.getByTestId('replace-pages-ok').click();
+  await expect(page.getByTestId('replace-pages-dialog')).toContainText('gleich viele Seiten');
+  await page.getByTestId('replace-sources').fill('4-5');
+  await page.getByTestId('replace-pages-ok').click();
+  await waitForDocument(page, TEXT_PDF.pages);
+
+  // Seite 1 oben um 20 mm zuschneiden (erst, wenn das Ersetzen fertig ist; unten steht die Fußzeile)
+  await expect(page.getByTestId('replace-pages-dialog')).toHaveCount(0);
+  await expect.poll(() => menuItemState(app, 'pages.crop')).toMatchObject({ enabled: true });
+  await expect(async () => {
+    await menuClick(app, 'pages.crop');
+    await expect(page.getByTestId('crop-pages-dialog')).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+  await page.getByTestId('crop-pages-input').fill('1');
+  for (const [side, value] of [['top', '20'], ['bottom', '0'], ['left', '0'], ['right', '0']] as const) await page.getByTestId(`crop-${side}`).fill(value);
+  await page.getByTestId('crop-pages-ok').click();
+  await waitForDocument(page, TEXT_PDF.pages);
+  await save(page, app);
+
+  expect(await footers(file)).toEqual([1, 4, 5, ...Array.from({ length: TEXT_PDF.pages - 3 }, (_, i) => i + 4)]);
+  const { PDFDocument } = await import('@cantoo/pdf-lib');
+  const doc = await PDFDocument.load(readFileSync(file));
+  const media = doc.getPage(0).getMediaBox();
+  const crop = doc.getPage(0).getCropBox();
+  expect(media.height - crop.height).toBeCloseTo((20 * 72) / 25.4, 1);
+  expect(crop.y).toBeCloseTo(media.y, 1);
+  expect(crop.width).toBeCloseTo(media.width, 1);
+  expect(doc.getPage(1).getCropBox().height).toBeCloseTo(doc.getPage(1).getMediaBox().height, 1);
+  await close();
+});
+
+test('Seiten aus einem anderen Fenster ins Seitenraster ziehen: Kopie samt Inhalt', async () => {
+  const dir = tempDir();
+  const target = path.join(dir, 'ziel.pdf');
+  const source = path.join(dir, 'quelle.pdf');
+  copyFileSync(fixture(TEXT_PDF.file), target);
+  copyFileSync(fixture(TEXT_PDF.file), source);
+  const { app, close } = await launchApp([target, source], { userData: dir });
+  await expectWindowCount(app, 2);
+  const from = await windowWithTitle(app, 'quelle.pdf');
+  const to = await windowWithTitle(app, 'ziel.pdf');
+  await waitForDocument(from, TEXT_PDF.pages);
+  await waitForDocument(to, TEXT_PDF.pages);
+  await organize(from);
+  await organize(to);
+
+  // Seiten 2 und 3 der Quelle auswählen und das Ziehen beginnen (wie der Browser es täte)
+  await cell(from, 2).click();
+  await cell(from, 3).click({ modifiers: ['Shift'] });
+  const data = await cell(from, 2).evaluate((element) => {
+    const transfer = new DataTransfer();
+    element.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    return Object.fromEntries(transfer.types.map((type) => [type, transfer.getData(type)]));
+  });
+  expect(Object.keys(data)).toContain('application/x-blattwerk-page-transfer');
+
+  // Im anderen Fenster vor Seite 1 ablegen
+  await cell(to, 1).evaluate((element, entries) => {
+    const transfer = new DataTransfer();
+    for (const [type, value] of Object.entries(entries)) if (type !== 'application/x-blattwerk-pages') transfer.setData(type, value);
+    const box = element.getBoundingClientRect();
+    const at = { clientX: box.left + 5, clientY: box.top + box.height / 2 };
+    element.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer, ...at }));
+    element.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer, ...at }));
+  }, data);
+  await expect(to.getByTestId('organize-page')).toHaveCount(TEXT_PDF.pages + 2);
+  await expect(from.getByTestId('organize-page')).toHaveCount(TEXT_PDF.pages);
+  // Sichern im Zielfenster (Menübefehle gingen an das vordere Fenster)
+  await to.getByTestId('organize-close').click();
+  await waitForDocument(to, TEXT_PDF.pages + 2);
+  await to.getByTestId('save-button').click();
+  await expect(to.getByTestId('tab-dirty')).toHaveCount(0);
+  expect((await footers(target)).slice(0, 4)).toEqual([2, 3, 1, 2]);
+  expect(await footers(source)).toEqual(Array.from({ length: TEXT_PDF.pages }, (_, i) => i + 1));
+  await close();
 });

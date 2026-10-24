@@ -53,6 +53,8 @@ class TreeReader {
   readonly figures: TagNode[] = [];
   readonly headings: number[] = [];
   readonly tables: TagNode[] = [];
+  // Element-Wörterbücher nach TagNode.id
+  readonly dicts: PDFDict[] = [];
 
   constructor(private readonly doc: PDFDocument) {
     doc.getPages().forEach((page, i) => this.pageIndex.set(page.ref, i));
@@ -106,10 +108,12 @@ class TreeReader {
       return null;
     }
     seen.add(dict);
-    this.nodes++;
+    const id = this.nodes++;
+    this.dicts[id] = dict;
     const custom = nameOf(dict.get(N('S'))) ?? '?';
     const role = this.standardRole(custom);
     const node: TagNode = {
+      id,
       role,
       customRole: role !== custom ? custom : null,
       title: textOf(dict.lookup(N('T'))),
@@ -248,10 +252,44 @@ export async function checkAccessibility(bytes: Uint8Array): Promise<Accessibili
   return { tagged, lang, title, checks, tree, truncated: reader.truncated };
 }
 
+// Inkrementelles Speichern schreibt nur geänderte indirekte Objekte. Steht das Element direkt in einem anderen
+// (z. B. in /K eines Elternelements), wird das indirekte Objekt, in dem es steckt, als geändert gemeldet.
+function markChanged(doc: PDFDocument, dict: PDFDict): void {
+  const holder = [...doc.context.enumerateIndirectObjects()].find(([, object]) => object === dict || (object instanceof PDFDict && contains(object, dict, 0)));
+  const ref = holder?.[0];
+  const target = holder?.[1];
+  if (ref && target) doc.context.assign(ref, target);
+}
+
+function contains(object: PDFObject, dict: PDFDict, depth: number): boolean {
+  if (depth > 64) return false;
+  if (object === dict) return true;
+  if (object instanceof PDFDict) return [...object.entries()].some(([, value]) => !(value instanceof PDFRef) && contains(value, dict, depth + 1));
+  if (object instanceof PDFArray) return object.asArray().some((value) => !(value instanceof PDFRef) && contains(value, dict, depth + 1));
+  return false;
+}
+
 // Sprache, Titel, Titelanzeige und Tab-Reihenfolge setzen (inkrementell)
 export async function fixAccessibility(bytes: Uint8Array, fix: AccessibilityFix): Promise<Uint8Array> {
   const doc = await PDFDocument.load(bytes, { forIncrementalUpdate: true, updateMetadata: false, ignoreEncryption: true, throwOnInvalidObject: false });
   if (doc.isEncrypted) throw new Error('verschlüsselt');
+  if (fix.elements) {
+    // Gleiche Reihenfolge wie beim Auslesen: die Nummern passen zum angezeigten Baum
+    const root = doc.catalog.lookup(N('StructTreeRoot'));
+    const reader = new TreeReader(doc);
+    if (root instanceof PDFDict) reader.read(root.get(N('K')), 0, new Set());
+    for (const edit of fix.elements) {
+      const dict = reader.dicts[edit.id];
+      if (!dict) throw new Error(`Element ${edit.id} fehlt`);
+      for (const [key, value] of [['Alt', edit.alt], ['ActualText', edit.actualText]] as const) {
+        if (value === undefined) continue;
+        if (value.trim() === '') dict.delete(N(key));
+        else dict.set(N(key), PDFHexString.fromText(value.trim()));
+      }
+      markChanged(doc, dict);
+    }
+    return doc.commit({ useObjectStreams: false });
+  }
   if (fix.lang) doc.catalog.set(N('Lang'), PDFHexString.fromText(fix.lang));
   if (fix.title) {
     let info = doc.context.lookup(doc.context.trailerInfo.Info);

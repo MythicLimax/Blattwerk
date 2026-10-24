@@ -1,6 +1,7 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Rgb } from '../../../shared/annotations';
+import { systemFontKey, type TextFont } from '../../../shared/fonts';
 import { parsePageRanges, type ImageSource } from '../../../shared/pages';
 import {
   EMPTY_TEXTS,
@@ -12,7 +13,6 @@ import {
   type HorizontalAlign,
   type PageNumberFormat,
   type PageNumberPosition,
-  type StampFont,
   type VerticalAlign,
 } from '../../../shared/stamping';
 import { Dialog, DialogButton } from '../../components/Dialog';
@@ -22,6 +22,7 @@ import fieldStyles from '../password/PasswordDialog.module.css';
 import { imageSource, pickSources } from '../pages/actions';
 import pageStyles from '../pages/PageDialogs.module.css';
 import { mmToPt, runStamp, today } from './actions';
+import { fontLabel, useSystemFonts } from '../content-edit/system-fonts';
 import styles from './StampDialogs.module.css';
 
 const close = () => useUi.getState().setStampDialog(null);
@@ -65,15 +66,35 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function FontSelect({ value, onChange }: { value: StampFont; onChange: (font: StampFont) => void }) {
+// Standardschriften (Westeuropa) und Schriften des Rechners (alle Schriftsysteme, werden eingebettet; ADR 0024)
+function FontSelect({ value, onChange }: { value: TextFont; onChange: (font: TextFont) => void }) {
   const { t } = useTranslation();
+  const systemFonts = useSystemFonts((s) => s.fonts);
+  useEffect(() => useSystemFonts.getState().load(), []);
+  const styleNames = { bold: t('contentEdit.fontStyles.bold'), italic: t('contentEdit.fontStyles.italic'), boldItalic: t('contentEdit.fontStyles.boldItalic') };
   return (
-    <select className={pageStyles.select} value={value} onChange={(event) => onChange(event.target.value as StampFont)}>
-      {STAMP_FONTS.map((font) => (
-        <option key={font} value={font}>
-          {t(`stamp.fonts.${font}`)}
-        </option>
-      ))}
+    <select className={pageStyles.select} value={value} onChange={(event) => onChange(event.target.value as TextFont)} data-testid="stamp-font">
+      <optgroup label={t('contentEdit.fontsStandard')}>
+        {STAMP_FONTS.map((font) => (
+          <option key={font} value={font}>
+            {t(`stamp.fonts.${font}`)}
+          </option>
+        ))}
+      </optgroup>
+      {systemFonts.length > 0 && (
+        <optgroup label={t('contentEdit.fontsSystem')}>
+          {systemFonts.flatMap((family) =>
+            family.styles.map((variant) => {
+              const key = systemFontKey(family.id, variant);
+              return (
+                <option key={key} value={key}>
+                  {fontLabel(key, systemFonts, styleNames)}
+                </option>
+              );
+            }),
+          )}
+        </optgroup>
+      )}
     </select>
   );
 }
@@ -117,7 +138,7 @@ export function WatermarkDialog({ tab }: { tab: TabState }) {
   const { t } = useTranslation();
   const [source, setSource] = useState<'text' | 'image'>('text');
   const [text, setText] = useState(t('stamp.defaultWatermark'));
-  const [font, setFont] = useState<StampFont>('HelveticaBold');
+  const [font, setFont] = useState<TextFont>('HelveticaBold');
   const [size, setSize] = useState(0);
   const [color, setColor] = useState<Rgb>((COLORS[1] as { color: Rgb }).color);
   const [image, setImage] = useState<{ name: string; source: ImageSource } | null>(null);
@@ -274,7 +295,7 @@ const SLOTS: Array<keyof HeaderFooterTexts> = ['headerLeft', 'headerCenter', 'he
 export function HeaderFooterDialog({ tab }: { tab: TabState }) {
   const { t } = useTranslation();
   const [texts, setTexts] = useState<HeaderFooterTexts>(EMPTY_TEXTS);
-  const [font, setFont] = useState<StampFont>('Helvetica');
+  const [font, setFont] = useState<TextFont>('Helvetica');
   const [size, setSize] = useState(10);
   const [color, setColor] = useState<Rgb>((COLORS[3] as { color: Rgb }).color);
   const [margins, setMargins] = useState({ top: 12, bottom: 12, left: 15, right: 15 });

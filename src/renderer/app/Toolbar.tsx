@@ -30,7 +30,7 @@ import { focusViewer, getRuntime } from '../engine/runtime';
 import { executeCommand, goToPage, openWithDialog, printTab, setScaleValue, setViewMode } from '../engine/session';
 import { useTabDirty } from '../state/dirty';
 import { VIEW_MODES } from '../features/viewer/view-modes';
-import { isPresetScaleValue, scaleToPercent, ZOOM_MENU_PERCENTS } from '../features/viewer/zoom';
+import { isPresetScaleValue, parsePercentInput, scaleToPercent, ZOOM_MENU_PERCENTS } from '../features/viewer/zoom';
 import { useActiveTab, type TabState } from '../state/documents-store';
 import { useUi } from '../state/ui-store';
 import styles from './Toolbar.module.css';
@@ -106,10 +106,42 @@ function ZoomSelect({ tab }: { tab: TabState }) {
   const isPreset = isPresetScaleValue(tab.scaleValue);
   const matchingPercent = ZOOM_MENU_PERCENTS.find((p) => Math.abs(p / 100 - tab.scale) < 0.001);
   const selectValue = isPreset ? tab.scaleValue : matchingPercent ? String(matchingPercent / 100) : 'custom';
+  // Eintippen eines Prozentwerts (z. B. „137“ oder „137 %“); Enter übernimmt, Esc und Verlassen verwerfen
+  const shown = t('toolbar.zoom.percent', { value: percent });
+  const [draft, setDraft] = useState<string | null>(null);
+  const apply = () => {
+    const scale = draft === null ? null : parsePercentInput(draft);
+    setDraft(null);
+    if (scale !== null) setScaleValue(tab, String(scale));
+    focusViewer(getRuntime(tab.id));
+  };
 
   return (
+    <span className={styles.zoomField}>
+      <input
+        className={styles.zoomInput}
+        type="text"
+        inputMode="decimal"
+        aria-label={t('toolbar.zoomInput')}
+        data-tooltip={t('toolbar.zoomInput')}
+        data-testid="zoom-input"
+        value={draft ?? shown}
+        onFocus={(event) => {
+          setDraft(String(percent));
+          requestAnimationFrame(() => event.target.select());
+        }}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') apply();
+          else if (event.key === 'Escape') {
+            setDraft(null);
+            focusViewer(getRuntime(tab.id));
+          }
+        }}
+        onBlur={() => setDraft(null)}
+      />
     <select
-      className={styles.select}
+      className={[styles.select, styles.zoomPresets].join(' ')}
       aria-label={t('toolbar.zoomSelect')}
       data-tooltip={t('toolbar.zoomSelect')}
       data-testid="zoom-select"
@@ -136,6 +168,8 @@ function ZoomSelect({ tab }: { tab: TabState }) {
         </option>
       )}
     </select>
+      <ChevronDown className={styles.zoomChevron} size={14} strokeWidth={2} aria-hidden="true" />
+    </span>
   );
 }
 

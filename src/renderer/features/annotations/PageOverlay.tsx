@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as R
 import { useTranslation } from 'react-i18next';
 import type { Annotation, FreeTextAnnotation, InkAnnotation, MarkupAnnotation, Point, Quad, Rect } from '../../../shared/annotations';
 import { boundsOf, normalizeRect } from '../../../shared/annotations';
-import { DRAWING_TOOLS as STORE_DRAWING_TOOLS, useAnnotations, type Tool } from '../../state/annotations-store';
+import { CUSTOM_STAMP_COLORS, DRAWING_TOOLS as STORE_DRAWING_TOOLS, useAnnotations, type Tool } from '../../state/annotations-store';
+import { i18n } from '../../i18n';
 import { useUi } from '../../state/ui-store';
 import { useDocuments } from '../../state/documents-store';
 import type { PageGeometry } from '../../engine/coords';
@@ -109,6 +110,15 @@ interface PageOverlayProps {
   inert?: boolean;
 }
 
+
+// Eigener Stempel an der Klickstelle: Text, darunter Name und Datum (fest beim Setzen, wie bei einem Papierstempel)
+function customStampAt(base: ReturnType<typeof baseFields>, at: Point) {
+  const custom = useAnnotations.getState().customStamp;
+  const details = [custom.name ? base.author : '', custom.date ? new Date().toLocaleString(i18n.language, { dateStyle: 'medium', timeStyle: 'short' }) : '']
+    .filter((part) => part.trim() !== '')
+    .join(' · ');
+  return createStamp(base, at, 'custom', details ? `${custom.text}\n${details}` : custom.text, CUSTOM_STAMP_COLORS[custom.color]);
+}
 export function PageOverlay({
   tabId,
   pageIndex,
@@ -169,7 +179,7 @@ export function PageOverlay({
         return;
       }
       case 'stamp':
-        addAnnotation(tabId, createStamp(base, at, stamp, t(`stamps.${stamp}`), colors.stamp));
+        addAnnotation(tabId, stamp === 'custom' ? customStampAt(base, at) : createStamp(base, at, stamp, t(`stamps.${stamp}`), colors.stamp));
         store().setTool('select');
         return;
       case 'signature': {
@@ -358,7 +368,7 @@ export function PageOverlay({
           store().setEditing(tabId, box.id);
         } else {
           const rect = dragRect(current.from, current.to, SHAPE_SIZE);
-          addAnnotation(tabId, createShape(baseFields(pageIndex), current.tool, rect, colors[current.tool], width));
+          addAnnotation(tabId, createShape(baseFields(pageIndex), current.tool, rect, colors[current.tool], width, store().fill));
         }
         store().setTool('select');
         return;
